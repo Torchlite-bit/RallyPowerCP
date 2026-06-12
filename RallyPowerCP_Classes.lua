@@ -287,30 +287,56 @@ local function RecordGroupExpiry(unit, b, dur)
     end
 end
 
--- Cast `spell` on `unit` using PallyPower's proven 1.12 pattern:
--- with no/hostile target, CastSpellByName raises the targeting cursor and
--- SpellTargetUnit directs it (this also kills the auto-self-cast problem);
--- with a DIFFERENT friendly target selected, briefly retarget and swap back.
+-- Cast `spell` on `unit` using PallyPower's EXACT casting flow (copied from
+-- its blessing cast): temporarily disable the autoSelfCast CVar, clear the
+-- target so the targeting cursor is GUARANTEED to come up, direct it with
+-- SpellTargetUnit, then restore the player's target and the CVar. This is
+-- what makes one click reliably land on the chosen group member.
 local function CastBuffOn(spell, unit, b, dur, isGroup)
     if not spell then return end
-    if UnitExists("target") and UnitIsFriend("player", "target")
-       and not UnitIsUnit("target", unit) then
-        TargetUnit(unit)
+
+    local restoreCVar = false
+    if GetCVar("autoSelfCast") == "1" then
+        restoreCVar = true
+        SetCVar("autoSelfCast", "0")
+    end
+
+    DoEmote("STAND")                      -- force stand, as PallyPower does
+
+    -- If the chosen unit IS our current friendly target, cast straight at them
+    -- (clearing the target first would destroy the "target" unit reference).
+    if UnitExists("target") and UnitIsUnit("target", unit)
+       and UnitIsFriend("player", "target") then
         CastSpellByName(spell)
-        if SpellIsTargeting() then SpellTargetUnit(unit) end
-        if SpellIsTargeting() then SpellStopTargeting() end
-        TargetLastTarget()
-    else
-        CastSpellByName(spell)
-        if SpellIsTargeting() then SpellTargetUnit(unit) end
+        if restoreCVar then SetCVar("autoSelfCast", "1") end
+        if isGroup then RecordGroupExpiry(unit, b, dur)
+        else RecordExpiry(unit, b, dur) end
+        return
+    end
+
+    local hadTarget = UnitExists("target")
+    ClearTarget()
+
+    CastSpellByName(spell)
+
+    local landed = false
+    if SpellIsTargeting() then
+        if SpellCanTargetUnit(unit) then
+            SpellTargetUnit(unit)
+            landed = not SpellIsTargeting()
+        end
         if SpellIsTargeting() then
-            -- couldn't land it (range/LoS) — cancel cleanly, record nothing
-            SpellStopTargeting()
-            return
+            SpellStopTargeting()          -- couldn't land it — cancel cleanly
         end
     end
-    if isGroup then RecordGroupExpiry(unit, b, dur)
-    else RecordExpiry(unit, b, dur) end
+
+    if hadTarget then TargetLastTarget() end
+    if restoreCVar then SetCVar("autoSelfCast", "1") end
+
+    if landed then
+        if isGroup then RecordGroupExpiry(unit, b, dur)
+        else RecordExpiry(unit, b, dur) end
+    end
 end
 
 local function ButtonOnClick()
