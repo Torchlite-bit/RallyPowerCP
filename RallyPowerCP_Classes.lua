@@ -41,29 +41,49 @@ local SCAN_INTERVAL = 1.0        -- seconds between roster rescans
 local bar                        -- the bar frame (created lazily)
 local buttons = {}               -- bar buttons, one per active buff
 
+-- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
+-- a buff (keyed by the recipient's character name), and we read exact times for
+-- buffs on OURSELF via the player-buff API. The 1.12 client gives no way to
+-- read remaining time on other players' buffs, so — exactly like PallyPower —
+-- timers come from our own casts; the coverage scan self-corrects if a buff
+-- drops early or a cast actually failed.
+local expiry = {}                -- expiry[charName][buffName] = GetTime() deadline
+local minRemain = {}             -- per active buff: soonest expiry among holders
+local warned = {}                -- per active buff: ding played for this cycle?
+local WARN_TIME = 60             -- seconds left when the warning ding plays
+
 --=============================================================================
 -- BUFF DATA TABLE  (keyed by the English class token from UnitClass)
 --=============================================================================
+--   Fields: name/group (spell names), icons (applied-aura icon basenames),
+--   pet (track on pets), dur/gdur (single/group buff duration in seconds —
+--   used for the countdown timers; edit here if Turtle tunes a duration).
 RallyPowerCP_ClassBuffs = {
     PRIEST = {
         { name = "Power Word: Fortitude", group = "Prayer of Fortitude",
-          icons = { "Spell_Holy_WordFortitude" }, pet = true },
+          icons = { "Spell_Holy_WordFortitude" }, pet = true,
+          dur = 30*60, gdur = 60*60 },
         { name = "Divine Spirit",         group = "Prayer of Spirit",
-          icons = { "Spell_Holy_DivineSpirit", "Spell_Holy_PrayerofSpirit" } },
+          icons = { "Spell_Holy_DivineSpirit", "Spell_Holy_PrayerofSpirit" },
+          dur = 30*60, gdur = 60*60 },
         { name = "Shadow Protection",     group = "Prayer of Shadow Protection",
-          icons = { "Spell_Shadow_AntiShadow" } },
+          icons = { "Spell_Shadow_AntiShadow" },
+          dur = 10*60, gdur = 20*60 },
     },
 
     MAGE = {
         { name = "Arcane Intellect",      group = "Arcane Brilliance",
-          icons = { "Spell_Holy_MagicalSentry", "Spell_Holy_ArcaneIntellect" } },
+          icons = { "Spell_Holy_MagicalSentry", "Spell_Holy_ArcaneIntellect" },
+          dur = 30*60, gdur = 60*60 },
     },
 
     DRUID = {
         { name = "Mark of the Wild",      group = "Gift of the Wild",
-          icons = { "Spell_Nature_Regeneration" }, pet = true },
+          icons = { "Spell_Nature_Regeneration" }, pet = true,
+          dur = 30*60, gdur = 60*60 },
         { name = "Thorns",
-          icons = { "Spell_Nature_Thorns" } },
+          icons = { "Spell_Nature_Thorns" },
+          dur = 10*60 },
     },
 
     -- ---- Stubs below: add icons/names to enable. They will simply not show
@@ -185,6 +205,8 @@ end
 local BTN_SIZE   = 32
 local PAD        = 6
 local ROW_H      = BTN_SIZE + 4
+local TIMER_W    = 44                      -- room for "59:59" beside the icon
+local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
 
 local function SavePosition()
     if not bar then return end
@@ -195,25 +217,124 @@ local function SavePosition()
     RallyPowerCP_Settings.barY = y
 end
 
+-- Exact remaining time of buff b on the PLAYER (real data via the 1.12 API).
+local function PlayerBuffTimeLeft(b)
+    local i = 0
+    while i < 32 do
+        local idx = GetPlayerBuff(i, "HELPFUL")
+        if not idx or idx < 0 then break end
+        local tex = GetPlayerBuffTexture(idx)
+        if tex and b._iconset[IconBase(tex)] then
+            return GetPlayerBuffTimeLeft(idx)
+        end
+        i = i + 1
+    end
+    return nil
+end
+
+-- Find the next group member (or pet) who is missing buff b.
+-- Prefers your current friendly target if THEY are missing it.
+local findRoster = {}
+local function FindNeedyUnit(b)
+    if UnitExists("target") and UnitIsFriend("player", "target")
+       and UnitIsBuffable("target") and not UnitHasBuff("target", b) then
+        return "target"
+    end
+    local count = BuildRoster(findRoster, b.pet and true or false)
+    for r = 1, count do
+        local u = findRoster[r]
+        if UnitIsBuffable(u) then
+            local isPet = (string.find(u, "pet") ~= nil)
+            if (not isPet or b.pet) and not UnitHasBuff(u, b) then
+                return u
+            end
+        end
+    end
+    return nil
+end
+
+local function RecordExpiry(unit, b, dur)
+    if not dur then return end
+    local nm = UnitName(unit)
+    if not nm then return end
+    expiry[nm] = expiry[nm] or {}
+    expiry[nm][b.name or b.group] = GetTime() + dur
+end
+
+-- For a group-version cast on `unit`, record expiry for that unit's whole
+-- subgroup (party: everyone; raid: the unit's raid subgroup).
+local function RecordGroupExpiry(unit, b, dur)
+    if not dur then return end
+    local numRaid = GetNumRaidMembers()
+    if numRaid > 0 then
+        local _, _, uidx = string.find(unit, "raid(%d+)")
+        uidx = tonumber(uidx)
+        if not uidx then RecordExpiry(unit, b, dur) return end
+        local _, _, sub = GetRaidRosterInfo(uidx)
+        local targetSub = sub
+        for i = 1, numRaid do
+            local nm, _, isub = GetRaidRosterInfo(i)
+            if nm and isub == targetSub then
+                expiry[nm] = expiry[nm] or {}
+                expiry[nm][b.name or b.group] = GetTime() + dur
+            end
+        end
+    else
+        RecordExpiry("player", b, dur)
+        for i = 1, GetNumPartyMembers() do
+            RecordExpiry("party" .. i, b, dur)
+        end
+    end
+end
+
+-- Cast `spell` on `unit` using PallyPower's proven 1.12 pattern:
+-- with no/hostile target, CastSpellByName raises the targeting cursor and
+-- SpellTargetUnit directs it (this also kills the auto-self-cast problem);
+-- with a DIFFERENT friendly target selected, briefly retarget and swap back.
+local function CastBuffOn(spell, unit, b, dur, isGroup)
+    if not spell then return end
+    if UnitExists("target") and UnitIsFriend("player", "target")
+       and not UnitIsUnit("target", unit) then
+        TargetUnit(unit)
+        CastSpellByName(spell)
+        if SpellIsTargeting() then SpellTargetUnit(unit) end
+        if SpellIsTargeting() then SpellStopTargeting() end
+        TargetLastTarget()
+    else
+        CastSpellByName(spell)
+        if SpellIsTargeting() then SpellTargetUnit(unit) end
+        if SpellIsTargeting() then
+            -- couldn't land it (range/LoS) — cancel cleanly, record nothing
+            SpellStopTargeting()
+            return
+        end
+    end
+    if isGroup then RecordGroupExpiry(unit, b, dur)
+    else RecordExpiry(unit, b, dur) end
+end
+
 local function ButtonOnClick()
     -- arg1 holds the mouse button on the 1.12 client
     local idx = this.buffIndex
     local b = ACTIVE_BUFFS[idx]
     if not b then return end
+
+    local unit = FindNeedyUnit(b) or "player"   -- all covered: refresh self
     if arg1 == "RightButton" and b.group and KNOWN[b.group] then
-        CastSpellByName(b.group)
+        CastBuffOn(b.group, unit, b, b.gdur, true)
     elseif b.name and KNOWN[b.name] then
-        CastSpellByName(b.name)
-    elseif b.group then
-        CastSpellByName(b.group)
+        CastBuffOn(b.name, unit, b, b.dur, false)
+    elseif b.group and KNOWN[b.group] then
+        CastBuffOn(b.group, unit, b, b.gdur, true)
     end
+    lastScan = SCAN_INTERVAL   -- rescan promptly to refresh counts/timers
 end
 
 local function CreateBar()
     if bar then return bar end
 
     bar = CreateFrame("Frame", "RallyPowerCP_Bar", UIParent)
-    bar:SetWidth(BTN_SIZE + PAD * 2)
+    bar:SetWidth(BAR_W)
     bar:SetHeight(ROW_H + 18)
     bar:SetBackdrop({
         bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -288,15 +409,22 @@ local function LayoutButtons()
             count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
             btn.count = count
 
+            -- countdown readout to the right of the icon (like the Pally bar)
+            local timer = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            timer:SetPoint("LEFT", btn, "RIGHT", 4, 0)
+            timer:SetJustifyH("LEFT")
+            btn.timer = timer
+
             btn:SetScript("OnClick", ButtonOnClick)
             btn:SetScript("OnEnter", function()
                 GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
                 local bb = ACTIVE_BUFFS[this.buffIndex]
                 GameTooltip:SetText(bb.name or bb.group or "Buff", 1, 1, 1)
-                GameTooltip:AddLine("Left-click: cast " .. (bb.name or "-"), 0.8, 0.8, 0.8)
+                GameTooltip:AddLine("Left-click: buff the next group member missing it", 0.8, 0.8, 0.8)
                 if bb.group then
-                    GameTooltip:AddLine("Right-click: cast " .. bb.group, 0.8, 0.8, 0.8)
+                    GameTooltip:AddLine("Right-click: " .. bb.group .. " on their group", 0.8, 0.8, 0.8)
                 end
+                GameTooltip:AddLine("Timer shows the soonest expiry you've cast", 0.6, 0.6, 0.6)
                 GameTooltip:Show()
             end)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -309,7 +437,7 @@ local function LayoutButtons()
         local iconName = (b.icons and b.icons[1]) or "INV_Misc_QuestionMark"
         btn.icon:SetTexture("Interface\\Icons\\" .. iconName)
         btn:ClearAllPoints()
-        btn:SetPoint("TOP", bar, "TOP", 0, y)
+        btn:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
         btn:Show()
         y = y - ROW_H
         shown = shown + 1
@@ -334,20 +462,60 @@ local function ScanRoster()
 
     local count = BuildRoster(roster, withPets)
 
-    for i = 1, table.getn(ACTIVE_BUFFS) do NEEDCOUNT[i] = 0 end
+    for i = 1, table.getn(ACTIVE_BUFFS) do NEEDCOUNT[i] = 0; minRemain[i] = nil end
 
+    local now = GetTime()
     for r = 1, count do
         local unit = roster[r]
         if UnitIsBuffable(unit) then
             local isPet = (string.find(unit, "pet") ~= nil)
+            local uname = UnitName(unit)
             for i = 1, table.getn(ACTIVE_BUFFS) do
                 local b = ACTIVE_BUFFS[i]
                 if BuffIsUsable(b) and (not isPet or b.pet) then
                     if not UnitHasBuff(unit, b) then
                         NEEDCOUNT[i] = NEEDCOUNT[i] + 1
+                        -- buff is gone: drop any stale recorded timer
+                        if uname and expiry[uname] then
+                            expiry[uname][b.name or b.group] = nil
+                        end
+                    else
+                        -- buff present: figure out time left for the countdown
+                        local left = nil
+                        if UnitIsUnit(unit, "player") then
+                            left = PlayerBuffTimeLeft(b)   -- exact, via API
+                        elseif uname and expiry[uname] then
+                            local dl = expiry[uname][b.name or b.group]
+                            if dl then
+                                left = dl - now
+                                if left <= 0 then
+                                    expiry[uname][b.name or b.group] = nil
+                                    left = nil
+                                end
+                            end
+                        end
+                        if left and (not minRemain[i] or left < minRemain[i]) then
+                            minRemain[i] = left
+                        end
                     end
                 end
             end
+        end
+    end
+
+    -- Expiry warning ding (same sound + spirit as the Paladin bar)
+    for i = 1, table.getn(ACTIVE_BUFFS) do
+        local mr = minRemain[i]
+        if mr and mr <= WARN_TIME and mr > 0 then
+            if not warned[i] then
+                warned[i] = true
+                PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                local b = ACTIVE_BUFFS[i]
+                DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
+                    .. (b.name or b.group) .. " is about to expire!")
+            end
+        else
+            warned[i] = nil   -- re-arm once refreshed (or no timer tracked)
         end
     end
 
@@ -365,6 +533,20 @@ local function ScanRoster()
                 btn.bg:SetTexture(0.1, 0.6, 0.1, 0.25)  -- green/faded: all covered
                 btn.count:SetText("")
                 btn.icon:SetVertexColor(0.55, 0.55, 0.55)
+            end
+            -- countdown readout (soonest expiry among tracked holders)
+            local mr = minRemain[btn.buffIndex]
+            if mr then
+                local m = math.floor(mr / 60)
+                local s = math.floor(mr - m * 60)
+                btn.timer:SetText(string.format("%d:%02d", m, s))
+                if mr <= WARN_TIME then
+                    btn.timer:SetTextColor(1, 0.25, 0.25)   -- red: about to expire
+                else
+                    btn.timer:SetTextColor(0.9, 0.9, 0.9)
+                end
+            else
+                btn.timer:SetText("")
             end
         end
     end

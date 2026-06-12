@@ -1,6 +1,6 @@
 # RallyPowerCP
 
-**All-class buff management for Capybara Paradise WoW 1.18.1 (1.12 client).**
+**All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
 By **Subtilizer (Torchlite)** — version **0.0.1**.
 
 Built on PallyPowerTW (by ivanovlk) and the original PallyPower team.
@@ -34,11 +34,20 @@ buffs across the party/raid.
 
 - One button per group buff you can cast. **Red + number** = that many group
   members are still missing it. **Faded/green** = everyone is covered.
-- **Left-click** a button → cast the single-target buff (rebuff your target).
-- **Right-click** → cast the group/greater version (Prayer of…, Arcane
-  Brilliance, Gift of the Wild) if you know it.
-- **Drag** the bar to move it; position is saved.
-- Only buffs you've actually learned appear, so it scales with your level/spec.
+- **Left-click** a button → buffs the **next group member missing it** (your
+  current target gets priority if they're missing it; if everyone's covered it
+  refreshes you). No more accidental self-casts.
+- **Right-click** → casts the group/greater version (Prayer of…, Arcane
+  Brilliance, Gift of the Wild) on the missing member's subgroup.
+- **Countdown timer** beside each icon shows the soonest expiry among the buffs
+  you've cast — exact to the second for buffs on yourself; for others it counts
+  down from your cast (the 1.12 client doesn't expose other players' buff
+  durations, the same limitation PallyPower works around the same way). Turns
+  red and plays the **ding** (same sound as the Paladin bar) at 60 seconds left.
+- **Drag** the bar to move it; position is saved. Only buffs you've actually
+  learned appear.
+- Buff durations are listed per spell in `RallyPowerCP_ClassBuffs`
+  (`dur`/`gdur`, in seconds) — easy to edit if Turtle tunes a duration.
 
 ## Showing up automatically + the minimap icon
 
