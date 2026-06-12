@@ -48,9 +48,12 @@ local buttons = {}               -- bar buttons, one per active buff
 -- timers come from our own casts; the coverage scan self-corrects if a buff
 -- drops early or a cast actually failed.
 local expiry = {}                -- expiry[charName][buffName] = GetTime() deadline
-local minRemain = {}             -- per active buff: soonest expiry among holders
+local minDeadline = {}           -- per active buff: soonest absolute expiry (GetTime-based)
 local warned = {}                -- per active buff: ding played for this cycle?
 local WARN_TIME = 60             -- seconds left when the warning ding plays
+local auraDirty = true           -- something changed: full roster rescan needed
+local sinceFullScan = 0          -- safety-net full scan every FULL_SCAN_FALLBACK
+local FULL_SCAN_FALLBACK = 5.0
 
 --=============================================================================
 -- BUFF DATA TABLE  (keyed by the English class token from UnitClass)
@@ -130,6 +133,9 @@ local function BuildIconLookups()
 end
 
 -- Does this unit currently have buff b? (matched by icon texture)
+-- Used for SINGLE-unit checks (e.g. the click targeter). The roster scan uses
+-- CollectUnitBuffs/HasCollected below instead, which reads each unit's buff
+-- list only ONCE per scan no matter how many buffs we track.
 local function UnitHasBuff(unit, b)
     local j = 1
     while true do
@@ -141,6 +147,28 @@ local function UnitHasBuff(unit, b)
         if b._iconset[IconBase(tex)] then return true end
         j = j + 1
         if j > 40 then break end
+    end
+    return false
+end
+
+-- Single pass over a unit's buffs: fill `presentIcons` with every icon base.
+local presentIcons = {}
+local function CollectUnitBuffs(unit)
+    for k in pairs(presentIcons) do presentIcons[k] = nil end
+    local j = 1
+    while j <= 40 do
+        local tex = UnitBuff(unit, j, true)
+        if not tex then tex = UnitBuff(unit, j) end
+        if not tex then break end
+        presentIcons[IconBase(tex)] = true
+        j = j + 1
+    end
+end
+
+-- After CollectUnitBuffs(unit): does the collected set contain buff b?
+local function HasCollected(b)
+    for ic in pairs(b._iconset) do
+        if presentIcons[ic] then return true end
     end
     return false
 end
@@ -243,7 +271,9 @@ local function FindNeedyUnit(b)
     local count = BuildRoster(findRoster, b.pet and true or false)
     for r = 1, count do
         local u = findRoster[r]
-        if UnitIsBuffable(u) then
+        -- UnitIsVisible filters members too far away to cast on, so a click
+        -- never wastes itself on someone across the zone.
+        if UnitIsBuffable(u) and UnitIsVisible(u) then
             local isPet = (string.find(u, "pet") ~= nil)
             if (not isPet or b.pet) and not UnitHasBuff(u, b) then
                 return u
@@ -339,6 +369,26 @@ local function CastBuffOn(spell, unit, b, dur, isGroup)
     end
 end
 
+-- One-key smart buff (for the key binding): casts on the next group member
+-- missing ANY of your tracked buffs — soonest-expiring buff types first.
+-- Press it repeatedly to top off the whole group hands-free.
+function RallyPowerCP_SmartBuff()
+    if not ACTIVE_BUFFS or PLAYER_CLASS == "PALADIN" then return end
+    for i = 1, table.getn(ACTIVE_BUFFS) do
+        local b = ACTIVE_BUFFS[i]
+        if BuffIsUsable(b) and (NEEDCOUNT[i] or 0) > 0 then
+            local unit = FindNeedyUnit(b)
+            if unit then
+                local spell = (b.name and KNOWN[b.name]) and b.name or b.group
+                CastBuffOn(spell, unit, b, (spell == b.name) and b.dur or b.gdur,
+                           spell == b.group)
+                auraDirty = true; lastScan = SCAN_INTERVAL
+                return
+            end
+        end
+    end
+end
+
 local function ButtonOnClick()
     -- arg1 holds the mouse button on the 1.12 client
     local idx = this.buffIndex
@@ -353,7 +403,7 @@ local function ButtonOnClick()
     elseif b.group and KNOWN[b.group] then
         CastBuffOn(b.group, unit, b, b.gdur, true)
     end
-    lastScan = SCAN_INTERVAL   -- rescan promptly to refresh counts/timers
+    auraDirty = true; lastScan = SCAN_INTERVAL   -- prompt full rescan
 end
 
 local function CreateBar()
@@ -474,6 +524,57 @@ local function LayoutButtons()
 end
 
 --=============================================================================
+-- CHEAP PER-SECOND TICK: countdown text + expiry warning. Pure arithmetic on
+-- stored deadlines — zero UnitBuff/API calls — so it can run every second.
+--=============================================================================
+local function UpdateDisplays()
+    if not bar or not ACTIVE_BUFFS then return end
+    local now = GetTime()
+    for slot = 1, table.getn(buttons) do
+        local btn = buttons[slot]
+        if btn and btn:IsShown() then
+            local i = btn.buffIndex
+            local need = NEEDCOUNT[i] or 0
+            if need > 0 then
+                btn.bg:SetTexture(0.8, 0.1, 0.1, 0.6)   -- red: someone needs it
+                btn.count:SetText(need)
+                btn.icon:SetVertexColor(1, 1, 1)
+            else
+                btn.bg:SetTexture(0.1, 0.6, 0.1, 0.25)  -- green/faded: all covered
+                btn.count:SetText("")
+                btn.icon:SetVertexColor(0.55, 0.55, 0.55)
+            end
+            local dl = minDeadline[i]
+            local mr = dl and (dl - now) or nil
+            if mr and mr > 0 then
+                local m = math.floor(mr / 60)
+                local s = math.floor(mr - m * 60)
+                btn.timer:SetText(string.format("%d:%02d", m, s))
+                if mr <= WARN_TIME then
+                    btn.timer:SetTextColor(1, 0.25, 0.25)   -- red: about to expire
+                    if not warned[i] then
+                        warned[i] = true
+                        PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                        local b = ACTIVE_BUFFS[i]
+                        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
+                            .. (b.name or b.group) .. " is about to expire!")
+                    end
+                else
+                    btn.timer:SetTextColor(0.9, 0.9, 0.9)
+                    warned[i] = nil   -- re-armed: it was refreshed
+                end
+            else
+                btn.timer:SetText("")
+                if dl then
+                    minDeadline[i] = nil
+                    auraDirty = true   -- a deadline just lapsed: verify coverage
+                end
+            end
+        end
+    end
+end
+
+--=============================================================================
 -- SCAN: count how many roster members still need each active buff
 --=============================================================================
 local roster = {}
@@ -488,7 +589,7 @@ local function ScanRoster()
 
     local count = BuildRoster(roster, withPets)
 
-    for i = 1, table.getn(ACTIVE_BUFFS) do NEEDCOUNT[i] = 0; minRemain[i] = nil end
+    for i = 1, table.getn(ACTIVE_BUFFS) do NEEDCOUNT[i] = 0; minDeadline[i] = nil end
 
     local now = GetTime()
     for r = 1, count do
@@ -496,32 +597,32 @@ local function ScanRoster()
         if UnitIsBuffable(unit) then
             local isPet = (string.find(unit, "pet") ~= nil)
             local uname = UnitName(unit)
+            CollectUnitBuffs(unit)              -- ONE buff-list read per unit
+            local isPlayer = UnitIsUnit(unit, "player")
             for i = 1, table.getn(ACTIVE_BUFFS) do
                 local b = ACTIVE_BUFFS[i]
                 if BuffIsUsable(b) and (not isPet or b.pet) then
-                    if not UnitHasBuff(unit, b) then
+                    if not HasCollected(b) then
                         NEEDCOUNT[i] = NEEDCOUNT[i] + 1
                         -- buff is gone: drop any stale recorded timer
                         if uname and expiry[uname] then
                             expiry[uname][b.name or b.group] = nil
                         end
                     else
-                        -- buff present: figure out time left for the countdown
-                        local left = nil
-                        if UnitIsUnit(unit, "player") then
-                            left = PlayerBuffTimeLeft(b)   -- exact, via API
+                        -- buff present: compute its absolute deadline
+                        local dl = nil
+                        if isPlayer then
+                            local left = PlayerBuffTimeLeft(b)   -- exact, via API
+                            if left then dl = now + left end
                         elseif uname and expiry[uname] then
-                            local dl = expiry[uname][b.name or b.group]
-                            if dl then
-                                left = dl - now
-                                if left <= 0 then
-                                    expiry[uname][b.name or b.group] = nil
-                                    left = nil
-                                end
+                            dl = expiry[uname][b.name or b.group]
+                            if dl and dl <= now then
+                                expiry[uname][b.name or b.group] = nil
+                                dl = nil
                             end
                         end
-                        if left and (not minRemain[i] or left < minRemain[i]) then
-                            minRemain[i] = left
+                        if dl and (not minDeadline[i] or dl < minDeadline[i]) then
+                            minDeadline[i] = dl
                         end
                     end
                 end
@@ -529,53 +630,7 @@ local function ScanRoster()
         end
     end
 
-    -- Expiry warning ding (same sound + spirit as the Paladin bar)
-    for i = 1, table.getn(ACTIVE_BUFFS) do
-        local mr = minRemain[i]
-        if mr and mr <= WARN_TIME and mr > 0 then
-            if not warned[i] then
-                warned[i] = true
-                PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
-                local b = ACTIVE_BUFFS[i]
-                DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
-                    .. (b.name or b.group) .. " is about to expire!")
-            end
-        else
-            warned[i] = nil   -- re-arm once refreshed (or no timer tracked)
-        end
-    end
-
-    -- Update button visuals.
-    if not bar then return end
-    for slot = 1, table.getn(buttons) do
-        local btn = buttons[slot]
-        if btn and btn:IsShown() then
-            local need = NEEDCOUNT[btn.buffIndex] or 0
-            if need > 0 then
-                btn.bg:SetTexture(0.8, 0.1, 0.1, 0.6)   -- red: someone needs it
-                btn.count:SetText(need)
-                btn.icon:SetVertexColor(1, 1, 1)
-            else
-                btn.bg:SetTexture(0.1, 0.6, 0.1, 0.25)  -- green/faded: all covered
-                btn.count:SetText("")
-                btn.icon:SetVertexColor(0.55, 0.55, 0.55)
-            end
-            -- countdown readout (soonest expiry among tracked holders)
-            local mr = minRemain[btn.buffIndex]
-            if mr then
-                local m = math.floor(mr / 60)
-                local s = math.floor(mr - m * 60)
-                btn.timer:SetText(string.format("%d:%02d", m, s))
-                if mr <= WARN_TIME then
-                    btn.timer:SetTextColor(1, 0.25, 0.25)   -- red: about to expire
-                else
-                    btn.timer:SetTextColor(0.9, 0.9, 0.9)
-                end
-            else
-                btn.timer:SetText("")
-            end
-        end
-    end
+    UpdateDisplays()
 end
 
 --=============================================================================
@@ -629,20 +684,29 @@ f:SetScript("OnEvent", function()
         if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
             RebuildKnownSpells()
             LayoutButtons()
-            ScanRoster()
+            auraDirty = true
         end
     elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
-        -- roster/aura changed: rescan on the next throttled tick
-        lastScan = SCAN_INTERVAL
+        auraDirty = true   -- roster/aura changed: full rescan on the next tick
     end
 end)
 
 f:SetScript("OnUpdate", function()
     if not ACTIVE_BUFFS then return end
-    lastScan = lastScan + (arg1 or 0)
+    local dt = arg1 or 0
+    lastScan = lastScan + dt
+    sinceFullScan = sinceFullScan + dt
     if lastScan >= SCAN_INTERVAL then
         lastScan = 0
-        ScanRoster()
+        -- Full roster scans only when something changed (or as a slow safety
+        -- net); otherwise just the zero-API-call countdown tick.
+        if auraDirty or sinceFullScan >= FULL_SCAN_FALLBACK then
+            auraDirty = false
+            sinceFullScan = 0
+            ScanRoster()
+        else
+            UpdateDisplays()
+        end
     end
 end)
 

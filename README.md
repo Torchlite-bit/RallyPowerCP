@@ -44,6 +44,9 @@ buffs across the party/raid.
   down from your cast (the 1.12 client doesn't expose other players' buff
   durations, the same limitation PallyPower works around the same way). Turns
   red and plays the **ding** (same sound as the Paladin bar) at 60 seconds left.
+- **Key binding:** bind **"Smart buff: next member missing any buff"** under
+  RallyPowerCP in the Key Bindings menu — each press buffs the next member
+  missing anything, fully hands-free. Mash it until everything's green.
 - **Drag** the bar to move it; position is saved. Only buffs you've actually
   learned appear.
 - Buff durations are listed per spell in `RallyPowerCP_ClassBuffs`
