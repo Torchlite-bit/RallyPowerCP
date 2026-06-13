@@ -1,5 +1,7 @@
 # RallyPowerCP
 
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
 By **Subtilizer (Torchlite)** — version **0.0.1**.
 

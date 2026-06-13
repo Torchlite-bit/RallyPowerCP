@@ -9,6 +9,16 @@ original **PallyPower** (Hjorim / Sneakyfoot / Rake / Xerron / Azgaardian /
 Aznamir). Targets Turtle WoW 1.18.1 on the 1.12 client.
 
 ## [Unreleased]
+### Fixed
+- Class-bar casts no longer throw "You can't do that while moving!" — removed a
+  stray `DoEmote("STAND")` from the cast flow (it was cosmetic, and emotes are
+  blocked while moving). Casting while moving now works silently.
+- Clicking a buff button no longer buffs your current target when that target
+  is an NPC, a stranger, or anyone outside your party/raid. The "prefer my
+  target" shortcut now only applies to an actual group member who is missing
+  the buff; otherwise the cast goes to the next needy group member and your
+  original target is restored.
+
 ### Planned / under consideration
 - Cross-caster sync: multiple casters of the same class coordinating buff
   duty and sharing timers (own addon-message protocol).

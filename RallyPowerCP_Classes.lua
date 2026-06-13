@@ -260,12 +260,26 @@ local function PlayerBuffTimeLeft(b)
     return nil
 end
 
--- Find the next group member (or pet) who is missing buff b.
--- Prefers your current friendly target if THEY are missing it.
+-- Scratch roster tables (declared before the functions that close over them).
 local findRoster = {}
+local findRoster2 = {}
+
+-- Is `unit` actually part of our party/raid (not a random NPC/stranger)?
+local function UnitIsGroupMember(unit)
+    local count = BuildRoster(findRoster2, true)
+    for r = 1, count do
+        if UnitIsUnit(unit, findRoster2[r]) then return true end
+    end
+    return false
+end
+
+-- Find the next group member (or pet) who is missing buff b.
+-- Your current target is only preferred if it is a real group member who is
+-- missing the buff — never a stranger, an NPC, or a hostile.
 local function FindNeedyUnit(b)
     if UnitExists("target") and UnitIsFriend("player", "target")
-       and UnitIsBuffable("target") and not UnitHasBuff("target", b) then
+       and UnitIsBuffable("target") and UnitIsVisible("target")
+       and UnitIsGroupMember("target") and not UnitHasBuff("target", b) then
         return "target"
     end
     local count = BuildRoster(findRoster, b.pet and true or false)
@@ -330,8 +344,6 @@ local function CastBuffOn(spell, unit, b, dur, isGroup)
         restoreCVar = true
         SetCVar("autoSelfCast", "0")
     end
-
-    DoEmote("STAND")                      -- force stand, as PallyPower does
 
     -- If the chosen unit IS our current friendly target, cast straight at them
     -- (clearing the target first would destroy the "target" unit reference).
