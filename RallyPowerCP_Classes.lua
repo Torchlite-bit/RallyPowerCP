@@ -34,12 +34,14 @@ RallyPowerCP_Settings = RallyPowerCP_Settings or {}
 
 local PLAYER_CLASS               -- e.g. "PRIEST"  (English, locale-independent)
 local ACTIVE_BUFFS = {}          -- the buff list for PLAYER_CLASS (or nil)
+local ACTIVE_UTILITY             -- utility-spell list for PLAYER_CLASS (or nil)
 local KNOWN = {}                 -- set of spell names the player actually knows
 local NEEDCOUNT = {}             -- per-buff: how many roster members still need it
 local lastScan = 0
 local SCAN_INTERVAL = 1.0        -- seconds between roster rescans
 local bar                        -- the bar frame (created lazily)
 local buttons = {}               -- bar buttons, one per active buff
+local utilButtons = {}           -- top-row utility buttons (e.g. PW:Shield)
 
 -- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
 -- a buff (keyed by the recipient's character name), and we read exact times for
@@ -103,6 +105,24 @@ RallyPowerCP_ClassBuffs = {
     },
     WARLOCK = {},
     ROGUE   = {},
+}
+
+--=============================================================================
+-- CLASS UTILITY BUTTONS  (top row, like the Paladin seal / righteous-fury
+-- buttons). Situational single-target casts rather than maintained buffs.
+--   mode "lowhp"  : cast on your friendly target if you have one, else the
+--                   lowest-health-percent in-range living group member.
+--   mode "target" : cast on your friendly target, else yourself.
+-- Icons are pulled live from your spellbook so they're always correct; the
+-- `icon` field is only a fallback if the spell isn't found.
+--=============================================================================
+RallyPowerCP_ClassUtility = {
+    PRIEST = {
+        { name = "Power Word: Shield", mode = "lowhp",  icon = "Spell_Holy_PowerWordShield",
+          tip = "lowest-health member in range (your target first)" },
+        { name = "Fear Ward",          mode = "target", icon = "Spell_Holy_Excorcism_02",
+          tip = "your target, else yourself" },
+    },
 }
 
 --=============================================================================
@@ -235,6 +255,9 @@ local PAD        = 6
 local ROW_H      = BTN_SIZE + 4
 local TIMER_W    = 44                      -- room for "59:59" beside the icon
 local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
+local UTIL_SIZE  = 28
+local UTIL_GAP   = 4
+local UTIL_ROW_H = UTIL_SIZE + 6
 
 local function SavePosition()
     if not bar then return end
@@ -279,20 +302,27 @@ end
 -- first needy unit (which, with the player first in the roster, was you).
 local cursor = {}
 
--- Find the next group member (or pet) who is missing buff b.
--- Your current target is preferred ONLY if it is a real group member missing
--- the buff (explicit intent) — never a stranger, an NPC, or a hostile.
-local function FindNeedyUnit(b)
+-- Pick a unit to (re)buff with buff b.
+--   renew = false : only a member MISSING the buff (used by the Smart Buff key,
+--                   which tops off the group then stops).
+--   renew = true  : the click behaviour — a member missing it FIRST (efficient
+--                   coverage), but if everyone in range already has it, return
+--                   the next member anyway so you can RENEW at any time. A
+--                   friendly group-member target is always (re)buffed on renew.
+local function FindUnitToBuff(b, renew)
     if UnitExists("target") and UnitIsFriend("player", "target")
        and UnitIsBuffable("target") and UnitIsVisible("target")
-       and UnitIsGroupMember("target") and not UnitHasBuff("target", b) then
-        return "target"
+       and UnitIsGroupMember("target") then
+        if renew or not UnitHasBuff("target", b) then
+            return "target"
+        end
     end
 
     local count = BuildRoster(findRoster, b.pet and true or false)
     if count == 0 then return nil end
     local key = b.name or b.group
     local start = cursor[key] or 0
+    local firstValid, firstValidIdx   -- for renew fallback when none are missing
 
     -- Walk the roster starting just AFTER the last unit we buffed, wrapping.
     local step = 1
@@ -304,12 +334,21 @@ local function FindNeedyUnit(b)
         -- never wastes itself on someone across the zone.
         if UnitIsBuffable(u) and UnitIsVisible(u) then
             local isPet = (string.find(u, "pet") ~= nil)
-            if (not isPet or b.pet) and not UnitHasBuff(u, b) then
-                cursor[key] = idx
-                return u
+            if (not isPet or b.pet) then
+                if not UnitHasBuff(u, b) then
+                    cursor[key] = idx
+                    return u                       -- missing it: top priority
+                elseif renew and not firstValid then
+                    firstValid, firstValidIdx = u, idx   -- remember to renew
+                end
             end
         end
         step = step + 1
+    end
+
+    if renew and firstValid then
+        cursor[key] = firstValidIdx
+        return firstValid                          -- everyone covered: renew next
     end
     return nil
 end
@@ -419,6 +458,95 @@ local function CastBuffOn(spell, unit, b, dur, isGroup)
     end
 end
 
+-- Resolve a spell's real icon from the spellbook (so utility buttons always
+-- show the correct art regardless of hard-coded guesses).
+local function GetSpellIconByName(spellName)
+    local i = 1
+    while true do
+        local nm = GetSpellName(i, BOOKTYPE_SPELL)
+        if not nm then break end
+        if nm == spellName then return GetSpellTexture(i, BOOKTYPE_SPELL) end
+        i = i + 1
+    end
+    return nil
+end
+
+-- Lowest-health-percent living group member in range (your friendly group-
+-- member target wins if you have one). Used by "lowhp" utility buttons.
+local utilScratch = {}
+local function LowestHealthUnit()
+    if UnitExists("target") and UnitIsFriend("player", "target")
+       and UnitIsBuffable("target") and UnitIsVisible("target")
+       and UnitIsGroupMember("target") then
+        return "target"
+    end
+    local count = BuildRoster(utilScratch, false)
+    local best, bestPct = nil, 2
+    for r = 1, count do
+        local u = utilScratch[r]
+        if UnitIsBuffable(u) and UnitIsVisible(u) then
+            local mh = UnitHealthMax(u)
+            if mh and mh > 0 then
+                local pct = UnitHealth(u) / mh
+                if pct < bestPct then bestPct = pct; best = u end
+            end
+        end
+    end
+    return best
+end
+
+-- Categorize the whole group for buff b into the 4 PallyPower tooltip lists.
+local tipScratch = {}
+local function BuildBuffStatus(b, have, need, range, dead)
+    local count = BuildRoster(tipScratch, b.pet and true or false)
+    for r = 1, count do
+        local u = tipScratch[r]
+        if UnitExists(u) and UnitIsConnected(u) then
+            local nm = UnitName(u) or "?"
+            if not UnitIsVisible(u) then
+                table.insert(range, nm)                 -- Not Here (out of range)
+            elseif UnitIsDeadOrGhost(u) then
+                if UnitHasBuff(u, b) then table.insert(have, nm)
+                else table.insert(dead, nm) end
+            elseif UnitHasBuff(u, b) then
+                table.insert(have, nm)
+            else
+                table.insert(need, nm)
+            end
+        end
+    end
+end
+
+-- Reliable single-target cast with no timer tracking (utility spells). Same
+-- autoSelfCast/ClearTarget technique as CastBuffOn. Returns true if it landed.
+local function CastSpellOnUnit(spell, unit)
+    if not spell or not unit then return false end
+    local restoreCVar = false
+    if GetCVar("autoSelfCast") == "1" then restoreCVar = true; SetCVar("autoSelfCast", "0") end
+
+    if UnitExists("target") and UnitIsUnit("target", unit)
+       and UnitIsFriend("player", "target") then
+        CastSpellByName(spell)
+        if restoreCVar then SetCVar("autoSelfCast", "1") end
+        return true
+    end
+
+    local hadTarget = UnitExists("target")
+    ClearTarget()
+    CastSpellByName(spell)
+    local landed = false
+    if SpellIsTargeting() then
+        if SpellCanTargetUnit(unit) then
+            SpellTargetUnit(unit)
+            landed = not SpellIsTargeting()
+        end
+        if SpellIsTargeting() then SpellStopTargeting() end
+    end
+    if hadTarget then TargetLastTarget() end
+    if restoreCVar then SetCVar("autoSelfCast", "1") end
+    return landed
+end
+
 -- One-key smart buff (for the key binding): casts on the next group member
 -- missing ANY of your tracked buffs — soonest-expiring buff types first.
 -- Press it repeatedly to top off the whole group hands-free.
@@ -427,7 +555,7 @@ function RallyPowerCP_SmartBuff()
     for i = 1, table.getn(ACTIVE_BUFFS) do
         local b = ACTIVE_BUFFS[i]
         if BuffIsUsable(b) and (NEEDCOUNT[i] or 0) > 0 then
-            local unit = FindNeedyUnit(b)
+            local unit = FindUnitToBuff(b, false)
             if unit then
                 local spell = (b.name and KNOWN[b.name]) and b.name or b.group
                 CastBuffOn(spell, unit, b, (spell == b.name) and b.dur or b.gdur,
@@ -445,11 +573,11 @@ local function ButtonOnClick()
     local b = ACTIVE_BUFFS[idx]
     if not b then return end
 
-    local unit = FindNeedyUnit(b)
+    local unit = FindUnitToBuff(b, true)
     if not unit then
-        -- Everyone in range (including you) already has it: don't waste a cast.
+        -- nobody in range at all (everyone too far / offline / dead)
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
-            .. (b.name or b.group) .. ": everyone in range is covered.")
+            .. (b.name or b.group) .. ": no group members in range.")
         return
     end
     if arg1 == "RightButton" and b.group and KNOWN[b.group] then
@@ -460,6 +588,31 @@ local function ButtonOnClick()
         CastBuffOn(b.group, unit, b, b.gdur, true)
     end
     auraDirty = true; lastScan = SCAN_INTERVAL   -- prompt full rescan
+end
+
+-- Click handler for a top-row utility button (PW: Shield, Fear Ward, ...).
+local function UtilityOnClick()
+    local u = ACTIVE_UTILITY and ACTIVE_UTILITY[this.utilIndex]
+    if not u then return end
+    if not KNOWN[u.name] then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r You haven't learned " .. u.name .. ".")
+        return
+    end
+    local target
+    if u.mode == "lowhp" then
+        target = LowestHealthUnit()
+    else  -- "target": friendly target, else self
+        if UnitExists("target") and UnitIsFriend("player", "target")
+           and UnitIsBuffable("target") then
+            target = "target"
+        else
+            target = "player"
+        end
+    end
+    if not target then target = "player" end
+    if CastSpellOnUnit(u.name, target) then
+        AnnounceBuff(u.name, target, false)
+    end
 end
 
 local function CreateBar()
@@ -502,6 +655,108 @@ local function CreateBar()
     return bar
 end
 
+-- Build/refresh the top-row utility buttons. Returns the row height used.
+-- Forward declaration: scroll/click closures below reach the display refresher,
+-- whose full definition lives after the layout functions.
+local UpdateDisplays
+
+-- Build the Have / Need / Not Here / Dead tooltip for whatever buff a button is
+-- currently set to. Re-callable so a scroll refreshes the open tooltip in place.
+local function ShowBuffTooltip(btn)
+    local bb = ACTIVE_BUFFS and ACTIVE_BUFFS[btn.buffIndex]
+    if not bb then return end
+    GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+    GameTooltip:SetText(bb.name or bb.group or "Buff", 1, 1, 1)
+    local have, need, range, dead = {}, {}, {}, {}
+    BuildBuffStatus(bb, have, need, range, dead)
+    GameTooltip:AddLine(PallyPower_Have    .. table.concat(have,  ", "), 0.5, 1, 0.5)
+    GameTooltip:AddLine(PallyPower_Need    .. table.concat(need,  ", "), 1, 0.5, 0.5)
+    GameTooltip:AddLine(PallyPower_NotHere .. table.concat(range, ", "), 0.5, 0.5, 1)
+    GameTooltip:AddLine(PallyPower_Dead    .. table.concat(dead,  ", "), 1, 0, 0)
+    GameTooltip:AddLine(" ", 1, 1, 1)
+    if ACTIVE_BUFFS and table.getn(ACTIVE_BUFFS) > 1 then
+        GameTooltip:AddLine("Scroll: switch buff", 0.6, 0.8, 1)
+    end
+    GameTooltip:AddLine("Left-click: buff / renew next member", 0.7, 0.7, 0.7)
+    if bb.group then
+        GameTooltip:AddLine("Right-click: " .. bb.group .. " on their group", 0.7, 0.7, 0.7)
+    end
+    GameTooltip:Show()
+end
+
+-- Point a button at buff index `idx` and refresh its icon.
+local function SetButtonBuff(btn, idx)
+    btn.buffIndex = idx
+    local b = ACTIVE_BUFFS[idx]
+    local iconName = (b.icons and b.icons[1]) or "INV_Misc_QuestionMark"
+    btn.icon:SetTexture("Interface\\Icons\\" .. iconName)
+end
+
+-- Mouse-wheel: cycle a button through the class's usable buffs (dir +1/-1),
+-- skipping unlearned spells and wrapping. The count, timer, button color and
+-- the Have/Need/Not Here/Dead tooltip all follow automatically because they key
+-- off the button's buffIndex (the scan already tracks every buff).
+local function CycleButtonBuff(btn, dir)
+    if not ACTIVE_BUFFS then return end
+    local n = table.getn(ACTIVE_BUFFS)
+    if n <= 1 then return end
+    local i = btn.buffIndex or 1
+    local tries = 0
+    repeat
+        i = i + dir
+        if i > n then i = 1 elseif i < 1 then i = n end
+        tries = tries + 1
+    until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= n
+    SetButtonBuff(btn, i)
+    if UpdateDisplays then UpdateDisplays() end   -- refresh count/timer at once
+    ShowBuffTooltip(btn)                           -- refresh the open tooltip
+end
+
+local function LayoutUtilityRow(topY)
+    for _, ub in pairs(utilButtons) do ub:Hide() end
+    if not ACTIVE_UTILITY then return 0 end
+
+    -- only utilities whose spell the player knows
+    local usable = {}
+    for i = 1, table.getn(ACTIVE_UTILITY) do
+        if KNOWN[ACTIVE_UTILITY[i].name] then table.insert(usable, i) end
+    end
+    if table.getn(usable) == 0 then return 0 end
+
+    local x = PAD
+    for slot = 1, table.getn(usable) do
+        local uidx = usable[slot]
+        local u = ACTIVE_UTILITY[uidx]
+        local ub = utilButtons[slot]
+        if not ub then
+            ub = CreateFrame("Button", "RallyPowerCP_Util" .. slot, bar)
+            ub:SetWidth(UTIL_SIZE); ub:SetHeight(UTIL_SIZE)
+            ub:RegisterForClicks("LeftButtonUp")
+            local ic = ub:CreateTexture(nil, "ARTWORK")
+            ic:SetAllPoints(ub)
+            ub.icon = ic
+            ub:SetScript("OnClick", UtilityOnClick)
+            ub:SetScript("OnEnter", function()
+                local uu = ACTIVE_UTILITY[this.utilIndex]
+                GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+                GameTooltip:SetText(uu.name, 1, 1, 1)
+                GameTooltip:AddLine("Click: cast on " .. (uu.tip or "target"), 0.8, 0.8, 0.8)
+                GameTooltip:Show()
+            end)
+            ub:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            utilButtons[slot] = ub
+        end
+        ub.utilIndex = uidx
+        local tex = GetSpellIconByName(u.name) or ("Interface\\Icons\\" .. (u.icon or "INV_Misc_QuestionMark"))
+        ub.icon:SetTexture(tex)
+        ub:ClearAllPoints()
+        ub:SetPoint("TOPLEFT", bar, "TOPLEFT", x, topY)
+        ub:Show()
+        x = x + UTIL_SIZE + UTIL_GAP
+    end
+    return UTIL_ROW_H
+end
+
 local function LayoutButtons()
     if not bar then return end
     -- Build the list of usable buffs (known spells only).
@@ -513,10 +768,14 @@ local function LayoutButtons()
         end
     end
 
-    -- Hide all old buttons first.
+    -- Hide all old buff buttons first.
     for _, btn in pairs(buttons) do btn:Hide() end
 
-    local y = -18
+    -- Top-row utility buttons (e.g. Priest PW: Shield / Fear Ward).
+    local topY = -18
+    local utilH = LayoutUtilityRow(topY)
+    local y = topY - utilH
+
     local shown = 0
     for slot = 1, table.getn(visible) do
         local buffIndex = visible[slot]
@@ -548,26 +807,17 @@ local function LayoutButtons()
             btn.timer = timer
 
             btn:SetScript("OnClick", ButtonOnClick)
-            btn:SetScript("OnEnter", function()
-                GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-                local bb = ACTIVE_BUFFS[this.buffIndex]
-                GameTooltip:SetText(bb.name or bb.group or "Buff", 1, 1, 1)
-                GameTooltip:AddLine("Left-click: buff the next group member missing it", 0.8, 0.8, 0.8)
-                if bb.group then
-                    GameTooltip:AddLine("Right-click: " .. bb.group .. " on their group", 0.8, 0.8, 0.8)
-                end
-                GameTooltip:AddLine("Timer shows the soonest expiry you've cast", 0.6, 0.6, 0.6)
-                GameTooltip:Show()
+            btn:EnableMouseWheel(true)
+            btn:SetScript("OnMouseWheel", function()
+                CycleButtonBuff(this, (arg1 and arg1 > 0) and 1 or -1)
             end)
+            btn:SetScript("OnEnter", function() ShowBuffTooltip(this) end)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
             buttons[slot] = btn
         end
 
-        btn.buffIndex = buffIndex
-        -- Icon: use the first icon basename for display.
-        local iconName = (b.icons and b.icons[1]) or "INV_Misc_QuestionMark"
-        btn.icon:SetTexture("Interface\\Icons\\" .. iconName)
+        SetButtonBuff(btn, buffIndex)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
         btn:Show()
@@ -575,15 +825,26 @@ local function LayoutButtons()
         shown = shown + 1
     end
 
-    bar:SetHeight(18 + shown * ROW_H + 6)
-    if shown == 0 then bar:Hide() end
+    -- Size the bar to fit the utility row and the buff rows.
+    local utilWidth = 0
+    if ACTIVE_UTILITY and utilH > 0 then
+        local nUtil = 0
+        for i = 1, table.getn(ACTIVE_UTILITY) do
+            if KNOWN[ACTIVE_UTILITY[i].name] then nUtil = nUtil + 1 end
+        end
+        utilWidth = PAD + nUtil * (UTIL_SIZE + UTIL_GAP) - UTIL_GAP + PAD
+    end
+    bar:SetWidth(math.max(BAR_W, utilWidth))
+    bar:SetHeight(18 + utilH + shown * ROW_H + 6)
+    if shown == 0 and utilH == 0 then bar:Hide() end
 end
 
 --=============================================================================
 -- CHEAP PER-SECOND TICK: countdown text + expiry warning. Pure arithmetic on
 -- stored deadlines — zero UnitBuff/API calls — so it can run every second.
 --=============================================================================
-local function UpdateDisplays()
+-- (forward-declared above) Cheap per-second tick: countdown text + warning.
+function UpdateDisplays()
     if not bar or not ACTIVE_BUFFS then return end
     local now = GetTime()
     for slot = 1, table.getn(buttons) do
@@ -704,6 +965,7 @@ local function Activate()
     end
 
     ACTIVE_BUFFS = RallyPowerCP_ClassBuffs[PLAYER_CLASS]
+    ACTIVE_UTILITY = RallyPowerCP_ClassUtility[PLAYER_CLASS]
 
     -- Empty/undefined class table -> nothing to show (e.g. Warrior/Rogue for now).
     if not ACTIVE_BUFFS or table.getn(ACTIVE_BUFFS) == 0 then

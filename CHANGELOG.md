@@ -9,6 +9,45 @@ original **PallyPower** (Hjorim / Sneakyfoot / Rake / Xerron / Azgaardian /
 Aznamir). Targets Turtle WoW 1.18.1 on the 1.12 client.
 
 ## [Unreleased]
+### Added
+- **Mouse-wheel scroll to switch a button's buff** (like PallyPower's scroll-to-
+  assign). Scroll up/down on any class-bar buff button to cycle it through your
+  class's buffs; its icon, the need count, the countdown timer, and the
+  Have/Need/Not Here/Dead tooltip all update to the newly selected buff. Only
+  buffs you've learned are included; classes with a single buff (e.g. Mage)
+  simply have nothing to cycle.
+
+### Changed
+- Clicking a buff can now **renew it on someone who already has it**. Clicks
+  still prioritize members who are missing the buff (so mass-buffing stays
+  efficient), but once everyone in range is covered, further clicks renew the
+  next member in the cycle instead of doing nothing — so you can top anyone off
+  at any time. Targeting a friendly group member always (re)buffs that member.
+  The Smart Buff key still stops once everyone is covered.
+
+### Planned / under consideration
+- Role assignment (tank/healer tables) so utility buttons can target by role —
+  e.g. PW: Shield / Fear Ward to tanks and healers specifically.
+- Cross-caster sync: multiple casters of the same class coordinating buff
+  duty and sharing timers (own addon-message protocol).
+- Reagent awareness: grey out group-buff right-click when out of reagents.
+- Combat mode: reduced scanning and/or muted expiry ding while in combat.
+- Shaman / Warrior / Hunter support (totems, shouts, and auras need a
+  different tracking model than maintained buffs).
+
+## [0.1.2] - 2026-06-12
+### Added
+- **PallyPower-style buff tooltips for every class.** Hovering a buff button
+  now lists group members by status — **Have** (green), **Need** (red),
+  **Not Here** (blue, out of range), **Dead** (bright red) — using the same
+  labels, colors, and categorization as the Paladin buff bar.
+- **Priest utility row** (top of the bar, like the Paladin seal/righteous-fury
+  buttons): **Power Word: Shield** (casts on your friendly target, else the
+  lowest-health living member in range) and **Fear Ward** (your target, else
+  yourself). Button icons are pulled live from your spellbook so they're always
+  correct, and only utilities you've learned appear. Extensible via
+  `RallyPowerCP_ClassUtility`.
+
 ### Fixed
 - Clicking a buff now properly **cycles** through party/raid members in range
   instead of getting stuck on you. Added a per-buff round-robin cursor so each
@@ -17,14 +56,6 @@ Aznamir). Targets Turtle WoW 1.18.1 on the 1.12 client.
 - When everyone in range (including you) already has the buff, a click no longer
   wastefully re-casts on yourself — it reports that the group is covered and
   does nothing.
-
-### Planned / under consideration
-- Cross-caster sync: multiple casters of the same class coordinating buff
-  duty and sharing timers (own addon-message protocol).
-- Reagent awareness: grey out group-buff right-click when out of reagents.
-- Combat mode: reduced scanning and/or muted expiry ding while in combat.
-- Shaman / Warrior / Hunter support (totems, shouts, and auras need a
-  different tracking model than maintained buffs).
 
 ## [0.1.1] - 2026-06-12
 ### Added
