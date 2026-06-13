@@ -273,26 +273,43 @@ local function UnitIsGroupMember(unit)
     return false
 end
 
+-- Round-robin cursor per buff: remembers the roster index we last cast on so
+-- the NEXT click continues from the following member (wrapping around). This is
+-- what makes repeated clicks cycle the whole group instead of locking onto the
+-- first needy unit (which, with the player first in the roster, was you).
+local cursor = {}
+
 -- Find the next group member (or pet) who is missing buff b.
--- Your current target is only preferred if it is a real group member who is
--- missing the buff — never a stranger, an NPC, or a hostile.
+-- Your current target is preferred ONLY if it is a real group member missing
+-- the buff (explicit intent) — never a stranger, an NPC, or a hostile.
 local function FindNeedyUnit(b)
     if UnitExists("target") and UnitIsFriend("player", "target")
        and UnitIsBuffable("target") and UnitIsVisible("target")
        and UnitIsGroupMember("target") and not UnitHasBuff("target", b) then
         return "target"
     end
+
     local count = BuildRoster(findRoster, b.pet and true or false)
-    for r = 1, count do
-        local u = findRoster[r]
-        -- UnitIsVisible filters members too far away to cast on, so a click
+    if count == 0 then return nil end
+    local key = b.name or b.group
+    local start = cursor[key] or 0
+
+    -- Walk the roster starting just AFTER the last unit we buffed, wrapping.
+    local step = 1
+    while step <= count do
+        local idx = start + step
+        while idx > count do idx = idx - count end
+        local u = findRoster[idx]
+        -- UnitIsVisible filters out members too far away to cast on, so a click
         -- never wastes itself on someone across the zone.
         if UnitIsBuffable(u) and UnitIsVisible(u) then
             local isPet = (string.find(u, "pet") ~= nil)
             if (not isPet or b.pet) and not UnitHasBuff(u, b) then
+                cursor[key] = idx
                 return u
             end
         end
+        step = step + 1
     end
     return nil
 end
@@ -331,6 +348,25 @@ local function RecordGroupExpiry(unit, b, dur)
     end
 end
 
+-- Announce a cast in green, exactly like the Paladin module. Reuses
+-- PallyPower_ShowFeedback so it honours the user's chat-vs-UIErrors feedback
+-- setting and the [RallyPowerCP] prefix; falls back to green chat text.
+local function AnnounceBuff(spell, unit, isGroup)
+    local name = UnitName(unit) or "?"
+    local msg
+    if isGroup then
+        msg = "Casting " .. spell .. " on " .. name .. "'s group"
+    else
+        local locClass = UnitClass(unit) or ""
+        msg = format(PallyPower_Casting or "Casting %s on %s (%s)", spell, locClass, name)
+    end
+    if PallyPower_ShowFeedback then
+        PallyPower_ShowFeedback(msg, 0, 1, 0)
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[RallyPowerCP] " .. msg .. "|r")
+    end
+end
+
 -- Cast `spell` on `unit` using PallyPower's EXACT casting flow (copied from
 -- its blessing cast): temporarily disable the autoSelfCast CVar, clear the
 -- target so the targeting cursor is GUARANTEED to come up, direct it with
@@ -351,6 +387,7 @@ local function CastBuffOn(spell, unit, b, dur, isGroup)
        and UnitIsFriend("player", "target") then
         CastSpellByName(spell)
         if restoreCVar then SetCVar("autoSelfCast", "1") end
+        AnnounceBuff(spell, unit, isGroup)
         if isGroup then RecordGroupExpiry(unit, b, dur)
         else RecordExpiry(unit, b, dur) end
         return
@@ -376,6 +413,7 @@ local function CastBuffOn(spell, unit, b, dur, isGroup)
     if restoreCVar then SetCVar("autoSelfCast", "1") end
 
     if landed then
+        AnnounceBuff(spell, unit, isGroup)
         if isGroup then RecordGroupExpiry(unit, b, dur)
         else RecordExpiry(unit, b, dur) end
     end
@@ -407,7 +445,13 @@ local function ButtonOnClick()
     local b = ACTIVE_BUFFS[idx]
     if not b then return end
 
-    local unit = FindNeedyUnit(b) or "player"   -- all covered: refresh self
+    local unit = FindNeedyUnit(b)
+    if not unit then
+        -- Everyone in range (including you) already has it: don't waste a cast.
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
+            .. (b.name or b.group) .. ": everyone in range is covered.")
+        return
+    end
     if arg1 == "RightButton" and b.group and KNOWN[b.group] then
         CastBuffOn(b.group, unit, b, b.gdur, true)
     elseif b.name and KNOWN[b.name] then

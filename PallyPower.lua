@@ -3142,7 +3142,8 @@ function PallyPowerBuffButton_OnClick(btn, mousebtn)
         SetCVar("autoSelfCast", "0")
     end
 
-    DoEmote("STAND") -- Force player stand
+    -- RallyPowerCP: removed forced STAND emote (caused "You can't do that while moving!"); casting auto-stands anyway
+    -- DoEmote("STAND")
 
     ClearTarget()
     local castspellid = -1
@@ -3343,7 +3344,8 @@ function PallyPower_AutoBless(mousebutton)
         SetCVar("autoSelfCast", "0")
     end
 
-    DoEmote("STAND") -- Force player stand
+    -- RallyPowerCP: removed forced STAND emote (caused "You can't do that while moving!"); casting auto-stands anyway
+    -- DoEmote("STAND")
 
     classbtn = lastClassBtn
     lastClassBtnTime = PALLYPOWER_RESTARTAUTOBLESS

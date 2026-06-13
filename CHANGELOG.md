@@ -10,14 +10,13 @@ Aznamir). Targets Turtle WoW 1.18.1 on the 1.12 client.
 
 ## [Unreleased]
 ### Fixed
-- Class-bar casts no longer throw "You can't do that while moving!" — removed a
-  stray `DoEmote("STAND")` from the cast flow (it was cosmetic, and emotes are
-  blocked while moving). Casting while moving now works silently.
-- Clicking a buff button no longer buffs your current target when that target
-  is an NPC, a stranger, or anyone outside your party/raid. The "prefer my
-  target" shortcut now only applies to an actual group member who is missing
-  the buff; otherwise the cast goes to the next needy group member and your
-  original target is restored.
+- Clicking a buff now properly **cycles** through party/raid members in range
+  instead of getting stuck on you. Added a per-buff round-robin cursor so each
+  click continues from the member after the last one buffed (wrapping around),
+  which also handles clicking faster than the buff visibly applies.
+- When everyone in range (including you) already has the buff, a click no longer
+  wastefully re-casts on yourself — it reports that the group is covered and
+  does nothing.
 
 ### Planned / under consideration
 - Cross-caster sync: multiple casters of the same class coordinating buff
@@ -26,6 +25,26 @@ Aznamir). Targets Turtle WoW 1.18.1 on the 1.12 client.
 - Combat mode: reduced scanning and/or muted expiry ding while in combat.
 - Shaman / Warrior / Hunter support (totems, shouts, and auras need a
   different tracking model than maintained buffs).
+
+## [0.1.1] - 2026-06-12
+### Added
+- Class bar now announces casts in green, mirroring the Paladin module
+  ("Casting <buff> on <Class> (<Name>)"), via PallyPower's own feedback
+  function — so it respects your chat-vs-screen feedback setting and the
+  `[RallyPowerCP]` prefix.
+
+### Fixed
+- Paladin blessing casts no longer throw "You can't do that while moving!" —
+  removed the same cosmetic `DoEmote("STAND")` (both occurrences) that caused
+  it on the class bar. Casting auto-stands you anyway.
+- Class-bar casts no longer throw "You can't do that while moving!" — removed a
+  stray `DoEmote("STAND")` from the cast flow (it was cosmetic, and emotes are
+  blocked while moving). Casting while moving now works silently.
+- Clicking a buff button no longer buffs your current target when that target
+  is an NPC, a stranger, or anyone outside your party/raid. The "prefer my
+  target" shortcut now only applies to an actual group member who is missing
+  the buff; otherwise the cast goes to the next needy group member and your
+  original target is restored.
 
 ## [0.0.1] - 2026-06-12
 Initial release, by **Subtilizer (Torchlite)**.
