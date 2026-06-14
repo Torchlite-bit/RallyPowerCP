@@ -222,12 +222,20 @@ local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
 local UTIL_SIZE  = 28
 local UTIL_GAP   = 4
 local UTIL_ROW_H = UTIL_SIZE + 6
--- Single scrollable class row (PallyPower-style): icon on the left, big timer
--- on the right, on a coloured status bar.
-local ROW_W      = 190
-local ROW_HEIGHT = 40
-local ROW_ICON   = 34
-local ROW_GAP    = 4
+-- Single scrollable class row, sized to EXACTLY match PallyPower's buff-bar
+-- button (100x36 with two 26x26 icons and a tooltip-textured backdrop coloured
+-- by status), so it looks identical to the Paladin row.
+local ROW_W      = 100
+local ROW_HEIGHT = 36
+local ROW_ICON   = 26
+local ROW_GAP    = 0
+local ROW_ALPHA  = 0.8
+local ROW_BACKDROP = {
+    bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 8, edgeSize = 8,
+    insets = { left = 2, right = 2, top = 3, bottom = 2 },
+}
 
 local function SavePosition()
     if not bar then return end
@@ -848,33 +856,40 @@ local function LayoutButtons()
             btn = CreateFrame("Button", "RallyPowerCP_BarBtn1", bar)
             btn:SetWidth(ROW_W); btn:SetHeight(ROW_HEIGHT)
             btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            btn:SetBackdrop(ROW_BACKDROP)
+            btn:SetBackdropColor(0, 1, 0, ROW_ALPHA)
 
-            local bg = btn:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints(btn)
-            bg:SetTexture(0.1, 0.6, 0.1, 0.25)
-            btn.bg = bg
+            -- left icon: your class (matches the Paladin row's class-icon slot)
+            local classIcon = btn:CreateTexture(nil, "ARTWORK")
+            classIcon:SetWidth(ROW_ICON); classIcon:SetHeight(ROW_ICON)
+            classIcon:SetPoint("TOPLEFT", btn, "TOPLEFT", 4, -5)
+            local cls = PLAYER_CLASS or "Priest"
+            cls = string.upper(string.sub(cls, 1, 1)) .. string.lower(string.sub(cls, 2))
+            classIcon:SetTexture("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
+            btn.classIcon = classIcon
 
+            -- right icon: the tracked buff
             local icon = btn:CreateTexture(nil, "ARTWORK")
             icon:SetWidth(ROW_ICON); icon:SetHeight(ROW_ICON)
-            icon:SetPoint("LEFT", btn, "LEFT", 4, 0)
+            icon:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 4, 0)
             btn.icon = icon
 
-            -- throttle indicator: a simple dark overlay shown briefly after a
-            -- cast (no Cooldown frame template, which isn't reliable on 1.12).
+            -- throttle dim (brief darken after a cast)
             local dim = btn:CreateTexture(nil, "OVERLAY")
             dim:SetAllPoints(icon)
             dim:SetTexture(0, 0, 0, 0.55)
             dim:Hide()
             btn.dim = dim
 
-            local count = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-            count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-            btn.count = count
-
-            local timer = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-            timer:SetPoint("RIGHT", btn, "RIGHT", -10, 0)
-            timer:SetJustifyH("RIGHT")
+            local timer = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            timer:SetWidth(40); timer:SetHeight(16); timer:SetJustifyH("RIGHT")
+            timer:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -5, 0)
             btn.timer = timer
+
+            local count = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            count:SetWidth(40); count:SetHeight(16); count:SetJustifyH("RIGHT")
+            count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -5, 0)
+            btn.count = count
 
             btn:SetScript("OnClick", ButtonOnClick)
             btn:EnableMouseWheel(true)
@@ -950,26 +965,23 @@ function UpdateDisplays()
         if btn and btn:IsShown() then
             local i = btn.buffIndex
             local need = NEEDCOUNT[i] or 0
-            if need > 0 then
-                btn.bg:SetTexture(0.55, 0.1, 0.1, 0.5)   -- red bar: someone needs it
-                btn.count:SetText(need)
-                btn.icon:SetVertexColor(1, 1, 1)
-            else
-                btn.bg:SetTexture(0.12, 0.5, 0.12, 0.5)  -- green bar: all covered
-                btn.count:SetText("")
-                btn.icon:SetVertexColor(1, 1, 1)
-            end
             local dl = minDeadline[i]
             local mr = dl and (dl - now) or nil
+            -- backdrop status colour, exactly like PallyPower's buff bar buttons
+            if need > 0 then
+                btn:SetBackdropColor(1, 0, 0, ROW_ALPHA)        -- red: someone needs it
+                btn.count:SetText(need)
+            elseif mr and mr <= WARN_TIME then
+                btn:SetBackdropColor(1, 1, 0.5, ROW_ALPHA)      -- yellow: covered but expiring
+                btn.count:SetText("")
+            else
+                btn:SetBackdropColor(0, 1, 0, ROW_ALPHA)        -- green: all covered
+                btn.count:SetText("")
+            end
             if mr and mr > 0 then
                 local m = math.floor(mr / 60)
                 local s = math.floor(mr - m * 60)
                 btn.timer:SetText(string.format("%d:%02d", m, s))
-                if mr <= WARN_TIME then
-                    btn.timer:SetTextColor(1, 0.4, 0.4)    -- red: about to expire
-                else
-                    btn.timer:SetTextColor(0.9, 1.0, 0.5)  -- pale gold, like the Pally bar
-                end
             else
                 btn.timer:SetText("")
             end

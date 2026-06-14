@@ -24,6 +24,18 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.2.3] — 2026-06-12
+### Changed
+- **The class row now matches PallyPower's buff-bar button exactly.** It was far
+  too large; it's now the same 100×36 size with two 26×26 icons (your class icon
+  on the left, the tracked buff on the right), the same Tooltip-textured backdrop
+  coloured by status — red when someone needs it, yellow when it's expiring,
+  green when everyone is covered — and the same `GameFontHighlightSmall` timer
+  and count text. The values are taken straight from the Paladin frame so the
+  look is identical.
+
+---
+
 ## [0.2.2] — 2026-06-12
 Hotfix: the class bar failed to appear for every non-Paladin class in 0.2.1.
 
