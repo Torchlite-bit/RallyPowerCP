@@ -1,128 +1,129 @@
 # RallyPowerCP
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** — version **0.0.1**.
+By **Subtilizer (Torchlite)** · version **0.2.0** · see [CHANGELOG.md](CHANGELOG.md).
 
-Built on PallyPowerTW (by ivanovlk) and the original PallyPower team.
+Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
-RallyPowerCP keeps PallyPower's Paladin blessing/aura/seal grid exactly as it
+RallyPowerCP keeps PallyPower's Paladin blessing/seal/aura grid exactly as it
 was, and adds an auto-detecting buff tracker for every other buffing class. Log
-in on a Paladin and you get the full PallyPower grid. Log in on a Priest, Mage,
-or Druid and you instead get a matching bar that tracks *your* class's group
-buffs across the party/raid.
+in on a Paladin and you get the full PallyPower grid, unchanged. Log in on a
+Priest, Mage, Druid, or Warrior and you instead get a matching bar that tracks
+*your* class's group buffs across the party/raid.
 
 ---
 
-## What's different from PallyPowerTW
+## What you get per class
 
-1. **Renamed** to RallyPowerCP (new `.toc`, paths, load check, slash aliases,
-   credits, key-binding header). Internal Lua function/variable names are kept
-   as `PallyPower_*` on purpose — they're invisible in-game and renaming 3,700+
-   lines would risk breaking the proven Paladin engine.
-2. **Turtle blessing timers forced on.** Regular blessings = **10 min**, Greater
-   Blessings = **30 min**, on every realm. (PallyPowerTW only applied these on a
-   hard-coded list of realm names, so off-list realms wrongly showed 5 min.)
-   Toggle in `PallyPower.lua` via `FORCE_TURTLE_DURATIONS`.
-3. **All-class buff bar** (`RallyPowerCP_Classes.lua`). Auto-detects your class:
-   - **Paladin** → dormant; the original grid owns the UI (unchanged).
-   - **Priest** → Power Word: Fortitude, Divine Spirit, Shadow Protection.
-   - **Mage** → Arcane Intellect.
-   - **Druid** → Mark of the Wild, Thorns.
-   - **Others** → no tracked group buffs yet (easy to add — see below).
+| Class | What the bar does |
+|-------|-------------------|
+| **Paladin** | The original PallyPower grid (blessings, seals, auras). The class bar stays dormant. |
+| **Priest** | Power Word: Fortitude, Divine Spirit, Shadow Protection — plus a utility row: PW: Shield and Fear Ward. |
+| **Mage** | Arcane Intellect. |
+| **Druid** | Mark of the Wild, Thorns. |
+| **Warrior** | Battle Shout (self-cast; one click refreshes nearby party). |
+
+More classes are planned — Hunter, Shaman, and Warlock need a different model
+(auras, totems, utility) and are on the roadmap in the changelog.
 
 ## The class bar
 
-- One button per group buff you can cast. **Red + number** = that many group
-  members are still missing it. **Faded/green** = everyone is covered.
-- **Left-click** a button → buffs the **next group member missing it** (your
-  current target gets priority if they're missing it; if everyone's covered it
-  refreshes you). No more accidental self-casts.
-- **Right-click** → casts the group/greater version (Prayer of…, Arcane
+- **One button per buff.** A red badge with a number = that many members are
+  missing it; faded green = everyone in range is covered.
+- **Left-click** buffs the next member who needs it. Once everyone is covered,
+  clicks **renew** the next member, so you can top anyone off at any time.
+  Targeting a friendly group member always (re)buffs that exact person.
+- **Right-click** casts the group/greater version (Prayer of…, Arcane
   Brilliance, Gift of the Wild) on the missing member's subgroup.
-- **Countdown timer** beside each icon shows the soonest expiry among the buffs
-  you've cast — exact to the second for buffs on yourself; for others it counts
-  down from your cast (the 1.12 client doesn't expose other players' buff
-  durations, the same limitation PallyPower works around the same way). Turns
-  red and plays the **ding** (same sound as the Paladin bar) at 60 seconds left.
-- **Key binding:** bind **"Smart buff: next member missing any buff"** under
-  RallyPowerCP in the Key Bindings menu — each press buffs the next member
-  missing anything, fully hands-free. Mash it until everything's green.
-- **Drag** the bar to move it; position is saved. Only buffs you've actually
-  learned appear.
-- Buff durations are listed per spell in `RallyPowerCP_ClassBuffs`
-  (`dur`/`gdur`, in seconds) — easy to edit if Turtle tunes a duration.
+- **Scroll the mouse wheel** over a button to switch which buff it tracks; the
+  icon, count, timer, and tooltip all follow.
+- **Countdown timer** beside each icon turns red and plays a **ding** at 60
+  seconds left. Times are exact for buffs on you; for others they count down
+  from your cast (the 1.12 client can't read other players' buff durations — the
+  same limit PallyPower works around the same way).
+- **Hover tooltip** lists everyone by status: **Have** / **Need** /
+  **Not Here** (out of range) / **Dead**, just like the Paladin bar.
+- **Utility row** (currently Priest): situational single-target casts. PW: Shield
+  goes to your target, else the lowest-health member in range; Fear Ward goes to
+  your target, else you.
+- Only buffs you've actually learned appear, so the bar scales with level/spec.
+- **Drag** to move; position is saved per character.
 
-## Showing up automatically + the minimap icon
-
-- **Solo / leveling:** the bar appears on its own at login and after zoning,
-  just like PallyPower's solo buff bar — *as soon as you know at least one
-  trackable buff*. Before you've trained any (a fresh low-level character), it
-  stays hidden because there's nothing to show, then pops up once you learn one.
-  While solo it tracks the buffs on **you**, so it doubles as a self-buff
-  reminder.
-- **Minimap icon:** shown for every class (toggle it in Options). 
-  **Left-click** toggles the right thing for your class — the Paladin assignment
-  grid on a Paladin, your class buff bar on everyone else. **Right-click** opens
-  Options. Hover shows the credits/version.
-
-## Slash commands
+## Commands & key binding
 
 | Command | Description |
 |---------|-------------|
 | `/pp`, `/pallypower`, `/rp`, `/rallypower` | Paladin grid / buff bar (PallyPower) |
 | `/rpc` | Toggle the all-class buff bar (non-Paladins) |
 | `/rpc reset` | Reset the class bar's position |
-| `/rpc icon` | Cycle the minimap icon skin (any class; also **shift-click** the icon) |
+| `/rpc icon` | Cycle the minimap icon skin (any class; or **shift-click** the icon) |
 | `/rpc icon <name>` | Set a skin directly: `blue`, `ivory`, `white`, `gold`, `pearl` |
+
+Bind **"Smart buff: next member missing any buff"** under RallyPowerCP in the
+Key Bindings menu to top off the group hands-free — each press buffs the next
+member missing anything.
+
+## Minimap icon
+
+Shown for every class (toggle it in Options). **Left-click** opens the right
+thing for your class — the Paladin grid on a Paladin, the class bar on everyone
+else. **Right-click** opens Options. **Shift-click** cycles the icon skin. Five
+skins ship (Blue & Gold default, Ivory, White, Gold, Pearl).
 
 ## Installation
 
-1. Place this folder in `Interface/AddOns/` and make sure it is named exactly
-   **`RallyPowerCP`** (the folder name must match `RallyPowerCP.toc`).
-2. That's it — all art (`Icons/`, `HDIcons/`), the expiry sound (`Sounds/`),
-   and the `PallyPower-ResizeGrip` texture are bundled and every path in the
-   code has been verified against a real file. The new class bar uses
-   Blizzard's built-in spell icons and needs no extra art.
+1. Put the `RallyPowerCP` folder in `Interface/AddOns/` (the folder name must
+   match `RallyPowerCP.toc`).
+2. That's it — all art, sounds, and textures are bundled, and every path is
+   verified against a real file.
 
-## Adding more classes/buffs
+## Architecture (for tinkering)
 
-Edit `RallyPowerCP_ClassBuffs` in `RallyPowerCP_Classes.lua`. Each entry:
+RallyPowerCP's all-class bar follows an AutoRota-style layout:
+
+- **`RallyPowerCP_Core.lua`** — the class-independent engine: roster scanning,
+  buff detection, casting, the bar UI, timers, tooltips, scrolling, minimap
+  skins, and slash commands. It knows nothing about specific classes.
+- **`Classes\Class_<Name>.lua`** — one module per class. Each registers with
+  `RallyPowerCP:NewClass("TOKEN")` and supplies only its data.
+
+The Paladin side is the original PallyPower engine (`PallyPower.lua` + `.xml`)
+and is deliberately left intact.
+
+### Adding a class or buff
+
+Copy an existing `Classes\Class_<Name>.lua`, change the token and data, and list
+the file in `RallyPowerCP.toc`. Buff entry fields:
 
 ```lua
-{ name  = "Power Word: Fortitude",          -- exact single-target spell name
-  group = "Prayer of Fortitude",            -- optional group/greater version
-  icons = { "Spell_Holy_WordFortitude" },   -- applied-aura icon basename(s)
-  pet   = true },                           -- optional: also track on pets
+{ name     = "Power Word: Fortitude",        -- single-target spell name
+  group    = "Prayer of Fortitude",          -- group/greater version (optional)
+  icons    = { "Spell_Holy_WordFortitude" }, -- applied-aura icon basename(s)
+  pet      = true,                           -- also track on pets (optional)
+  dur      = 30*60, gdur = 60*60,            -- durations in seconds (timers)
+  selfcast = true }                          -- shout/aura cast on self (optional)
 ```
 
-Buffs are detected by **icon texture**, which is the only reliable way to read
-another player's buffs on the 1.12 client.
+Buffs are detected by **icon texture** — the only reliable way to read another
+player's buffs on the 1.12 client.
 
-## Compatibility with other PallyPower users
+## Compatibility
 
-- **Paladin blessing sync works.** RallyPowerCP keeps PallyPower's sync channel
-  (addon-message prefix `PLPWR`) and message format unchanged, so a RallyPowerCP
-  Paladin and players running the original PallyPower / PallyPowerTW in the same
-  party/raid see and coordinate each other's blessing, aura, and seal
-  assignments normally, in both directions.
-- **The all-class bar is local-only.** The Priest/Mage/Druid buff tracker sends
-  and receives nothing over the network — it just watches buffs on your screen
-  and reminds you. It does not coordinate between, say, two Priests the way the
-  Paladin grid coordinates multiple Paladins. It also can't conflict with anyone
-  else's addons.
-- **No false "new version" pop-ups.** Because the sync channel is shared, other
-  PallyPower users broadcast their own (higher) version numbers. That would
-  normally trigger a misleading "new version of RallyPowerCP available" message,
-  so it's suppressed in this fork.
+- **Paladin sync works.** RallyPowerCP keeps PallyPower's sync channel (prefix
+  `PLPWR`) and message format, so a RallyPowerCP Paladin coordinates blessings
+  with players running original PallyPower / PallyPowerTW in both directions.
+- **The class bar is local-only** — it sends nothing over the network, so it
+  can't conflict with anyone, but it also doesn't coordinate between two casters
+  of the same class yet (that's the cross-caster sync on the roadmap).
 
-## Known limitations (v0.0.1)
+## Known limitations
 
-- Warrior/Hunter/Shaman/Warlock/Rogue have no tracked group buffs yet (shouts,
-  auras, and totems work differently and are planned for a later build).
-- The bar tracks coverage and lets you rebuff; it does not auto-assign buffs the
-  way the Paladin grid coordinates blessings between multiple Paladins.
+- On the 1.12 client there is no way to read how much time is left on another
+  player's buff, so non-self timers count down from your own casts.
+- "In range" uses the game's visibility check, which is a wider radius than buff
+  range; an out-of-range cast cancels cleanly and the next click moves on.
+- PW: Shield can't see who your tank is yet (role assignment is on the roadmap),
+  and it may pick a Weakened-Soul target, in which case the cast simply fizzles.
 
 ## Credits
 
