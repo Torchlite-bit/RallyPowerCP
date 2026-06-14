@@ -12,15 +12,48 @@ Author: **Subtilizer (Torchlite)**.
 
 ## [Unreleased]
 ### Planned / under consideration
-- **Role assignment** (tank/healer tables) so utility buttons can target by
-  role — e.g. PW: Shield / Fear Ward to tanks and healers specifically.
+- **Role assignment** (tank/healer tables) so utility buttons and a Tank-Shield
+  box can target by role — e.g. PW: Shield / Fear Ward to tanks and healers.
 - **Cross-caster sync**: two casters of the same class splitting buff duty and
-  sharing timers over a dedicated addon-message channel.
-- **Reagent awareness**: grey out a group-buff right-click when out of reagents.
-- **Combat mode**: reduced scanning and/or a muted expiry ding while in combat.
+  sharing timers over a dedicated addon-message channel (also the only way to get
+  exact timers for buffs other players cast).
+- **The full PallyPower grid + pop-outs**, drag-dot lock/unlock, and the
+  right-click assignment matrix / options panel.
 - **More classes**: Hunter (Trueshot Aura) and Shaman (totems) need an
-  aura/range model rather than per-member casting; Warlock utility (soulstones)
-  is a different feature again.
+  aura/range model rather than per-member casting.
+
+---
+
+## [0.2.1] — 2026-06-12
+Reworked the class bar into a single scrollable row and adopted the spec's
+main-button click model.
+
+### Changed
+- **One scrollable class row instead of one button per buff.** The bar now shows
+  a single PallyPower-styled row — icon on the left, large countdown on the
+  right, on a green (covered) / red (someone needs it) status bar. Scroll the
+  mouse wheel to switch which buff it shows; the timer and the Have/Need/Not
+  Here/Dead tooltip follow. Your selection is remembered.
+- **New click model on the class row:**
+  - **Left-click** casts the **group/raid version** (Prayer of…, Gift of the
+    Wild, Arcane Brilliance), covering a whole subgroup at once; renew-capable.
+  - **Right-click** is a **smart top-off**: it casts the single-target version on
+    the one member who needs it most (missing first, otherwise the lowest time
+    remaining). Disabled in combat, and it won't overwrite a buff with 4+ minutes
+    left, to save reagents.
+- The expiry **ding now fires for every tracked buff**, even one you aren't
+  currently showing on the row, so nothing slips by while it's scrolled off.
+
+### Added
+- **Throttle guard.** After a cast the row shows a brief cooldown swirl and
+  ignores clicks for the global-cooldown window, so a panicked double-click can't
+  burn a second set of reagents.
+
+### Notes
+- Per-member timing still relies on your own casts — the 1.12 client can't read
+  how long another player's buff has left — so the 4-minute no-overwrite guard
+  and "lowest time remaining" only consider members you personally buffed; others
+  showing the aura are treated as covered.
 
 ---
 

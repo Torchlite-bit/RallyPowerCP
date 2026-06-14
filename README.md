@@ -1,7 +1,7 @@
 # RallyPowerCP
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** · version **0.2.0** · see [CHANGELOG.md](CHANGELOG.md).
+By **Subtilizer (Torchlite)** · version **0.2.1** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
@@ -28,19 +28,26 @@ More classes are planned — Hunter, Shaman, and Warlock need a different model
 
 ## The class bar
 
-- **One button per buff.** A red badge with a number = that many members are
-  missing it; faded green = everyone in range is covered.
-- **Left-click** buffs the next member who needs it. Once everyone is covered,
-  clicks **renew** the next member, so you can top anyone off at any time.
-  Targeting a friendly group member always (re)buffs that exact person.
-- **Right-click** casts the group/greater version (Prayer of…, Arcane
-  Brilliance, Gift of the Wild) on the missing member's subgroup.
-- **Scroll the mouse wheel** over a button to switch which buff it tracks; the
-  icon, count, timer, and tooltip all follow.
-- **Countdown timer** beside each icon turns red and plays a **ding** at 60
-  seconds left. Times are exact for buffs on you; for others they count down
-  from your cast (the 1.12 client can't read other players' buff durations — the
-  same limit PallyPower works around the same way).
+- **One scrollable row.** The bar shows a single PallyPower-styled row — the buff
+  icon on the left, a large countdown on the right, on a green (everyone covered)
+  or red (someone needs it) status bar, with a badge showing how many are missing.
+- **Scroll the mouse wheel** over the row to switch which of your buffs it shows;
+  the timer, count, and tooltip all follow, and your choice is remembered.
+- **Left-click** casts the **group/raid version** (Prayer of Fortitude, Gift of
+  the Wild, Arcane Brilliance…), covering a whole subgroup at once. Once everyone
+  is covered it renews the next subgroup, so you can keep topping off.
+- **Right-click** is a **smart top-off**: it casts the single-target version on
+  the one member who needs it most — missing the buff first, otherwise the
+  lowest time remaining. It's disabled in combat and won't overwrite a buff with
+  4+ minutes left, to save reagents.
+- **Throttle guard:** after a cast the row briefly shows a cooldown swirl and
+  ignores clicks for the global-cooldown window, so a double-click can't waste a
+  second set of reagents.
+- **Countdown timer** turns red and plays a **ding** at 60 seconds left — for
+  *every* tracked buff, even one scrolled off the row, so nothing slips by. Times
+  are exact for buffs on you; for others they count down from your cast (the 1.12
+  client can't read other players' buff durations — the same limit PallyPower
+  works around the same way).
 - **Hover tooltip** lists everyone by status: **Have** / **Need** /
   **Not Here** (out of range) / **Dead**, just like the Paladin bar.
 - **Utility row** (currently Priest): situational single-target casts. PW: Shield

@@ -67,6 +67,11 @@ local SCAN_INTERVAL = 1.0        -- seconds between roster rescans
 local bar                        -- the bar frame (created lazily)
 local buttons = {}               -- bar buttons, one per active buff
 local utilButtons = {}           -- top-row utility buttons (e.g. PW:Shield)
+local shownIndex                 -- which buff the single class button currently shows
+local lastCast = 0               -- throttle guard: GetTime() of the last cast
+local THROTTLE = 1.5             -- seconds a click is ignored after casting (= GCD)
+local FOUR_MIN = 240             -- right-click won't overwrite a buff with this much left
+local smartRoster = {}           -- scratch for the smart-auto-buff scan
 
 -- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
 -- a buff (keyed by the recipient's character name), and we read exact times for
@@ -216,6 +221,12 @@ local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
 local UTIL_SIZE  = 28
 local UTIL_GAP   = 4
 local UTIL_ROW_H = UTIL_SIZE + 6
+-- Single scrollable class row (PallyPower-style): icon on the left, big timer
+-- on the right, on a coloured status bar.
+local ROW_W      = 190
+local ROW_HEIGHT = 40
+local ROW_ICON   = 34
+local ROW_GAP    = 4
 
 local function SavePosition()
     if not bar then return end
@@ -532,19 +543,60 @@ function RallyPowerCP_SmartBuff()
     end
 end
 
+-- Smart auto-buff target (right-click): the single most-needy member of the
+-- raid for buff b. A member MISSING the buff is top priority; otherwise the one
+-- with the least time left, but only if under the 4-minute reagent-saving floor.
+-- Members we have no timer for (someone else buffed them) count as covered,
+-- since the 1.12 client can't tell us how long their buff has left.
+local function FindSmartBuffTarget(b)
+    local count = BuildRoster(smartRoster, b.pet and true or false)
+    local lowU, lowRem
+    for r = 1, count do
+        local u = smartRoster[r]
+        if UnitIsBuffable(u) and UnitIsVisible(u) then
+            if not UnitHasBuff(u, b) then
+                return u                      -- missing it: cast now
+            else
+                local nm = UnitName(u)
+                local dl = nm and expiry[nm] and expiry[nm][b.name or b.group]
+                if dl then
+                    local rem = dl - GetTime()
+                    if rem < FOUR_MIN and (not lowRem or rem < lowRem) then
+                        lowRem = rem; lowU = u
+                    end
+                end
+            end
+        end
+    end
+    return lowU
+end
+
+-- Throttle guard: record the cast time and spin the button's cooldown swirl so
+-- it's visually obvious you can't usefully click again until the GCD is up.
+local function StartThrottle(btn)
+    lastCast = GetTime()
+    if btn and btn.cd then
+        CooldownFrame_SetTimer(btn.cd, lastCast, THROTTLE, 1)
+    end
+end
+
 local function ButtonOnClick()
     -- arg1 holds the mouse button on the 1.12 client
     local idx = this.buffIndex
     local b = ACTIVE_BUFFS[idx]
     if not b then return end
 
-    -- Self-cast shouts/auras (e.g. Battle Shout): a single cast refreshes nearby
-    -- party members; there is no per-member targeting.
+    -- Throttle guard: ignore a click that lands within the GCD of the last cast,
+    -- so a panicked double-click can't burn a second set of reagents.
+    if GetTime() - lastCast < THROTTLE then return end
+
+    -- Self-cast shouts/auras (e.g. Battle Shout): one cast refreshes nearby party.
     if b.selfcast then
         if KNOWN[b.name] then
             CastSpellByName(b.name)
-            RecordGroupExpiry("player", b, b.dur)   -- credit your party/subgroup
+            RecordGroupExpiry("player", b, b.dur)
             AnnounceBuff(b.name, "player", false)
+            StartThrottle(this)
         else
             DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r You haven't learned " .. b.name .. ".")
         end
@@ -552,21 +604,42 @@ local function ButtonOnClick()
         return
     end
 
+    if arg1 == "RightButton" then
+        -- Smart auto-buff: top off the single most-needy member with the normal
+        -- (single-target) version. Disabled in combat; respects the 4-min floor.
+        if UnitAffectingCombat("player") then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r auto-buff is disabled in combat.")
+            return
+        end
+        local unit = FindSmartBuffTarget(b)
+        if not unit then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
+                .. (b.name or b.group) .. ": everyone in range is covered (4+ min left).")
+            return
+        end
+        if b.name and KNOWN[b.name] then
+            CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
+        elseif b.group and KNOWN[b.group] then
+            CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
+        end
+        auraDirty = true; lastScan = SCAN_INTERVAL
+        return
+    end
+
+    -- Left-click: cast the GROUP/raid-wide version, covering a whole subgroup at
+    -- once (renew-capable: tops off the next subgroup once everyone is covered).
     local unit = FindUnitToBuff(b, true)
     if not unit then
-        -- nobody in range at all (everyone too far / offline / dead)
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
             .. (b.name or b.group) .. ": no group members in range.")
         return
     end
-    if arg1 == "RightButton" and b.group and KNOWN[b.group] then
-        CastBuffOn(b.group, unit, b, b.gdur, true)
+    if b.group and KNOWN[b.group] then
+        CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
     elseif b.name and KNOWN[b.name] then
-        CastBuffOn(b.name, unit, b, b.dur, false)
-    elseif b.group and KNOWN[b.group] then
-        CastBuffOn(b.group, unit, b, b.gdur, true)
+        CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
     end
-    auraDirty = true; lastScan = SCAN_INTERVAL   -- prompt full rescan
+    auraDirty = true; lastScan = SCAN_INTERVAL
 end
 
 -- Click handler for a top-row utility button (PW: Shield, Fear Ward, ...).
@@ -659,10 +732,12 @@ local function ShowBuffTooltip(btn)
     if bb.selfcast then
         GameTooltip:AddLine("Click: cast (refreshes nearby party)", 0.7, 0.7, 0.7)
     else
-        GameTooltip:AddLine("Left-click: buff / renew next member", 0.7, 0.7, 0.7)
         if bb.group then
-            GameTooltip:AddLine("Right-click: " .. bb.group .. " on their group", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine("Left-click: " .. bb.group .. " (covers a group)", 0.7, 0.7, 0.7)
+        else
+            GameTooltip:AddLine("Left-click: buff / renew next member", 0.7, 0.7, 0.7)
         end
+        GameTooltip:AddLine("Right-click: smart top-off (out of combat)", 0.7, 0.7, 0.7)
     end
     GameTooltip:Show()
 end
@@ -691,6 +766,7 @@ local function CycleButtonBuff(btn, dir)
         tries = tries + 1
     until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= n
     SetButtonBuff(btn, i)
+    shownIndex = i                                 -- remember across relayouts
     if UpdateDisplays then UpdateDisplays() end   -- refresh count/timer at once
     ShowBuffTooltip(btn)                           -- refresh the open tooltip
 end
@@ -742,16 +818,16 @@ end
 
 local function LayoutButtons()
     if not bar then return end
-    -- Build the list of usable buffs (known spells only).
+    -- Usable buffs (known spells only).
     local visible = {}
     if ACTIVE_BUFFS then
         for i = 1, table.getn(ACTIVE_BUFFS) do
-            local b = ACTIVE_BUFFS[i]
-            if BuffIsUsable(b) then table.insert(visible, i) end
+            if BuffIsUsable(ACTIVE_BUFFS[i]) then table.insert(visible, i) end
         end
     end
 
-    -- Hide all old buff buttons first.
+    -- Hide everything first; we render ONE scrollable class row (scroll to switch
+    -- which buff it shows) rather than all buffs at once.
     for _, btn in pairs(buttons) do btn:Hide() end
 
     -- Top-row utility buttons (e.g. Priest PW: Shield / Fear Ward).
@@ -760,33 +836,42 @@ local function LayoutButtons()
     local y = topY - utilH
 
     local shown = 0
-    for slot = 1, table.getn(visible) do
-        local buffIndex = visible[slot]
-        local b = ACTIVE_BUFFS[buffIndex]
-        local btn = buttons[slot]
+    if table.getn(visible) > 0 then
+        -- Which buff to show: the remembered one if still usable, else the first.
+        -- shownIndex persists across the frequent SPELLS_CHANGED relayouts and is
+        -- reset on a class change in Activate().
+        local okRemembered = shownIndex and ACTIVE_BUFFS[shownIndex]
+            and BuffIsUsable(ACTIVE_BUFFS[shownIndex])
+        if not okRemembered then shownIndex = visible[1] end
+
+        local btn = buttons[1]
         if not btn then
-            btn = CreateFrame("Button", "RallyPowerCP_BarBtn" .. slot, bar)
-            btn:SetWidth(BTN_SIZE); btn:SetHeight(BTN_SIZE)
+            btn = CreateFrame("Button", "RallyPowerCP_BarBtn1", bar)
+            btn:SetWidth(ROW_W); btn:SetHeight(ROW_HEIGHT)
             btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
             local bg = btn:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints(btn)
-            bg:SetTexture(1, 0, 0, 0.35)
+            bg:SetTexture(0.1, 0.6, 0.1, 0.25)
             btn.bg = bg
 
             local icon = btn:CreateTexture(nil, "ARTWORK")
-            icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
-            icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
+            icon:SetWidth(ROW_ICON); icon:SetHeight(ROW_ICON)
+            icon:SetPoint("LEFT", btn, "LEFT", 4, 0)
             btn.icon = icon
 
+            -- throttle cooldown swirl over the icon (visual anti-double-click)
+            local cd = CreateFrame("Cooldown", "RallyPowerCP_BarBtn1CD", btn, "CooldownFrameTemplate")
+            cd:SetAllPoints(icon)
+            btn.cd = cd
+
             local count = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-            count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+            count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
             btn.count = count
 
-            -- countdown readout to the right of the icon (like the Pally bar)
-            local timer = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            timer:SetPoint("LEFT", btn, "RIGHT", 4, 0)
-            timer:SetJustifyH("LEFT")
+            local timer = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+            timer:SetPoint("RIGHT", btn, "RIGHT", -10, 0)
+            timer:SetJustifyH("RIGHT")
             btn.timer = timer
 
             btn:SetScript("OnClick", ButtonOnClick)
@@ -797,18 +882,18 @@ local function LayoutButtons()
             btn:SetScript("OnEnter", function() ShowBuffTooltip(this) end)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-            buttons[slot] = btn
+            buttons[1] = btn
         end
 
-        SetButtonBuff(btn, buffIndex)
+        SetButtonBuff(btn, shownIndex)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
         btn:Show()
-        y = y - ROW_H
-        shown = shown + 1
+        y = y - (ROW_HEIGHT + ROW_GAP)
+        shown = 1
     end
 
-    -- Size the bar to fit the utility row and the buff rows.
+    -- Size the bar to fit the utility row and the single class row.
     local utilWidth = 0
     if ACTIVE_UTILITY and utilH > 0 then
         local nUtil = 0
@@ -817,8 +902,9 @@ local function LayoutButtons()
         end
         utilWidth = PAD + nUtil * (UTIL_SIZE + UTIL_GAP) - UTIL_GAP + PAD
     end
-    bar:SetWidth(math.max(BAR_W, utilWidth))
-    bar:SetHeight(18 + utilH + shown * ROW_H + 6)
+    local rowWidth = (shown > 0) and (PAD + ROW_W + PAD) or 0
+    bar:SetWidth(math.max(BAR_W, utilWidth, rowWidth))
+    bar:SetHeight(18 + utilH + shown * (ROW_HEIGHT + ROW_GAP) + 6)
     if shown == 0 and utilH == 0 then bar:Hide() end
 end
 
@@ -830,28 +916,15 @@ end
 function UpdateDisplays()
     if not bar or not ACTIVE_BUFFS then return end
     local now = GetTime()
-    for slot = 1, table.getn(buttons) do
-        local btn = buttons[slot]
-        if btn and btn:IsShown() then
-            local i = btn.buffIndex
-            local need = NEEDCOUNT[i] or 0
-            if need > 0 then
-                btn.bg:SetTexture(0.8, 0.1, 0.1, 0.6)   -- red: someone needs it
-                btn.count:SetText(need)
-                btn.icon:SetVertexColor(1, 1, 1)
-            else
-                btn.bg:SetTexture(0.1, 0.6, 0.1, 0.25)  -- green/faded: all covered
-                btn.count:SetText("")
-                btn.icon:SetVertexColor(0.55, 0.55, 0.55)
-            end
-            local dl = minDeadline[i]
-            local mr = dl and (dl - now) or nil
-            if mr and mr > 0 then
-                local m = math.floor(mr / 60)
-                local s = math.floor(mr - m * 60)
-                btn.timer:SetText(string.format("%d:%02d", m, s))
+
+    -- (1) Expiry-warning pass over EVERY buff, so a buff you're not currently
+    -- showing on the single row still dings and self-corrects on the tick.
+    for i = 1, table.getn(ACTIVE_BUFFS) do
+        local dl = minDeadline[i]
+        if dl then
+            local mr = dl - now
+            if mr > 0 then
                 if mr <= WARN_TIME then
-                    btn.timer:SetTextColor(1, 0.25, 0.25)   -- red: about to expire
                     if not warned[i] then
                         warned[i] = true
                         PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
@@ -860,15 +933,43 @@ function UpdateDisplays()
                             .. (b.name or b.group) .. " is about to expire!")
                     end
                 else
-                    btn.timer:SetTextColor(0.9, 0.9, 0.9)
-                    warned[i] = nil   -- re-armed: it was refreshed
+                    warned[i] = nil   -- re-armed: it was refreshed past the warning
+                end
+            else
+                minDeadline[i] = nil
+                auraDirty = true      -- a deadline just lapsed: verify coverage
+            end
+        end
+    end
+
+    -- (2) Update the single visible class row from its current buff.
+    for slot = 1, table.getn(buttons) do
+        local btn = buttons[slot]
+        if btn and btn:IsShown() then
+            local i = btn.buffIndex
+            local need = NEEDCOUNT[i] or 0
+            if need > 0 then
+                btn.bg:SetTexture(0.55, 0.1, 0.1, 0.5)   -- red bar: someone needs it
+                btn.count:SetText(need)
+                btn.icon:SetVertexColor(1, 1, 1)
+            else
+                btn.bg:SetTexture(0.12, 0.5, 0.12, 0.5)  -- green bar: all covered
+                btn.count:SetText("")
+                btn.icon:SetVertexColor(1, 1, 1)
+            end
+            local dl = minDeadline[i]
+            local mr = dl and (dl - now) or nil
+            if mr and mr > 0 then
+                local m = math.floor(mr / 60)
+                local s = math.floor(mr - m * 60)
+                btn.timer:SetText(string.format("%d:%02d", m, s))
+                if mr <= WARN_TIME then
+                    btn.timer:SetTextColor(1, 0.4, 0.4)    -- red: about to expire
+                else
+                    btn.timer:SetTextColor(0.9, 1.0, 0.5)  -- pale gold, like the Pally bar
                 end
             else
                 btn.timer:SetText("")
-                if dl then
-                    minDeadline[i] = nil
-                    auraDirty = true   -- a deadline just lapsed: verify coverage
-                end
             end
         end
     end
@@ -961,6 +1062,7 @@ local function Activate()
 
     BuildIconLookups()
     RebuildKnownSpells()
+    shownIndex = nil          -- start on the first usable buff for this class
     CreateBar()
     LayoutButtons()
     if RallyPowerCP_Settings.hidden then bar:Hide() else bar:Show() end
