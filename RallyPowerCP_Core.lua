@@ -72,6 +72,7 @@ local lastCast = 0               -- throttle guard: GetTime() of the last cast
 local THROTTLE = 1.5             -- seconds a click is ignored after casting (= GCD)
 local FOUR_MIN = 240             -- right-click won't overwrite a buff with this much left
 local smartRoster = {}           -- scratch for the smart-auto-buff scan
+local inCombat = false           -- tracked via PLAYER_REGEN_DISABLED/ENABLED (1.12-safe)
 
 -- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
 -- a buff (keyed by the recipient's character name), and we read exact times for
@@ -575,9 +576,7 @@ end
 -- it's visually obvious you can't usefully click again until the GCD is up.
 local function StartThrottle(btn)
     lastCast = GetTime()
-    if btn and btn.cd then
-        CooldownFrame_SetTimer(btn.cd, lastCast, THROTTLE, 1)
-    end
+    if btn and btn.dim then btn.dim:Show() end
 end
 
 local function ButtonOnClick()
@@ -607,7 +606,7 @@ local function ButtonOnClick()
     if arg1 == "RightButton" then
         -- Smart auto-buff: top off the single most-needy member with the normal
         -- (single-target) version. Disabled in combat; respects the 4-min floor.
-        if UnitAffectingCombat("player") then
+        if inCombat then
             DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r auto-buff is disabled in combat.")
             return
         end
@@ -860,10 +859,13 @@ local function LayoutButtons()
             icon:SetPoint("LEFT", btn, "LEFT", 4, 0)
             btn.icon = icon
 
-            -- throttle cooldown swirl over the icon (visual anti-double-click)
-            local cd = CreateFrame("Cooldown", "RallyPowerCP_BarBtn1CD", btn, "CooldownFrameTemplate")
-            cd:SetAllPoints(icon)
-            btn.cd = cd
+            -- throttle indicator: a simple dark overlay shown briefly after a
+            -- cast (no Cooldown frame template, which isn't reliable on 1.12).
+            local dim = btn:CreateTexture(nil, "OVERLAY")
+            dim:SetAllPoints(icon)
+            dim:SetTexture(0, 0, 0, 0.55)
+            dim:Hide()
+            btn.dim = dim
 
             local count = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
             count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
@@ -903,7 +905,7 @@ local function LayoutButtons()
         utilWidth = PAD + nUtil * (UTIL_SIZE + UTIL_GAP) - UTIL_GAP + PAD
     end
     local rowWidth = (shown > 0) and (PAD + ROW_W + PAD) or 0
-    bar:SetWidth(math.max(BAR_W, utilWidth, rowWidth))
+    bar:SetWidth(math.max(math.max(BAR_W, utilWidth), rowWidth))
     bar:SetHeight(18 + utilH + shown * (ROW_HEIGHT + ROW_GAP) + 6)
     if shown == 0 and utilH == 0 then bar:Hide() end
 end
@@ -971,6 +973,8 @@ function UpdateDisplays()
             else
                 btn.timer:SetText("")
             end
+            -- clear the throttle dim once the global cooldown window has passed
+            if btn.dim and (now - lastCast) >= THROTTLE then btn.dim:Hide() end
         end
     end
 end
@@ -1063,10 +1067,18 @@ local function Activate()
     BuildIconLookups()
     RebuildKnownSpells()
     shownIndex = nil          -- start on the first usable buff for this class
-    CreateBar()
-    LayoutButtons()
-    if RallyPowerCP_Settings.hidden then bar:Hide() else bar:Show() end
-    ScanRoster()
+    -- Guard the bar build: if anything errors on a custom client, report it in
+    -- chat instead of letting the bar silently fail to appear.
+    local ok, err = pcall(function()
+        CreateBar()
+        LayoutButtons()
+        if RallyPowerCP_Settings.hidden then bar:Hide() else bar:Show() end
+        ScanRoster()
+    end)
+    if not ok then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r " .. tostring(err)
+            .. " |cffaaaaaa(please report this)|r")
+    end
 end
 
 --=============================================================================
@@ -1080,11 +1092,17 @@ f:RegisterEvent("PARTY_MEMBERS_CHANGED")
 f:RegisterEvent("RAID_ROSTER_UPDATE")
 f:RegisterEvent("UNIT_AURA")
 f:RegisterEvent("PLAYER_AURAS_CHANGED")
+f:RegisterEvent("PLAYER_REGEN_DISABLED")
+f:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 f:SetScript("OnEvent", function()
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         Activate()
         RallyPowerCP_ApplyMinimapSkin()   -- restore the saved icon skin
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        inCombat = true
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        inCombat = false
     elseif event == "SPELLS_CHANGED" then
         if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
             RebuildKnownSpells()

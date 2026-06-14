@@ -24,6 +24,23 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.2.2] — 2026-06-12
+Hotfix: the class bar failed to appear for every non-Paladin class in 0.2.1.
+
+### Fixed
+- **The bar built nothing on non-Paladin classes.** The throttle's cooldown
+  swirl used a Cooldown frame template that isn't reliable on the 1.12 client;
+  creating it errored while building the bar, so the bar never appeared. Replaced
+  it with a simple darkening overlay on the icon — same "you just cast, wait for
+  the GCD" cue, no fragile frame template.
+- **Combat detection** no longer calls `UnitAffectingCombat` (a later-expansion
+  API); it now tracks combat with the vanilla `PLAYER_REGEN_DISABLED/ENABLED`
+  events, so the right-click combat lockout works correctly on 1.12.
+- The bar build is now wrapped so that, if anything unexpected errors on a custom
+  client, the error is printed in chat instead of the bar silently failing.
+
+---
+
 ## [0.2.1] — 2026-06-12
 Reworked the class bar into a single scrollable row and adopted the spec's
 main-button click model.
