@@ -24,6 +24,37 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.3.0] — 2026-06-12
+The class-grouped grid (Option A, stage 1 of 2). The bar is now organized like
+PallyPower's: one row per class in your group.
+
+### Added
+- **Class-grouped grid.** Instead of one row, the bar now shows **one row per
+  class present** in your party/raid (in PallyPower's class order), each styled
+  like the Paladin buff-bar button — your class icon, the buff icon, status
+  colour, count, and the earliest timer for that class.
+- **Per-class click actions**, scoped to just that class's members:
+  - **Left-click** casts the group/raid version on that class (cycling through
+    its members, renew-capable).
+  - **Right-click** is a smart top-off on the one member of that class who needs
+    it most (missing first, else lowest time left). Combat-locked, 4-min floor.
+  - **Scroll** changes the globally-selected buff shown on every row.
+  - **Hover** shows that class's members broken into Have / Need / Not Here /
+    Dead.
+
+### Fixed
+- Completed the data layer the grid needs: the roster scan now buckets members
+  by class and computes per-class coverage and timers (previously the grid had
+  no data feeding it, so no rows appeared). Rows rebuild automatically when the
+  set of classes in your group changes.
+
+### Notes
+- Stage 2 (next) is the interactive pop-out: a side panel off each class row
+  listing every individual player with status + timer, click-to-buff individuals.
+- The grid is players-only for now; pets aren't bucketed into a row yet.
+
+---
+
 ## [0.2.3] — 2026-06-12
 ### Changed
 - **The class row now matches PallyPower's buff-bar button exactly.** It was far

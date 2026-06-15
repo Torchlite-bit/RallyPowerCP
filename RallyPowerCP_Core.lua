@@ -74,6 +74,21 @@ local FOUR_MIN = 240             -- right-click won't overwrite a buff with this
 local smartRoster = {}           -- scratch for the smart-auto-buff scan
 local inCombat = false           -- tracked via PLAYER_REGEN_DISABLED/ENABLED (1.12-safe)
 
+-- Class-grouped grid state (Option A). The bar shows one row per class present
+-- in the group; each row tracks the globally-selected buff (scroll to change it)
+-- and breaks coverage down by class.
+local CLASS_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+local CLASS_SET = {}
+for _, c in pairs(CLASS_ORDER) do CLASS_SET[c] = true end
+local classUnits    = {}         -- [classToken] = { unitIDs of that class }
+local presentClasses = {}        -- ordered list of class tokens with >=1 member
+local rowNeed       = {}         -- [classToken][buffIndex] = members of that class missing it
+local rowDeadline   = {}         -- [classToken][buffIndex] = earliest absolute expiry for that class
+local classCursor   = {}         -- [classToken] = round-robin index for right-click cycling
+local classRows     = {}         -- [classToken] = the row Button frame
+local roster        = {}         -- flat unit list, reused by presence + scan
+local lastPresentSig             -- signature of presentClasses, to detect changes
+
 -- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
 -- a buff (keyed by the recipient's character name), and we read exact times for
 -- buffs on OURSELF via the player-buff API. The 1.12 client gives no way to
@@ -188,6 +203,39 @@ local function BuildRoster(out, withPets)
         end
     end
     return n
+end
+
+-- English class token for a unit ("WARRIOR", "PRIEST", ...). Used to bucket the
+-- roster by class for the grid. (Pets aren't bucketed; the grid is players-only.)
+local function UnitClassToken(unit)
+    local _, c = UnitClass(unit)
+    return c
+end
+
+-- Bucket the player roster by class and build the ordered present-class list,
+-- in CLASS_ORDER. Cheap: one UnitClass call per member, no buff reads. This is
+-- what drives which rows the grid shows and which members each row buffs.
+local function BuildClassPresence()
+    for k in pairs(classUnits) do classUnits[k] = nil end
+    local count = BuildRoster(roster, false)        -- players only
+    for r = 1, count do
+        local unit = roster[r]
+        if UnitExists(unit) then
+            local ct = UnitClassToken(unit)
+            if ct and CLASS_SET[ct] then
+                if not classUnits[ct] then classUnits[ct] = {} end
+                table.insert(classUnits[ct], unit)
+            end
+        end
+    end
+    for k = table.getn(presentClasses), 1, -1 do presentClasses[k] = nil end
+    local n = 0
+    for ci = 1, table.getn(CLASS_ORDER) do
+        local ct = CLASS_ORDER[ci]
+        if classUnits[ct] and table.getn(classUnits[ct]) > 0 then
+            n = n + 1; presentClasses[n] = ct
+        end
+    end
 end
 
 --=============================================================================
@@ -823,94 +871,232 @@ local function LayoutUtilityRow(topY)
     return UTIL_ROW_H
 end
 
-local function LayoutButtons()
-    if not bar then return end
-    -- Usable buffs (known spells only).
-    local visible = {}
-    if ACTIVE_BUFFS then
-        for i = 1, table.getn(ACTIVE_BUFFS) do
-            if BuffIsUsable(ACTIVE_BUFFS[i]) then table.insert(visible, i) end
+-- Helper: ensure shownIndex points at a usable buff (the globally-selected one).
+local function EnsureShownBuff()
+    if not ACTIVE_BUFFS then shownIndex = nil; return end
+    if shownIndex and ACTIVE_BUFFS[shownIndex] and BuffIsUsable(ACTIVE_BUFFS[shownIndex]) then return end
+    for i = 1, table.getn(ACTIVE_BUFFS) do
+        if BuffIsUsable(ACTIVE_BUFFS[i]) then shownIndex = i; return end
+    end
+    shownIndex = nil
+end
+
+-- Next member of class ct who needs buff b (renew=true also returns an already-
+-- buffed member once everyone is covered, so a click can still refresh).
+local function FindClassNeedy(ct, b, renew)
+    local units = classUnits[ct]
+    if not units then return nil end
+    local cnt = table.getn(units)
+    if cnt == 0 then return nil end
+    local start = classCursor[ct] or 0
+    local firstValid, firstIdx
+    for step = 1, cnt do
+        local idx = start + step
+        while idx > cnt do idx = idx - cnt end
+        local u = units[idx]
+        if UnitIsBuffable(u) and UnitIsVisible(u) then
+            if not UnitHasBuff(u, b) then
+                classCursor[ct] = idx
+                return u
+            elseif renew and not firstValid then
+                firstValid, firstIdx = u, idx
+            end
         end
     end
+    if renew and firstValid then classCursor[ct] = firstIdx; return firstValid end
+    return nil
+end
 
-    -- Hide everything first; we render ONE scrollable class row (scroll to switch
-    -- which buff it shows) rather than all buffs at once.
-    for _, btn in pairs(buttons) do btn:Hide() end
+-- Smart top-off target within a class: missing first, else the lowest time left
+-- (only under the 4-minute floor), using timers we recorded for our own casts.
+local function FindClassSmartTarget(ct, b)
+    local units = classUnits[ct]
+    if not units then return nil end
+    local lowU, lowRem
+    for i = 1, table.getn(units) do
+        local u = units[i]
+        if UnitIsBuffable(u) and UnitIsVisible(u) then
+            if not UnitHasBuff(u, b) then
+                return u
+            else
+                local nm = UnitName(u)
+                local dl = nm and expiry[nm] and expiry[nm][b.name or b.group]
+                if dl then
+                    local rem = dl - GetTime()
+                    if rem < FOUR_MIN and (not lowRem or rem < lowRem) then lowRem = rem; lowU = u end
+                end
+            end
+        end
+    end
+    return lowU
+end
+
+-- Scroll changes the globally-selected buff shown on every class row.
+local function CycleBuff(dir)
+    if not ACTIVE_BUFFS then return end
+    local nb = table.getn(ACTIVE_BUFFS)
+    if nb <= 1 then return end
+    EnsureShownBuff()
+    local i = shownIndex or 1
+    local tries = 0
+    repeat
+        i = i + dir
+        if i > nb then i = 1 elseif i < 1 then i = nb end
+        tries = tries + 1
+    until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= nb
+    shownIndex = i
+    if UpdateDisplays then UpdateDisplays() end
+end
+
+-- Tooltip for a class row: that class's members by Have/Need/Not Here/Dead.
+local function ShowClassRowTooltip(row)
+    local ct = row.classToken
+    EnsureShownBuff()
+    local b = shownIndex and ACTIVE_BUFFS[shownIndex]
+    if not b then return end
+    local clsName = string.upper(string.sub(ct, 1, 1)) .. string.lower(string.sub(ct, 2))
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:SetText(clsName .. "  -  " .. (b.name or b.group or "Buff"), 1, 1, 1)
+    local have, need, range, dead = {}, {}, {}, {}
+    local units = classUnits[ct] or {}
+    for i = 1, table.getn(units) do
+        local u = units[i]
+        if UnitExists(u) and UnitIsConnected(u) then
+            local nm = UnitName(u) or "?"
+            if not UnitIsVisible(u) then table.insert(range, nm)
+            elseif UnitIsDeadOrGhost(u) then
+                if UnitHasBuff(u, b) then table.insert(have, nm) else table.insert(dead, nm) end
+            elseif UnitHasBuff(u, b) then table.insert(have, nm)
+            else table.insert(need, nm) end
+        end
+    end
+    GameTooltip:AddLine(PallyPower_Have    .. table.concat(have,  ", "), 0.5, 1, 0.5)
+    GameTooltip:AddLine(PallyPower_Need    .. table.concat(need,  ", "), 1, 0.5, 0.5)
+    GameTooltip:AddLine(PallyPower_NotHere .. table.concat(range, ", "), 0.5, 0.5, 1)
+    GameTooltip:AddLine(PallyPower_Dead    .. table.concat(dead,  ", "), 1, 0, 0)
+    GameTooltip:AddLine(" ", 1, 1, 1)
+    if table.getn(ACTIVE_BUFFS) > 1 then GameTooltip:AddLine("Scroll: switch buff", 0.6, 0.8, 1) end
+    if b.group then GameTooltip:AddLine("Left-click: " .. b.group .. " on this class", 0.7, 0.7, 0.7) end
+    GameTooltip:AddLine("Right-click: top off the next " .. clsName, 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end
+
+-- Click a class row: left = group version on this class, right = smart single
+-- top-off within this class (combat-locked, 4-min floor).
+local function ClassRowOnClick()
+    local ct = this.classToken
+    EnsureShownBuff()
+    local b = shownIndex and ACTIVE_BUFFS[shownIndex]
+    if not b then return end
+    if GetTime() - lastCast < THROTTLE then return end
+
+    if b.selfcast then
+        if KNOWN[b.name] then
+            CastSpellByName(b.name)
+            RecordGroupExpiry("player", b, b.dur)
+            AnnounceBuff(b.name, "player", false)
+            StartThrottle(this)
+        end
+        auraDirty = true; lastScan = SCAN_INTERVAL
+        return
+    end
+
+    if arg1 == "RightButton" then
+        if inCombat then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r auto-buff is disabled in combat.")
+            return
+        end
+        local unit = FindClassSmartTarget(ct, b)
+        if not unit then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. ct .. ": covered (4+ min left).")
+            return
+        end
+        if b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
+        elseif b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this) end
+        auraDirty = true; lastScan = SCAN_INTERVAL
+        return
+    end
+
+    -- left-click: group version, covering this class's subgroup
+    local unit = FindClassNeedy(ct, b, true)
+    if not unit then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. ct .. ": no members in range.")
+        return
+    end
+    if b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
+    elseif b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this) end
+    auraDirty = true; lastScan = SCAN_INTERVAL
+end
+
+-- Build one class row, styled exactly like the PallyPower buff-bar button.
+local function CreateClassRow(ct)
+    local row = CreateFrame("Button", "RallyPowerCP_Row_" .. ct, bar)
+    row:SetWidth(ROW_W); row:SetHeight(ROW_HEIGHT)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetBackdrop(ROW_BACKDROP)
+    row:SetBackdropColor(0, 1, 0, ROW_ALPHA)
+    row.classToken = ct
+
+    local classIcon = row:CreateTexture(nil, "ARTWORK")
+    classIcon:SetWidth(ROW_ICON); classIcon:SetHeight(ROW_ICON)
+    classIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -5)
+    local cls = string.upper(string.sub(ct, 1, 1)) .. string.lower(string.sub(ct, 2))
+    classIcon:SetTexture("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
+    row.classIcon = classIcon
+
+    local icon = row:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(ROW_ICON); icon:SetHeight(ROW_ICON)
+    icon:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 4, 0)
+    row.icon = icon
+
+    local dim = row:CreateTexture(nil, "OVERLAY")
+    dim:SetAllPoints(icon); dim:SetTexture(0, 0, 0, 0.55); dim:Hide()
+    row.dim = dim
+
+    local timer = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    timer:SetWidth(40); timer:SetHeight(16); timer:SetJustifyH("RIGHT")
+    timer:SetPoint("TOPRIGHT", row, "TOPRIGHT", -5, 0)
+    row.timer = timer
+
+    local count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    count:SetWidth(40); count:SetHeight(16); count:SetJustifyH("RIGHT")
+    count:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -5, 0)
+    row.count = count
+
+    row:SetScript("OnClick", ClassRowOnClick)
+    row:EnableMouseWheel(true)
+    row:SetScript("OnMouseWheel", function() CycleBuff((arg1 and arg1 > 0) and 1 or -1) end)
+    row:SetScript("OnEnter", function() ShowClassRowTooltip(this) end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return row
+end
+
+local function LayoutButtons()
+    if not bar then return end
+    EnsureShownBuff()
+
+    -- Hide all class rows first.
+    for _, row in pairs(classRows) do row:Hide() end
 
     -- Top-row utility buttons (e.g. Priest PW: Shield / Fear Ward).
     local topY = -18
     local utilH = LayoutUtilityRow(topY)
     local y = topY - utilH
 
+    -- One row per class present in the group, in CLASS_ORDER.
     local shown = 0
-    if table.getn(visible) > 0 then
-        -- Which buff to show: the remembered one if still usable, else the first.
-        -- shownIndex persists across the frequent SPELLS_CHANGED relayouts and is
-        -- reset on a class change in Activate().
-        local okRemembered = shownIndex and ACTIVE_BUFFS[shownIndex]
-            and BuffIsUsable(ACTIVE_BUFFS[shownIndex])
-        if not okRemembered then shownIndex = visible[1] end
-
-        local btn = buttons[1]
-        if not btn then
-            btn = CreateFrame("Button", "RallyPowerCP_BarBtn1", bar)
-            btn:SetWidth(ROW_W); btn:SetHeight(ROW_HEIGHT)
-            btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-            btn:SetBackdrop(ROW_BACKDROP)
-            btn:SetBackdropColor(0, 1, 0, ROW_ALPHA)
-
-            -- left icon: your class (matches the Paladin row's class-icon slot)
-            local classIcon = btn:CreateTexture(nil, "ARTWORK")
-            classIcon:SetWidth(ROW_ICON); classIcon:SetHeight(ROW_ICON)
-            classIcon:SetPoint("TOPLEFT", btn, "TOPLEFT", 4, -5)
-            local cls = PLAYER_CLASS or "Priest"
-            cls = string.upper(string.sub(cls, 1, 1)) .. string.lower(string.sub(cls, 2))
-            classIcon:SetTexture("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
-            btn.classIcon = classIcon
-
-            -- right icon: the tracked buff
-            local icon = btn:CreateTexture(nil, "ARTWORK")
-            icon:SetWidth(ROW_ICON); icon:SetHeight(ROW_ICON)
-            icon:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 4, 0)
-            btn.icon = icon
-
-            -- throttle dim (brief darken after a cast)
-            local dim = btn:CreateTexture(nil, "OVERLAY")
-            dim:SetAllPoints(icon)
-            dim:SetTexture(0, 0, 0, 0.55)
-            dim:Hide()
-            btn.dim = dim
-
-            local timer = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            timer:SetWidth(40); timer:SetHeight(16); timer:SetJustifyH("RIGHT")
-            timer:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -5, 0)
-            btn.timer = timer
-
-            local count = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            count:SetWidth(40); count:SetHeight(16); count:SetJustifyH("RIGHT")
-            count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -5, 0)
-            btn.count = count
-
-            btn:SetScript("OnClick", ButtonOnClick)
-            btn:EnableMouseWheel(true)
-            btn:SetScript("OnMouseWheel", function()
-                CycleButtonBuff(this, (arg1 and arg1 > 0) and 1 or -1)
-            end)
-            btn:SetScript("OnEnter", function() ShowBuffTooltip(this) end)
-            btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-            buttons[1] = btn
-        end
-
-        SetButtonBuff(btn, shownIndex)
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
-        btn:Show()
+    for ci = 1, table.getn(presentClasses) do
+        local ct = presentClasses[ci]
+        local row = classRows[ct]
+        if not row then row = CreateClassRow(ct); classRows[ct] = row end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
+        row:Show()
         y = y - (ROW_HEIGHT + ROW_GAP)
-        shown = 1
+        shown = shown + 1
     end
 
-    -- Size the bar to fit the utility row and the single class row.
+    -- Size the bar to fit the utility row and the class rows.
     local utilWidth = 0
     if ACTIVE_UTILITY and utilH > 0 then
         local nUtil = 0
@@ -933,9 +1119,12 @@ end
 function UpdateDisplays()
     if not bar or not ACTIVE_BUFFS then return end
     local now = GetTime()
+    EnsureShownBuff()
+    local bi = shownIndex
+    local b = bi and ACTIVE_BUFFS[bi]
 
-    -- (1) Expiry-warning pass over EVERY buff, so a buff you're not currently
-    -- showing on the single row still dings and self-corrects on the tick.
+    -- (1) Expiry-warning pass over EVERY buff (global earliest), so a buff not
+    -- currently shown on the rows still dings and self-corrects on the tick.
     for i = 1, table.getn(ACTIVE_BUFFS) do
         local dl = minDeadline[i]
         if dl then
@@ -945,48 +1134,48 @@ function UpdateDisplays()
                     if not warned[i] then
                         warned[i] = true
                         PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
-                        local b = ACTIVE_BUFFS[i]
+                        local bb = ACTIVE_BUFFS[i]
                         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
-                            .. (b.name or b.group) .. " is about to expire!")
+                            .. (bb.name or bb.group) .. " is about to expire!")
                     end
                 else
-                    warned[i] = nil   -- re-armed: it was refreshed past the warning
+                    warned[i] = nil
                 end
             else
                 minDeadline[i] = nil
-                auraDirty = true      -- a deadline just lapsed: verify coverage
+                auraDirty = true
             end
         end
     end
 
-    -- (2) Update the single visible class row from its current buff.
-    for slot = 1, table.getn(buttons) do
-        local btn = buttons[slot]
-        if btn and btn:IsShown() then
-            local i = btn.buffIndex
-            local need = NEEDCOUNT[i] or 0
-            local dl = minDeadline[i]
+    -- (2) Update each class row with the selected buff's status for that class.
+    local iconTex = b and b.icons and ("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+    for ci = 1, table.getn(presentClasses) do
+        local ct = presentClasses[ci]
+        local row = classRows[ct]
+        if row and row:IsShown() then
+            if iconTex then row.icon:SetTexture(iconTex) end
+            local need = (bi and rowNeed[ct] and rowNeed[ct][bi]) or 0
+            local dl = bi and rowDeadline[ct] and rowDeadline[ct][bi]
             local mr = dl and (dl - now) or nil
-            -- backdrop status colour, exactly like PallyPower's buff bar buttons
             if need > 0 then
-                btn:SetBackdropColor(1, 0, 0, ROW_ALPHA)        -- red: someone needs it
-                btn.count:SetText(need)
+                row:SetBackdropColor(1, 0, 0, ROW_ALPHA)        -- red: someone needs it
+                row.count:SetText(need)
             elseif mr and mr <= WARN_TIME then
-                btn:SetBackdropColor(1, 1, 0.5, ROW_ALPHA)      -- yellow: covered but expiring
-                btn.count:SetText("")
+                row:SetBackdropColor(1, 1, 0.5, ROW_ALPHA)      -- yellow: covered but expiring
+                row.count:SetText("")
             else
-                btn:SetBackdropColor(0, 1, 0, ROW_ALPHA)        -- green: all covered
-                btn.count:SetText("")
+                row:SetBackdropColor(0, 1, 0, ROW_ALPHA)        -- green: all covered
+                row.count:SetText("")
             end
             if mr and mr > 0 then
                 local m = math.floor(mr / 60)
                 local s = math.floor(mr - m * 60)
-                btn.timer:SetText(string.format("%d:%02d", m, s))
+                row.timer:SetText(string.format("%d:%02d", m, s))
             else
-                btn.timer:SetText("")
+                row.timer:SetText("")
             end
-            -- clear the throttle dim once the global cooldown window has passed
-            if btn.dim and (now - lastCast) >= THROTTLE then btn.dim:Hide() end
+            if row.dim and (now - lastCast) >= THROTTLE then row.dim:Hide() end
         end
     end
 end
@@ -994,57 +1183,70 @@ end
 --=============================================================================
 -- SCAN: count how many roster members still need each active buff
 --=============================================================================
-local roster = {}
 local function ScanRoster()
     if not ACTIVE_BUFFS or PLAYER_CLASS == "PALADIN" then return end
 
-    -- Does any active buff want pets? Then include pets in the roster.
-    local withPets = false
-    for i = 1, table.getn(ACTIVE_BUFFS) do
-        if ACTIVE_BUFFS[i].pet then withPets = true break end
-    end
+    BuildClassPresence()   -- refresh classUnits + presentClasses (players only)
 
-    local count = BuildRoster(roster, withPets)
-
+    -- Reset flat coverage (drives the expiry ding) and per-class coverage.
     for i = 1, table.getn(ACTIVE_BUFFS) do NEEDCOUNT[i] = 0; minDeadline[i] = nil end
+    for ct in pairs(rowNeed) do rowNeed[ct] = nil end
+    for ct in pairs(rowDeadline) do rowDeadline[ct] = nil end
 
     local now = GetTime()
-    for r = 1, count do
-        local unit = roster[r]
-        if UnitIsBuffable(unit) then
-            local isPet = (string.find(unit, "pet") ~= nil)
-            local uname = UnitName(unit)
-            CollectUnitBuffs(unit)              -- ONE buff-list read per unit
-            local isPlayer = UnitIsUnit(unit, "player")
-            for i = 1, table.getn(ACTIVE_BUFFS) do
-                local b = ACTIVE_BUFFS[i]
-                if BuffIsUsable(b) and (not isPet or b.pet) then
-                    if not HasCollected(b) then
-                        NEEDCOUNT[i] = NEEDCOUNT[i] + 1
-                        -- buff is gone: drop any stale recorded timer
-                        if uname and expiry[uname] then
-                            expiry[uname][b.name or b.group] = nil
-                        end
-                    else
-                        -- buff present: compute its absolute deadline
-                        local dl = nil
-                        if isPlayer then
-                            local left = PlayerBuffTimeLeft(b)   -- exact, via API
-                            if left then dl = now + left end
-                        elseif uname and expiry[uname] then
-                            dl = expiry[uname][b.name or b.group]
-                            if dl and dl <= now then
+    for ci = 1, table.getn(presentClasses) do
+        local ct = presentClasses[ci]
+        local units = classUnits[ct]
+        rowNeed[ct] = {}
+        rowDeadline[ct] = {}
+        for r = 1, table.getn(units) do
+            local unit = units[r]
+            if UnitIsBuffable(unit) then
+                local uname = UnitName(unit)
+                CollectUnitBuffs(unit)              -- ONE buff-list read per unit
+                local isPlayer = UnitIsUnit(unit, "player")
+                for i = 1, table.getn(ACTIVE_BUFFS) do
+                    local b = ACTIVE_BUFFS[i]
+                    if BuffIsUsable(b) then
+                        if not HasCollected(b) then
+                            rowNeed[ct][i] = (rowNeed[ct][i] or 0) + 1
+                            NEEDCOUNT[i] = NEEDCOUNT[i] + 1
+                            -- buff gone: drop any stale recorded timer
+                            if uname and expiry[uname] then
                                 expiry[uname][b.name or b.group] = nil
-                                dl = nil
                             end
-                        end
-                        if dl and (not minDeadline[i] or dl < minDeadline[i]) then
-                            minDeadline[i] = dl
+                        else
+                            -- buff present: compute its absolute deadline
+                            local dl = nil
+                            if isPlayer then
+                                local left = PlayerBuffTimeLeft(b)   -- exact, via API
+                                if left then dl = now + left end
+                            elseif uname and expiry[uname] then
+                                dl = expiry[uname][b.name or b.group]
+                                if dl and dl <= now then
+                                    expiry[uname][b.name or b.group] = nil; dl = nil
+                                end
+                            end
+                            if dl then
+                                if not rowDeadline[ct][i] or dl < rowDeadline[ct][i] then
+                                    rowDeadline[ct][i] = dl
+                                end
+                                if not minDeadline[i] or dl < minDeadline[i] then
+                                    minDeadline[i] = dl
+                                end
+                            end
                         end
                     end
                 end
             end
         end
+    end
+
+    -- Rebuild the rows only when the set of present classes actually changes.
+    local sig = table.concat(presentClasses, ",")
+    if sig ~= lastPresentSig then
+        lastPresentSig = sig
+        LayoutButtons()
     end
 
     UpdateDisplays()
@@ -1083,6 +1285,7 @@ local function Activate()
     -- chat instead of letting the bar silently fail to appear.
     local ok, err = pcall(function()
         CreateBar()
+        BuildClassPresence()
         LayoutButtons()
         if RallyPowerCP_Settings.hidden then bar:Hide() else bar:Show() end
         ScanRoster()
