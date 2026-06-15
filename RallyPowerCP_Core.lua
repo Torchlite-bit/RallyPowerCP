@@ -38,6 +38,7 @@
 --=============================================================================
 
 RallyPowerCP_Settings = RallyPowerCP_Settings or {}
+RallyPowerCP_Roles    = RallyPowerCP_Roles or {}   -- [playerName] = "MT" | "MA" (local, per character)
 
 --=============================================================================
 -- RallyPowerCP class-module registry  (AutoRota-style).
@@ -88,6 +89,10 @@ local classCursor   = {}         -- [classToken] = round-robin index for right-c
 local classRows     = {}         -- [classToken] = the row Button frame
 local roster        = {}         -- flat unit list, reused by presence + scan
 local lastPresentSig             -- signature of presentClasses, to detect changes
+local popout                     -- the hover pop-out side panel (created lazily)
+local popoutRows = {}            -- pooled per-player row buttons inside the panel
+local popoutClass                -- class token the pop-out is currently showing
+local popoutRow                  -- the class row the pop-out is anchored to
 
 -- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
 -- a buff (keyed by the recipient's character name), and we read exact times for
@@ -284,6 +289,13 @@ local ROW_BACKDROP = {
     tile = true, tileSize = 8, edgeSize = 8,
     insets = { left = 2, right = 2, top = 3, bottom = 2 },
 }
+
+-- Hover pop-out side panel: a stack of colour-coded player bars (PallyPower
+-- player-list style), expanding to the LEFT of the class rows.
+local POP_W       = 160          -- panel width
+local POP_BAR_H   = 26           -- per-player bar height
+local POP_BAR_GAP = 2            -- gap between player bars
+local POP_PAD     = 4            -- inner padding
 
 local function SavePosition()
     if not bar then return end
@@ -766,6 +778,7 @@ end
 -- Forward declaration: scroll/click closures below reach the display refresher,
 -- whose full definition lives after the layout functions.
 local UpdateDisplays
+local RefreshPopout              -- forward decl (defined in the pop-out section)
 
 -- Build the Have / Need / Not Here / Dead tooltip for whatever buff a button is
 -- currently set to. Re-callable so a scroll refreshes the open tooltip in place.
@@ -881,6 +894,58 @@ local function EnsureShownBuff()
     shownIndex = nil
 end
 
+-- Per-class buff selection: each class row independently tracks one of the
+-- player's buffs (scroll a row to change just that class's buff, PallyPower-style).
+local rowBuff = {}               -- [classToken] = buff index shown/cast for that class
+
+-- Return the usable buff index for class ct, defaulting to the first usable.
+local function RowBuffIndex(ct)
+    if not ACTIVE_BUFFS then return nil end
+    local bi = rowBuff[ct]
+    if bi and ACTIVE_BUFFS[bi] and BuffIsUsable(ACTIVE_BUFFS[bi]) then return bi end
+    for i = 1, table.getn(ACTIVE_BUFFS) do
+        if BuffIsUsable(ACTIVE_BUFFS[i]) then rowBuff[ct] = i; return i end
+    end
+    rowBuff[ct] = nil
+    return nil
+end
+
+-- Scroll over a class row cycles that class's buff only (independent per class).
+local function CycleRowBuff(ct, dir)
+    if not ACTIVE_BUFFS then return end
+    local nb = table.getn(ACTIVE_BUFFS)
+    if nb <= 1 then return end
+    local i = RowBuffIndex(ct) or 1
+    local tries = 0
+    repeat
+        i = i + dir
+        if i > nb then i = 1 elseif i < 1 then i = nb end
+        tries = tries + 1
+    until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= nb
+    rowBuff[ct] = i
+    if UpdateDisplays then UpdateDisplays() end
+    if RefreshPopout and popout and popout:IsShown() and popoutClass == ct then RefreshPopout() end
+end
+
+-- Local per-player role tags (MT = main tank, MA = main assist), cycled with
+-- CTRL+click on a pop-out player bar. Local only for now: not synced to other
+-- RallyPowerCP users and not yet wired into smart targeting.
+local ROLE_NEXT = { [""] = "MT", MT = "MA", MA = "" }
+local function CycleRole(name)
+    if not name then return end
+    local nxt = ROLE_NEXT[RallyPowerCP_Roles[name] or ""] or ""
+    if nxt == "" then RallyPowerCP_Roles[name] = nil else RallyPowerCP_Roles[name] = nxt end
+end
+local function RoleLabel(name)
+    return (name and RallyPowerCP_Roles[name]) or "R"   -- unassigned shows an "R" slot
+end
+local function RoleColor(name)
+    local r = name and RallyPowerCP_Roles[name]
+    if r == "MT" then return 1, 0.82, 0          -- tank: gold
+    elseif r == "MA" then return 0.4, 0.8, 1     -- assist: cyan
+    else return 0.5, 1, 0.5 end                  -- unassigned: green (matches PallyPower)
+end
+
 -- Next member of class ct who needs buff b (renew=true also returns an already-
 -- buffed member once everyone is covered, so a click can still refresh).
 local function FindClassNeedy(ct, b, renew)
@@ -985,8 +1050,8 @@ end
 -- top-off within this class (combat-locked, 4-min floor).
 local function ClassRowOnClick()
     local ct = this.classToken
-    EnsureShownBuff()
-    local b = shownIndex and ACTIVE_BUFFS[shownIndex]
+    local bi = RowBuffIndex(ct)
+    local b = bi and ACTIVE_BUFFS[bi]
     if not b then return end
     if GetTime() - lastCast < THROTTLE then return end
 
@@ -1028,6 +1093,208 @@ local function ClassRowOnClick()
     auraDirty = true; lastScan = SCAN_INTERVAL
 end
 
+--=============================================================================
+-- INTERACTIVE POP-OUT  (stage 2): hovering a class row opens a side panel that
+-- lists every player in that class with their status colour and personal timer.
+--   Left-click a player  : group version covering their subgroup (skipped if
+--                           they already have it; disabled in combat).
+--   Right-click a player : single-target on just that player (works in combat) —
+--                           the "top off the one who missed it" action.
+--=============================================================================
+
+-- Cursor hit-test that works on the 1.12 client (scale-aware).
+local function IsMouseOverFrame(frame)
+    if not frame or not frame:IsVisible() then return false end
+    local l = frame:GetLeft()
+    if not l then return false end
+    local b, w, h = frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
+    local scale = frame:GetEffectiveScale()
+    local x, y = GetCursorPosition()
+    x = x / scale; y = y / scale
+    return x >= l and x <= l + w and y >= b and y <= b + h
+end
+
+local function HidePopout()
+    if popout then popout:Hide() end
+    popoutClass = nil; popoutRow = nil
+end
+
+-- Click a player row: left = group on their subgroup, right = single on them.
+local function PopoutPlayerOnClick()
+    local unit = this.unit
+    if not unit or not UnitExists(unit) then return end
+    if IsControlKeyDown() then                     -- CTRL+click: assign role (local)
+        CycleRole(UnitName(unit))
+        RefreshPopout()
+        return
+    end
+    local bi = RowBuffIndex(popoutClass)
+    local b = bi and ACTIVE_BUFFS[bi]
+    if not b then return end
+    if b.selfcast then return end                 -- shouts/auras have no per-player cast
+    if GetTime() - lastCast < THROTTLE then return end
+
+    if arg1 == "RightButton" then
+        -- single-target on this player; permitted in combat (manual rebuff)
+        if b.name and KNOWN[b.name] then
+            CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
+        elseif b.group and KNOWN[b.group] then
+            CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
+        end
+        auraDirty = true; lastScan = SCAN_INTERVAL
+        return
+    end
+
+    -- left-click: group version covering this player's subgroup
+    if inCombat then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r group buffs are disabled in combat (right-click for a single buff).")
+        return
+    end
+    -- smart prevention: don't waste a group cast on someone already buffed
+    if UnitHasBuff(unit, b) then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. (UnitName(unit) or "?") .. " already has " .. (b.name or b.group) .. ".")
+        return
+    end
+    if b.group and KNOWN[b.group] then
+        CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
+    elseif b.name and KNOWN[b.name] then
+        CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
+    end
+    auraDirty = true; lastScan = SCAN_INTERVAL
+end
+
+-- Refresh each visible player bar: status colour, buff icon, name, personal timer.
+function RefreshPopout()
+    if not popout or not popoutClass then return end
+    local bi = RowBuffIndex(popoutClass)
+    local b = bi and ACTIVE_BUFFS[bi]
+    local units = classUnits[popoutClass] or {}
+    local now = GetTime()
+    local iconTex = b and b.icons and ("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+    for i = 1, table.getn(popoutRows) do
+        local pr = popoutRows[i]
+        local unit = units[i]
+        if unit and b and UnitExists(unit) then
+            pr.unit = unit
+            pr.name:SetText(UnitName(unit) or "?")
+            if iconTex then pr.icon:SetTexture(iconTex) end
+            local nm = UnitName(unit)
+            pr.role:SetText(RoleLabel(nm))
+            pr.role:SetTextColor(RoleColor(nm))
+            local timerText = ""
+            if not UnitIsVisible(unit) then
+                pr:SetBackdropColor(0.3, 0.3, 0.9, ROW_ALPHA)      -- Not Here (blue)
+            elseif UnitIsDeadOrGhost(unit) then
+                pr:SetBackdropColor(0.5, 0.1, 0.1, ROW_ALPHA)      -- Dead (dark red)
+            elseif UnitHasBuff(unit, b) then
+                pr:SetBackdropColor(0, 1, 0, ROW_ALPHA)            -- Have (green)
+                local dl
+                if UnitIsUnit(unit, "player") then
+                    local left = PlayerBuffTimeLeft(b)
+                    if left then dl = now + left end
+                elseif nm and expiry[nm] then
+                    dl = expiry[nm][b.name or b.group]
+                end
+                if dl and dl > now then
+                    local rem = dl - now
+                    local m = math.floor(rem / 60)
+                    timerText = string.format("%d:%02d", m, math.floor(rem - m * 60))
+                end
+            else
+                pr:SetBackdropColor(1, 0, 0, ROW_ALPHA)            -- Need (red)
+            end
+            pr.timer:SetText(timerText)
+            pr:Show()
+        else
+            pr:Hide()
+        end
+    end
+end
+
+local popoutNotOver = 0
+local popoutAccum = 0
+local function PopoutOnUpdate()
+    if not popout:IsShown() then return end
+    -- keep open while the cursor is over the anchor row OR the panel
+    if IsMouseOverFrame(popoutRow) or IsMouseOverFrame(popout) then
+        popoutNotOver = 0
+    else
+        popoutNotOver = popoutNotOver + (arg1 or 0)
+        if popoutNotOver > 0.15 then HidePopout(); return end
+    end
+    popoutAccum = popoutAccum + (arg1 or 0)
+    if popoutAccum >= 0.2 then popoutAccum = 0; RefreshPopout() end
+end
+
+local function GetPopoutRow(i)
+    local pr = popoutRows[i]
+    if pr then return pr end
+    pr = CreateFrame("Button", "RallyPowerCP_PopRow" .. i, popout)
+    pr:SetWidth(POP_W - 2 * POP_PAD); pr:SetHeight(POP_BAR_H)
+    pr:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    pr:SetBackdrop(ROW_BACKDROP)
+    pr:SetBackdropColor(0, 1, 0, ROW_ALPHA)
+    local hl = pr:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(pr); hl:SetTexture(1, 1, 1, 0.18)
+    local icon = pr:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(POP_BAR_H - 8); icon:SetHeight(POP_BAR_H - 8)
+    icon:SetPoint("LEFT", pr, "LEFT", 4, 0)
+    pr.icon = icon
+    local name = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    name:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+    name:SetPoint("RIGHT", pr, "RIGHT", -32, 0); name:SetJustifyH("LEFT")
+    pr.name = name
+    local role = pr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    role:SetPoint("TOPRIGHT", pr, "TOPRIGHT", -4, -2); role:SetJustifyH("RIGHT")
+    pr.role = role
+    local timer = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    timer:SetPoint("BOTTOMRIGHT", pr, "BOTTOMRIGHT", -4, 2); timer:SetJustifyH("RIGHT")
+    pr.timer = timer
+    pr:SetScript("OnClick", PopoutPlayerOnClick)
+    popoutRows[i] = pr
+    return pr
+end
+
+local function CreatePopout()
+    local p = CreateFrame("Frame", "RallyPowerCP_Popout", UIParent)
+    p:SetWidth(POP_W); p:SetHeight(40)
+    p:SetBackdrop(ROW_BACKDROP)
+    p:SetBackdropColor(0, 0, 0, 0.85)
+    p:SetFrameStrata("DIALOG")
+    p:EnableMouse(true)
+    p:Hide()
+    p:SetScript("OnUpdate", PopoutOnUpdate)
+    popout = p
+    return p
+end
+
+local function ShowPopout(row)
+    if not popout then CreatePopout() end
+    popoutClass = row.classToken
+    popoutRow = row
+
+    local units = classUnits[popoutClass] or {}
+    local count = table.getn(units)
+    local y = -POP_PAD
+    for i = 1, count do
+        local pr = GetPopoutRow(i)
+        pr:ClearAllPoints()
+        pr:SetPoint("TOPLEFT", popout, "TOPLEFT", POP_PAD, y)
+        pr:SetWidth(POP_W - 2 * POP_PAD)
+        y = y - (POP_BAR_H + POP_BAR_GAP)
+    end
+    for i = count + 1, table.getn(popoutRows) do popoutRows[i]:Hide() end
+
+    local h = POP_PAD * 2 + count * POP_BAR_H
+    if count > 1 then h = h + (count - 1) * POP_BAR_GAP end
+    popout:SetHeight(h)
+    popout:ClearAllPoints()
+    popout:SetPoint("TOPRIGHT", row, "TOPLEFT", -2, 0)   -- expand to the LEFT
+    popoutNotOver = 0
+    RefreshPopout()
+    popout:Show()
+end
+
 -- Build one class row, styled exactly like the PallyPower buff-bar button.
 local function CreateClassRow(ct)
     local row = CreateFrame("Button", "RallyPowerCP_Row_" .. ct, bar)
@@ -1065,9 +1332,9 @@ local function CreateClassRow(ct)
 
     row:SetScript("OnClick", ClassRowOnClick)
     row:EnableMouseWheel(true)
-    row:SetScript("OnMouseWheel", function() CycleBuff((arg1 and arg1 > 0) and 1 or -1) end)
-    row:SetScript("OnEnter", function() ShowClassRowTooltip(this) end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row:SetScript("OnMouseWheel", function() CycleRowBuff(this.classToken, (arg1 and arg1 > 0) and 1 or -1) end)
+    row:SetScript("OnEnter", function() ShowPopout(this) end)
+    row:SetScript("OnLeave", function() end)   -- pop-out self-hides when the cursor leaves both
     return row
 end
 
@@ -1119,9 +1386,6 @@ end
 function UpdateDisplays()
     if not bar or not ACTIVE_BUFFS then return end
     local now = GetTime()
-    EnsureShownBuff()
-    local bi = shownIndex
-    local b = bi and ACTIVE_BUFFS[bi]
 
     -- (1) Expiry-warning pass over EVERY buff (global earliest), so a buff not
     -- currently shown on the rows still dings and self-corrects on the tick.
@@ -1148,13 +1412,16 @@ function UpdateDisplays()
         end
     end
 
-    -- (2) Update each class row with the selected buff's status for that class.
-    local iconTex = b and b.icons and ("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+    -- (2) Update each class row with ITS OWN selected buff's status for that class.
     for ci = 1, table.getn(presentClasses) do
         local ct = presentClasses[ci]
         local row = classRows[ct]
         if row and row:IsShown() then
-            if iconTex then row.icon:SetTexture(iconTex) end
+            local bi = RowBuffIndex(ct)
+            local b = bi and ACTIVE_BUFFS[bi]
+            if b and b.icons then
+                row.icon:SetTexture("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+            end
             local need = (bi and rowNeed[ct] and rowNeed[ct][bi]) or 0
             local dl = bi and rowDeadline[ct] and rowDeadline[ct][bi]
             local mr = dl and (dl - now) or nil

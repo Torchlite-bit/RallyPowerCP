@@ -24,6 +24,54 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.3.2] — 2026-06-15
+Pop-out refinements to match PallyPower's player-list behaviour.
+
+### Changed
+- **The pop-out now expands to the *left*** of the class rows (was the right),
+  matching PallyPower's layout.
+- **Replaced the plain text tooltip with a stack of colour-coded player bars.**
+  Each bar shows the buff icon, the player's name, a status colour (green Have /
+  red Need / blue Not Here / dark-red Dead) and that player's personal timer —
+  instead of the old dark text panel.
+- **Mouse-wheel is now per-class.** Scrolling a class row cycles *that class's*
+  buff only (e.g. the Druid row toggles Mark of the Wild -> Gift of the Wild ->
+  Thorns), so each class can display and cast a different buff at the same time.
+
+### Added
+- **Role markers on the player bars.** Each bar shows a role slot (an "R" when
+  unassigned); **CTRL+click** a player cycles their role — Main Tank (gold) ->
+  Main Assist (cyan) -> none. Roles are saved per character.
+  - *Local only for now:* roles aren't yet shared with other RallyPowerCP users
+    and aren't yet wired into smart targeting (e.g. directing Priest shields to
+    tanks). Those come with the upcoming role/sync milestone.
+
+---
+
+## [0.3.1] — 2026-06-12
+The interactive pop-out (Option A, stage 2 of 2). Option A is now complete.
+
+### Added
+- **Hover pop-out side panel.** Hovering a class row opens a panel to its right
+  listing every player in that class, each colour-coded by status — green
+  (Have), red (Need), blue (Not Here), bright red (Dead) — with that player's
+  personal countdown timer. It stays open while the cursor is over the row or
+  the panel, and updates live.
+- **Click an individual player** in the pop-out:
+  - **Left-click** casts the group version covering that player's subgroup. It's
+    skipped if they already have the buff (no wasted reagents) and is disabled in
+    combat.
+  - **Right-click** casts the single-target version on just that player — the
+    "top off the one who missed it" action — and works in combat.
+
+### Notes
+- Deferred to later milestones (they need the assignment/role systems): the
+  mouse-wheel-per-player custom assignment and CTRL+click tank/assist roles.
+- Per-player timers are exact only for buffs you cast yourself; a player buffed
+  by someone else shows as covered with no countdown (1.12 client limitation).
+
+---
+
 ## [0.3.0] — 2026-06-12
 The class-grouped grid (Option A, stage 1 of 2). The bar is now organized like
 PallyPower's: one row per class in your group.

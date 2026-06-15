@@ -1,7 +1,7 @@
 # RallyPowerCP
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** · version **0.3.0** · see [CHANGELOG.md](CHANGELOG.md).
+By **Subtilizer (Torchlite)** · version **0.3.2** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
@@ -28,32 +28,38 @@ More classes are planned — Hunter, Shaman, and Warlock need a different model
 
 ## The class bar
 
-- **One scrollable row.** The bar shows a single PallyPower-styled row — the buff
-  icon on the left, a large countdown on the right, on a green (everyone covered)
-  or red (someone needs it) status bar, with a badge showing how many are missing.
-- **Scroll the mouse wheel** over the row to switch which of your buffs it shows;
-  the timer, count, and tooltip all follow, and your choice is remembered.
-- **Left-click** casts the **group/raid version** (Prayer of Fortitude, Gift of
-  the Wild, Arcane Brilliance…), covering a whole subgroup at once. Once everyone
-  is covered it renews the next subgroup, so you can keep topping off.
-- **Right-click** is a **smart top-off**: it casts the single-target version on
-  the one member who needs it most — missing the buff first, otherwise the
-  lowest time remaining. It's disabled in combat and won't overwrite a buff with
-  4+ minutes left, to save reagents.
-- **Throttle guard:** after a cast the row briefly shows a cooldown swirl and
-  ignores clicks for the global-cooldown window, so a double-click can't waste a
-  second set of reagents.
-- **Countdown timer** turns red and plays a **ding** at 60 seconds left — for
-  *every* tracked buff, even one scrolled off the row, so nothing slips by. Times
-  are exact for buffs on you; for others they count down from your cast (the 1.12
-  client can't read other players' buff durations — the same limit PallyPower
-  works around the same way).
-- **Hover tooltip** lists everyone by status: **Have** / **Need** /
-  **Not Here** (out of range) / **Dead**, just like the Paladin bar.
+The bar is organized like PallyPower's: **one row per class** present in your
+party/raid (in PallyPower's class order), each styled like the Paladin buff-bar
+button — your class icon, the buff icon, a status colour (red = someone needs it,
+yellow = expiring, green = covered), a count, and that class's earliest timer.
+
+- **Scroll the mouse wheel** over a class row to change *that class's* buff. Each
+  row tracks its own buff, so (for example) the Druid row can show Thorns while
+  the Mage row shows Arcane Brilliance.
+- **Left-click a class row** casts the group/raid version on that class, cycling
+  through its members; **right-click** smart-tops-off the one member of that
+  class who needs it most (disabled in combat; won't overwrite a buff with 4+
+  minutes left).
+- **Hover a class row** to open a **pop-out to its left** — a stack of colour-coded
+  player bars (green Have / red Need / blue Not Here / dark-red Dead), each with
+  the buff icon, the player's name, their personal timer, and a role marker.
+  In the pop-out, **left-click a player** to cover their subgroup with the group
+  version (skipped if they already have it; disabled in combat), or
+  **right-click a player** to single-target just them — which works in combat,
+  for topping off the one person who missed it.
+- **CTRL+click a player** in the pop-out to set their role: Main Tank (gold) →
+  Main Assist (cyan) → none. Roles are saved per character. *(For now they're
+  local — not yet shared with other RallyPowerCP users or used by smart
+  targeting; that's coming in the role/sync update.)*
+- **Countdown timers** turn the row yellow and play a **ding** at 60 seconds
+  left — for every tracked buff, even one scrolled off the rows. Times are exact
+  for buffs on you; for others they count down from your cast (the 1.12 client
+  can't read other players' buff durations — the same limit PallyPower works
+  around the same way).
 - **Utility row** (currently Priest): situational single-target casts. PW: Shield
   goes to your target, else the lowest-health member in range; Fear Ward goes to
   your target, else you.
-- Only buffs you've actually learned appear, so the bar scales with level/spec.
+- Only buffs you've learned appear, so the bar scales with level/spec.
 - **Drag** to move; position is saved per character.
 
 ## Commands & key binding
