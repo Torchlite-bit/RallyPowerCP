@@ -9,7 +9,7 @@ RallyPowerCP keeps PallyPower's Paladin blessing/seal/aura grid exactly as it
 was, and adds an auto-detecting buff tracker for every other buffing class. Log
 in on a Paladin and you get the full PallyPower grid, unchanged. Log in on a
 Priest, Mage, Druid, or Warrior and you instead get a matching bar that tracks
-*your* class's group buffs across the party/raid.
+*your* class's group buffs across the party/raid. - see [ROADMAP.md](ROADMAP.md).
 
 ---
 
