@@ -1,15 +1,17 @@
 # RallyPowerCP
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** · version **0.3.2** · see [CHANGELOG.md](CHANGELOG.md).
+By **Subtilizer (Torchlite)** · version **0.4.1** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
-RallyPowerCP keeps PallyPower's Paladin blessing/seal/aura grid exactly as it
-was, and adds an auto-detecting buff tracker for every other buffing class. Log
-in on a Paladin and you get the full PallyPower grid, unchanged. Log in on a
-Priest, Mage, Druid, or Warrior and you instead get a matching bar that tracks
-*your* class's group buffs across the party/raid. - see [ROADMAP.md](ROADMAP.md).
+RallyPowerCP keeps PallyPower's Paladin blessing/seal/aura bar and grid, and
+adds the hover **player pop-out** to it: hover a blessing button on the buff bar
+and a colour-coded list of that class's players (Have / Need / Not Here / Dead,
+with names and timers) expands to its left. It also adds an auto-detecting buff
+tracker for the other buffing classes — log in on a Priest, Mage, Druid, or
+Warrior and you get a matching bar that tracks *your* class's group buffs across
+the party/raid.
 
 ---
 
@@ -17,7 +19,7 @@ Priest, Mage, Druid, or Warrior and you instead get a matching bar that tracks
 
 | Class | What the bar does |
 |-------|-------------------|
-| **Paladin** | The original PallyPower grid (blessings, seals, auras). The class bar stays dormant. |
+| **Paladin** | The original PallyPower blessing bar/grid, now with a hover **player pop-out** on each class button (colour-coded Have / Need / Not Here / Dead, names, tank markers, timers). |
 | **Priest** | Power Word: Fortitude, Divine Spirit, Shadow Protection — plus a utility row: PW: Shield and Fear Ward. |
 | **Mage** | Arcane Intellect. |
 | **Druid** | Mark of the Wild, Thorns. |
@@ -137,7 +139,6 @@ player's buffs on the 1.12 client.
   range; an out-of-range cast cancels cleanly and the next click moves on.
 - PW: Shield can't see who your tank is yet (role assignment is on the roadmap),
   and it may pick a Weakened-Soul target, in which case the cast simply fizzles.
-
 
 ## Credits
 

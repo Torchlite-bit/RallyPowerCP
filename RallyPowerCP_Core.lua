@@ -10,8 +10,8 @@
 --   picks the module matching the player's class and drives everything from it.
 --
 -- WHAT THE ENGINE DOES
---   * PALADIN  -> stays dormant. The original PallyPower grid owns that UI, so
---                 the Paladin experience is 100% unchanged.
+--   * PALADIN  -> uses the original PallyPower bar/grid, now enhanced with the
+--                 hover player pop-out (RallyPowerCP_Popout.lua). No separate bar.
 --   * Any class with a registered module -> a movable, PallyPower-styled bar:
 --       - one button per group buff; red+count = members missing it, faded =
 --         covered; a countdown timer and a Have/Need/Not Here/Dead tooltip.
@@ -589,7 +589,7 @@ end
 -- missing ANY of your tracked buffs — soonest-expiring buff types first.
 -- Press it repeatedly to top off the whole group hands-free.
 function RallyPowerCP_SmartBuff()
-    if not ACTIVE_BUFFS or PLAYER_CLASS == "PALADIN" then return end
+    if not ACTIVE_BUFFS then return end
     for i = 1, table.getn(ACTIVE_BUFFS) do
         local b = ACTIVE_BUFFS[i]
         if BuffIsUsable(b) and (NEEDCOUNT[i] or 0) > 0 then
@@ -1451,7 +1451,7 @@ end
 -- SCAN: count how many roster members still need each active buff
 --=============================================================================
 local function ScanRoster()
-    if not ACTIVE_BUFFS or PLAYER_CLASS == "PALADIN" then return end
+    if not ACTIVE_BUFFS then return end
 
     BuildClassPresence()   -- refresh classUnits + presentClasses (players only)
 
@@ -1527,7 +1527,8 @@ local function Activate()
     PLAYER_CLASS = classToken
 
     if PLAYER_CLASS == "PALADIN" then
-        -- Hand everything to the original PallyPower engine. Stay dormant.
+        -- Paladins use the original PallyPower bar/grid (now with the hover
+        -- player pop-out from RallyPowerCP_Popout.lua). No separate bar.
         ACTIVE_BUFFS = nil
         if bar then bar:Hide() end
         return
@@ -1710,7 +1711,7 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
     end
 
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid. (/rpc icon changes the minimap icon.)")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then

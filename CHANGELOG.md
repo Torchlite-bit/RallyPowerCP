@@ -24,6 +24,64 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.4.1] — 2026-06-27
+**Paladin pop-out, done right.** 0.4.0 added a *second* bar for Paladins; that was
+the wrong call. This replaces it: the **original PallyPower buff bar** now gets
+the hover player pop-out directly, and the duplicate bar is gone.
+
+### Changed
+- **Reverted the separate Paladin class bar** from 0.4.0. Paladins use the
+  original PallyPower bar/grid again — no second bar on screen.
+- **Hovering a blessing button** on the PallyPower buff bar now opens the
+  colour-coded **player pop-out** to its left (green Have / red Need / blue Not
+  Here / dark-red Dead), each bar showing the blessing icon, the player's name, a
+  tank marker (MT), and that player's personal timer. This replaces the old text
+  tooltip on those buttons.
+
+### Added
+- **`RallyPowerCP_Popout.lua`** — a self-contained pop-out that reads PallyPower's
+  own per-button data (`need` / `have` / `range` / `dead` lists + `LastCastPlayer`
+  timers) and tank flags. It does **not** modify the PallyPower engine — it wraps
+  the existing buff-button hover handler — so the classic bar behaves exactly as
+  before, just with the visual pop-out instead of the text tooltip.
+
+### Removed
+- `Classes/Class_Paladin.lua` (the 0.4.0 module) — no longer needed.
+
+---
+
+## [0.4.0] — 2026-06-26
+**M0 begins — Paladin becomes a class-bar class.** First step of the Foundation
+milestone from the roadmap: bring Paladin into the same system as everyone else.
+
+### Added
+- **`Class_Paladin.lua`** — Paladins now get the class rows + hover player
+  pop-out, exactly like Priest/Mage/Druid. All six blessings are included with
+  their normal (single-target) and greater (group) versions and Turtle durations
+  (10 min / 30 min).
+- **Per-class blessing assignment is built in** via the existing mouse-wheel:
+  scroll a class row to set that class's blessing (e.g. Might on the Warrior row,
+  Wisdom on the Mage row). Left-click casts the Greater (group) blessing on the
+  class; right-click tops off the one member who needs the normal blessing. In
+  the pop-out, left-click a player = Greater, right-click = normal single target.
+
+### Changed
+- Paladins are no longer walled off from the bar. The minimap **left-click** and
+  **/rpc** now toggle the new bar for Paladins; the Smart Buff key works too.
+
+### Notes
+- **The original PallyPower blessing grid still runs**, independently and
+  unchanged — open it with **/pp**. You'll have both UIs available; hide whichever
+  you don't want. (Retiring or merging the legacy grid is later M0 work.)
+- This bar is **local-only** for now — it tracks the blessings *you* cast.
+  Cross-paladin sync (and interop with stock PallyPower) lands in M1.
+- Auras / Seals / Righteous Fury (the paladin top-anchor controls) are M3; the
+  classic self-bar still provides them today.
+- Blessing **reagents aren't pre-checked** (same as the other group buffs) — a
+  cast without reagents fails with the normal game error.
+
+---
+
 ## [0.3.2] — 2026-06-15
 Pop-out refinements to match PallyPower's player-list behaviour.
 
