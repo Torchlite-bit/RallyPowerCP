@@ -24,6 +24,184 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.7.0] — 2026-07-04
+**First all-class module: Shaman totems** — and the reusable "cycle button"
+pattern the other utility classes will inherit.
+
+### Added
+- **`Class_Shaman.lua`** — the Shaman gets its own compact strip of four element
+  buttons (Earth / Fire / Water / Air) instead of the buff grid, since totems are
+  party auras dropped at your feet, not buffs cast on players.
+  - **Mouse-wheel** picks which totem to drop for that element (only totems you've
+    learned); **left-click** drops it (self-cast, works in combat);
+    **right-click** clears the tracked timer if you picked the totem back up.
+  - Buttons show the totem's **real spellbook icon** (no icon guessing), green
+    with a countdown while it's down, red when it isn't.
+  - Your selected totem per element and the strip's position are **saved per
+    character**. Toggle the strip from the minimap or `/rpc`.
+  - Casting uses SuperWoW's `CastSpellByName` (falls back to a spellbook cast);
+    timers are cast-derived, with a cooldown check so a totem on cooldown doesn't
+    start a false timer.
+- **Module hooks in the Core:** a class module can now provide `OnActivate` (build
+  its own UI) and `Toggle` (own show/hide). The Core calls these for strip-based
+  classes, so Shaman participates in the minimap/`/rpc` toggle like everyone else.
+
+### Notes
+- v1 tracks and drops **your own** totems. Cross-shaman coordination ("whose
+  totem covers which party") uses SuperWoW's totem owner-suffix and arrives with
+  the shared assignment/sync milestone.
+- Totem durations use vanilla defaults; if Turtle differs (as blessings did),
+  they're one edit each at the top of the module.
+
+---
+
+## [0.6.0] — 2026-07-03
+**The 1.18.1-native pass — RallyPowerCP now uses SuperWoW where it removes a
+1.12 limitation, with a graceful fallback when it's missing.** (Groundwork for
+the all-class rollout: every class inherits this cleaner plumbing.)
+
+### Added
+- **SuperWoW detection** via `SUPERWOW_VERSION`. A one-time login notice tells
+  players when it's missing (the addon then runs in 1.12 compatibility mode).
+- **Spell-id buff detection.** SuperWoW makes `UnitBuff` also return each aura's
+  spell id, so buffs are now matched by exact id instead of icon texture — no
+  more "same icon" collisions. IDs are **learned at runtime** from the icon seed
+  (captured the first time a buff is seen), so it needs no hard-coded ids and
+  works on Turtle even where its ids differ from Vanilla.
+- **Buff data gains an optional `ids = { ... }` field** for classes that want to
+  pin exact aura ids; otherwise learning handles it.
+
+### Changed
+- **Casting now uses `CastSpellByName(spell, unit)`** under SuperWoW — a single
+  call that targets the unit directly and can't disturb your current target.
+  This replaces the `autoSelfCast`-CVar + `ClearTarget`/`SpellTargetUnit`/
+  `TargetLastTarget` dance in both the Core caster and the pop-out row clicks.
+  The old flow is kept as the no-SuperWoW fallback.
+- Consolidated the three near-duplicate cast helpers into one primitive
+  (`RawCastOnUnit`) used everywhere.
+
+### Notes
+- **VanillaFixes** remains a pure client-side performance/timing fix with no Lua
+  API — a documented install requirement, nothing the addon calls.
+- Detection/casting fall back to the exact 1.12 behaviour when SuperWoW is
+  absent, so the addon still loads on a bare client.
+- Not yet adopted (later steps): `UNIT_CASTEVENT` for cast-exact timers and
+  shared timers (M1), and GUID-based identity for pets/totems (needed for the
+  Shaman module).
+
+---
+
+## [0.5.1] — 2026-07-02
+**The pop-out rows are now clickable for refreshes, with individual timers.**
+
+### Added
+- **Click a player in the pop-out to rebuff them**, official-flyout style:
+  - **Left-click** casts the **Greater** blessing on that player (refreshing
+    their class). Disabled in combat, per the project's combat rules.
+  - **Right-click** casts the **Normal** single-target blessing — it honours
+    that player's individual assignment if one is set, and **works in combat**
+    (the one action permitted while fighting).
+  - Casting goes through PallyPower's own spellbook tables and safety rails:
+    auto-self-cast is suspended, your current target is preserved, the spell's
+    cooldown is checked, and a 0.7s guard prevents double-click reagent burns.
+    Out-of-range and dead targets get a feedback message instead of a wasted
+    attempt.
+- **Individual timers confirmed per player:** each row's countdown is that
+  player's own (`m:ss`), ticked down by the engine, and a click-refresh
+  restarts it — Normal casts reset that player's personal timer; Greater casts
+  reset the class-wide one, exactly like the engine's own bookkeeping.
+
+---
+
+## [0.5.0] — 2026-07-01
+**Phase 1 of the PallyPower 3.3.5 parity directive begins.** The pop-out is now
+an exact replica of the WotLK player flyout.
+
+### Changed
+- **The player pop-out replicates `PallyPowerPopupTemplate`** from the official
+  PallyPower Classic source (reference: `github.com/AznamirWoW/PallyPower`,
+  `PallyPower_Wrath.xml`) — the WotLK-state design this project standardises on:
+  - **100×34 buttons, stacked flush, floating bare** (no container panel).
+  - **Skinned backdrop:** the official default "Smooth" statusbar texture (now
+    shipped in `Skins\`) + Blizzard Tooltip border, coloured with the official
+    defaults — green `0,0.7,0` Have · red `1,0,0` Need/Dead · blue `0,0,1`
+    special/unknown — all at the official 0.5 alpha.
+  - **Element-for-element layout:** 16×16 buff icon top-left (alpha 1 buffed /
+    0.4 not), white personal timer beside it, player name bottom-right, green/red
+    **"R"** range letter top-right, red **"D"** dead marker, and the main-tank
+    icon for PallyPower-marked tanks.
+
+### Notes
+- 1.12 mappings: "Not Here" players get the blue preset + red R (a hidden
+  player's buffs can't be read on this client); the official yellow
+  "visible-but-far" R needs range data we don't track yet; the tank icon uses
+  the official texture path, which may not exist in 1.12 art (harmlessly blank
+  if so).
+- Row clicks are display-only for now — porting the flyout's cast/assignment
+  interactions is the next parity step, alongside the 84×80 class buttons and
+  the main frame.
+
+---
+
+## [0.4.3] — 2026-07-01
+**Pop-out reverted; design target changed to PallyPower 3.3.5.**
+
+### Changed
+- **Reverted the 0.4.2 pop-out** (the vanilla `PlayerButtonTemplate` rows and
+  native assignment-click handlers). The pop-out is back to the 0.4.1
+  colour-coded player bars (status-coloured bars with blessing icon, name, tank
+  marker, and personal timer).
+- **New project design target:** the pop-out — and, going forward, the whole
+  Paladin experience — will be restyled to match **PallyPower 3.3.5** (the
+  WotLK version in the project reference files) exactly, and that design will
+  then be replicated for every other class. The 0.4.2 vanilla-template approach
+  matched the wrong reference and is retired.
+- The `Core\` / `Classes\` / `PallyPower\` folder structure from 0.4.2 is kept.
+
+---
+
+## [0.4.2] — 2026-06-30
+**The pop-out becomes real PallyPower, and the addon gets an AutoRota-style
+folder structure.**
+
+### Changed
+- **The player pop-out is now built from PallyPower's own `PlayerButtonTemplate`**
+  — the exact rows the `/pp` grid uses: 13px-high flush-stacked rows, name on the
+  left, the player's **individual assigned blessing** as a small icon on the
+  right (just like the grid), and the main PallyPower frame's backdrop —
+  following your PallyPower transparency setting.
+- **Clicking a pop-out row runs PallyPower's real handlers** (not a copy):
+  **Left-click** cycles that player's individual blessing (synced),
+  **mouse-wheel** cycles it up/down, **right-click** clears it,
+  **middle-click** toggles Main Tank, **CTRL+middle** toggles Healer — all with
+  PallyPower's own sync messages and (as leader) raid-icon marking.
+- **Name colours match PallyPower exactly**: Tank orange and Healer green
+  override; otherwise the buff-tooltip status palette — Have (soft green), Need
+  (soft red), Not Here (blue), Dead (bright red). A gold personal timer sits
+  right of the name.
+- **Restructured into an AutoRota-style folder layout**:
+  - `Core\` — `RallyPowerCP_Core.lua` (engine) + `RallyPowerCP_Popout.lua`
+  - `Classes\` — one module per class (unchanged)
+  - `PallyPower\` — the untouched legacy engine (`PallyPower.lua/.xml`,
+    `PallyPowerManaCost.lua`, `MinimapButton.lua/.xml`)
+  - Root — `.toc`, `Bindings.xml` (must stay), `PallyPower-ResizeGrip.tga`
+    (referenced by absolute path), docs, `Locale\`, `Icons\`, `HDIcons\`,
+    `Sounds\`
+  No code changes were needed for the move: the toc paths were updated, the
+  legacy XML's relative `<Script>` references travel with their lua files, and
+  every art path is absolute.
+
+### Notes
+- The pop-out rows use PlayerButton indices past `PALLYPOWER_MAXPERCLASS`, so
+  the native grid's update loop never touches them, while the native click
+  handlers parse them exactly like the grid's own rows. The PallyPower engine
+  itself is still unmodified.
+- Row clicks now do **assignment** (PallyPower semantics), not casting — casting
+  stays on the buff button itself (left = class, right = single top-off), same
+  as stock PallyPower.
+
+---
+
 ## [0.4.1] — 2026-06-27
 **Paladin pop-out, done right.** 0.4.0 added a *second* bar for Paladins; that was
 the wrong call. This replaces it: the **original PallyPower buff bar** now gets

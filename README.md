@@ -1,7 +1,7 @@
 # RallyPowerCP
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** · version **0.4.1** · see [CHANGELOG.md](CHANGELOG.md).
+By **Subtilizer (Torchlite)** · version **0.7.0** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
@@ -19,14 +19,16 @@ the party/raid.
 
 | Class | What the bar does |
 |-------|-------------------|
-| **Paladin** | The original PallyPower blessing bar/grid, now with a hover **player pop-out** on each class button (colour-coded Have / Need / Not Here / Dead, names, tank markers, timers). |
+| **Paladin** | The original PallyPower blessing bar/grid, with a hover **player pop-out** on each buff-bar class button, replicating **PallyPower 3.3.5's player flyout**: skinned status-coloured buttons (green Have / red Need / blue Not Here), buff icon with dimming, personal timer, name, "R" range letter, "D" dead marker, and tank icon. **Click a player to refresh:** left = Greater blessing (out of combat), right = Normal single-target (honours individual assignments; works in combat). |
 | **Priest** | Power Word: Fortitude, Divine Spirit, Shadow Protection — plus a utility row: PW: Shield and Fear Ward. |
 | **Mage** | Arcane Intellect. |
 | **Druid** | Mark of the Wild, Thorns. |
 | **Warrior** | Battle Shout (self-cast; one click refreshes nearby party). |
+| **Shaman** | A four-button totem strip (Earth / Fire / Water / Air). Scroll to pick a totem, click to drop it; shows its icon, green-with-timer when down. Toggle from the minimap or `/rpc`. |
 
-More classes are planned — Hunter, Shaman, and Warlock need a different model
-(auras, totems, utility) and are on the roadmap in the changelog.
+More classes are planned — Hunter, Warlock, and Rogue mostly reuse the Shaman
+strip's "cycle button" pattern (stings, curses, poisons, debuff duty) and are on
+the roadmap in the changelog.
 
 ## The class bar
 
@@ -92,18 +94,46 @@ skins ship (Blue & Gold default, Ivory, White, Gold, Pearl).
 2. That's it — all art, sounds, and textures are bundled, and every path is
    verified against a real file.
 
+### Client requirements (Turtle WoW 1.18.1 / 1.12 client)
+
+- **SuperWoW** — strongly recommended. RallyPowerCP uses it for exact,
+  spell-id-based buff detection and clean one-call targeted casting. Without it
+  the addon still works, falling back to icon-based detection and the classic
+  target-juggling cast (you'll get a one-time notice at login).
+- **VanillaFixes** — recommended. A client-side fix that eliminates stutter and
+  animation lag. It has no in-game effect the addon relies on, but it makes the
+  whole client (and the bar's timers) run smoother.
+
 ## Architecture (for tinkering)
 
-RallyPowerCP's all-class bar follows an AutoRota-style layout:
+RallyPowerCP follows an AutoRota-style layout — a class-independent core, one
+module per class, and the legacy engine quarantined in its own folder:
 
-- **`RallyPowerCP_Core.lua`** — the class-independent engine: roster scanning,
-  buff detection, casting, the bar UI, timers, tooltips, scrolling, minimap
-  skins, and slash commands. It knows nothing about specific classes.
+```
+RallyPowerCP\
+  RallyPowerCP.toc
+  Bindings.xml                  (key bindings — must stay at the root)
+  PallyPower-ResizeGrip.tga     (referenced by absolute path — stays at root)
+  Core\
+    RallyPowerCP_Core.lua       (the class-independent engine)
+    RallyPowerCP_Popout.lua     (the PallyPower buff-bar player pop-out)
+  Classes\
+    Class_Priest.lua  Class_Mage.lua  Class_Druid.lua  Class_Warrior.lua
+  PallyPower\                   (the original PallyPower engine, untouched)
+    PallyPower.lua  PallyPower.xml  PallyPowerManaCost.lua
+    MinimapButton.lua  MinimapButton.xml
+  Locale\   Icons\   HDIcons\   Sounds\
+```
+
+- **`Core\RallyPowerCP_Core.lua`** — the engine: roster scanning, buff
+  detection, casting, the bar UI, timers, tooltips, scrolling, minimap skins,
+  and slash commands. It knows nothing about specific classes.
 - **`Classes\Class_<Name>.lua`** — one module per class. Each registers with
   `RallyPowerCP:NewClass("TOKEN")` and supplies only its data.
-
-The Paladin side is the original PallyPower engine (`PallyPower.lua` + `.xml`)
-and is deliberately left intact.
+- **`Core\RallyPowerCP_Popout.lua`** — attaches the player pop-out to the
+  PallyPower buff bar. Reads PallyPower's own per-button data without modifying
+  the engine.
+- **`PallyPower\`** — the original engine, deliberately left intact.
 
 ### Adding a class or buff
 
