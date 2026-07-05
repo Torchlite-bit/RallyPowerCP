@@ -10,6 +10,7 @@ BINDING_NAME_REPORT = "Report Assignments"
 BINDING_NAME_AUTOKEY1 = "Auto Normal Blessing Key"
 BINDING_NAME_AUTOKEY2 = "Auto Greater Blessing Key"
 BINDING_NAME_SEALKEY = "Cast Seal Key"
+BINDING_NAME_RALLYSMARTBUFF = "Smart buff: next member missing any buff (class bar)"
 
 PallyPower_BlessingID = { };
 PallyPower_BlessingID[0] = "Wisdom";
