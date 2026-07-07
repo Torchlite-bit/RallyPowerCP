@@ -24,6 +24,89 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.9.0] — 2026-07-07
+**Test mode** — preview and exercise the whole addon on an under-levelled
+character. Toggle with **`/rpc test`** (any class).
+
+### Added
+- **`/rpc test`** toggles test mode (saved per character; strip headers show an
+  orange **[TEST]** tag while it's on):
+  - **Every option appears** in every cycle — grid buffs, totems, stings,
+    curses, armor, poison types — even if not yet learned. Unlearned entries are
+    marked with an orange `*`.
+  - **Clicks simulate instead of cast:** timers start, buttons turn green, and
+    chat prints `[test] would cast/drop/apply …` — but nothing is actually cast,
+    so there are no failed-cast errors and no reagent use. Strip states run
+    purely off the simulated timers (no target needed).
+  - Turning it off returns everything to live casting and your real spellbook
+    instantly.
+- Exceptions that stay real (they read live data by nature): the **Soulstone**
+  button (actual bag item + cooldown) and the **poison coating timers**
+  (actual weapon enchants) — in test mode the poison *cycle* previews all
+  types, but coating a weapon still requires the real item.
+
+---
+
+## [0.8.1] — 2026-07-07
+**Strip dimensions now match the paladin template, Shaman moves onto the shared
+engine, and lookups are cached.**
+
+### Changed
+- **All strip buttons are now the paladin-template size — 100×34 with a 26px
+  icon and a 2px gap** (they were 138×30), with the buff-button text anatomy:
+  label top-left, timer top-right, sub-label along the bottom. Applies to
+  Shaman, Hunter, Warlock, and Rogue at once, since they share the engine.
+- **`Class_Shaman.lua` refactored onto the shared strip engine**, deleting its
+  bespoke duplicate strip code from 0.7.0. Behaviour is unchanged (wheel picks,
+  click drops, right-click clears, cooldown-guarded cast-derived timers, saved
+  selections) — your selected totems carry over; the strip's saved position
+  resets once.
+
+### Fixed
+- **Performance:** spellbook lookups are cached (invalidated on
+  `SPELLS_CHANGED`) and bag scans are cached (invalidated on `BAG_UPDATE`).
+  Modules poll every 0.25s, so this removes constant full spellbook/bag rescans
+  on the 1.12 client.
+
+---
+
+## [0.8.0] — 2026-07-05
+**Three more classes — Hunter, Warlock, Rogue — on a new shared strip engine.**
+Seven of nine classes now have a working module.
+
+### Added
+- **`Core\RallyPowerCP_Strip.lua`** — the reusable utility-strip engine extracted
+  from the Shaman pattern: movable titled strip, skinned status buttons
+  (icon / label / sub-label / timer, green–red–neutral), saved position per
+  strip, tooltips, wheel plumbing, and shared helpers — spellbook lookup,
+  bag search, "cast at target," and a **target-debuff tracker** that matches
+  the debuff's icon against your own spellbook texture and **learns the real
+  aura id under SuperWoW** (exact matching, no hard-coded ids or icons).
+- **`Class_Hunter.lua`** — one **Sting** button: wheel picks Serpent / Scorpid /
+  Viper (whichever you know), click applies it to your target; green with a
+  cast-derived timer while your sting is up, red when the target lacks it.
+- **`Class_Warlock.lua`** — three buttons:
+  - **Armor** — Demon Armor/Skin (highest known), tracked on you, click to refresh.
+  - **Soulstone** — the spec's glow button: green when a stone is in your bags and
+    ready, red with a countdown while on cooldown, grey when you have none
+    (clicking then *creates* one); click uses it on your friendly target or you.
+  - **Curse** — wheel through every curse you know, click applies to the target,
+    green while it's up.
+- **`Class_Rogue.lua`** — three buttons:
+  - **Expose Armor** duty — green/red on your target, click to apply.
+  - **Main Hand / Off Hand poison** slots — wheel picks the poison type from
+    what's actually in your bags (highest rank wins), click coats that weapon;
+    shows the **real remaining time and charges** from `GetWeaponEnchantInfo`.
+
+### Notes
+- Sting/curse/expose timers are cast-derived per target (the client can't read
+  debuff durations); presence detection is live and exact.
+- Cross-player coordination (assigned duties, "who keeps what up") remains the
+  sync milestone — these v1 modules are personal-accurate, per the design doc.
+- Durations use vanilla defaults; any Turtle deltas are one-line edits.
+
+---
+
 ## [0.7.0] — 2026-07-04
 **First all-class module: Shaman totems** — and the reusable "cycle button"
 pattern the other utility classes will inherit.
