@@ -308,6 +308,14 @@ local function RebuildKnownSpells()
         KNOWN[spellName] = true
         i = i + 1
     end
+    -- Test mode: pretend every buff this class defines is learned, so the full
+    -- kit can be previewed on an under-levelled character.
+    if RallyPowerCP_Settings.testMode and ACTIVE_BUFFS then
+        for _, b in pairs(ACTIVE_BUFFS) do
+            if b.name then KNOWN[b.name] = true end
+            if b.group then KNOWN[b.group] = true end
+        end
+    end
 end
 
 -- A buff is "usable" if the player knows either its single or group form.
@@ -547,6 +555,13 @@ end
 -- Cast a tracked buff on a unit and record its timer.
 local function CastBuffOn(spell, unit, b, dur, isGroup)
     if not spell then return end
+    -- Test mode: SIMULATE - record the timer and announce, cast nothing.
+    if RallyPowerCP_Settings.testMode then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would cast " .. spell .. " on " .. (UnitName(unit) or unit))
+        if isGroup then RecordGroupExpiry(unit, b, dur)
+        else RecordExpiry(unit, b, dur) end
+        return
+    end
     if RawCastOnUnit(spell, unit) then
         AnnounceBuff(spell, unit, isGroup)
         if isGroup then RecordGroupExpiry(unit, b, dur)
@@ -615,6 +630,10 @@ end
 
 -- Reliable single-target cast with no timer tracking (utility spells).
 local function CastSpellOnUnit(spell, unit)
+    if RallyPowerCP_Settings.testMode then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would cast " .. tostring(spell) .. " on " .. (UnitName(unit) or tostring(unit)))
+        return true
+    end
     return RawCastOnUnit(spell, unit)
 end
 
@@ -1758,6 +1777,23 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
 
+    -- Test mode: preview every option and simulate casts (for under-levelled
+    -- characters). Available to every class.
+    if msg == "test" then
+        RallyPowerCP_Settings.testMode = not RallyPowerCP_Settings.testMode
+        if RallyPowerCP_Settings.testMode then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Test mode off - back to live casting and your real spellbook.")
+        end
+        if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
+            RallyPowerCP.active:OnActivate()
+        elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
+            RebuildKnownSpells(); LayoutButtons(); auraDirty = true
+        end
+        return
+    end
+
     if PLAYER_CLASS == "PALADIN" then
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc icon changes the minimap icon.")
         return
@@ -1772,4 +1808,9 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
     RallyPowerCP_ToggleBar()
+end
+
+-- Shared accessor for the class modules / strip engine.
+function RallyPowerCP.IsTestMode()
+    return RallyPowerCP_Settings.testMode and true or false
 end
