@@ -1,7 +1,7 @@
 # RallyPowerCP
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** · version **0.7.0** · see [CHANGELOG.md](CHANGELOG.md).
+By **Subtilizer (Torchlite)** · version **0.9.0** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
@@ -25,10 +25,12 @@ the party/raid.
 | **Druid** | Mark of the Wild, Thorns. |
 | **Warrior** | Battle Shout (self-cast; one click refreshes nearby party). |
 | **Shaman** | A four-button totem strip (Earth / Fire / Water / Air). Scroll to pick a totem, click to drop it; shows its icon, green-with-timer when down. Toggle from the minimap or `/rpc`. |
+| **Hunter** | A Sting button: scroll to pick Serpent / Scorpid / Viper, click to apply to your target; green while your sting is up. |
+| **Warlock** | Armor (self, tracked), Soulstone (green = ready in bags, red = cooldown, grey = none — click creates/uses it), and a Curse cycle for your target. |
+| **Rogue** | Expose Armor duty on your target, plus Main-hand / Off-hand poison slots — scroll picks the poison from your bags, click coats the weapon, with real remaining time and charges. |
 
-More classes are planned — Hunter, Warlock, and Rogue mostly reuse the Shaman
-strip's "cycle button" pattern (stings, curses, poisons, debuff duty) and are on
-the roadmap in the changelog.
+Still to come: the Priest tank-shield button, Mage/Warrior debuff-duty buttons,
+and the raid-wide assignment/sync layer that coordinates all of it.
 
 ## The class bar
 
@@ -72,6 +74,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
 |---------|-------------|
 | `/pp`, `/pallypower`, `/rp`, `/rallypower` | Paladin grid / buff bar (PallyPower) |
 | `/rpc` | Toggle the all-class buff bar (non-Paladins) |
+| `/rpc test` | **Test mode** — show every option (unlearned marked `*`) and simulate casts with real timers, for previewing on low-level characters |
 | `/rpc reset` | Reset the class bar's position |
 | `/rpc icon` | Cycle the minimap icon skin (any class; or **shift-click** the icon) |
 | `/rpc icon <name>` | Set a skin directly: `blue`, `ivory`, `white`, `gold`, `pearl` |
