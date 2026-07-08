@@ -318,8 +318,13 @@ local function RebuildKnownSpells()
     end
 end
 
--- A buff is "usable" if the player knows either its single or group form.
+-- A buff is "usable" if the player knows either its single or group form and
+-- it isn't switched off on the options Buttons tab (explicit false; absent
+-- means enabled). This is the single choke point the wheel/rows flow through.
 local function BuffIsUsable(b)
+    if RallyPowerCP_Settings["gridbuff_" .. (b.name or b.group or "")] == false then
+        return false
+    end
     if b.name and KNOWN[b.name] then return true end
     if b.group and KNOWN[b.group] then return true end
     return false
@@ -800,10 +805,14 @@ local function CreateBar()
     })
     bar:SetBackdropColor(0, 0, 0, 0.7)
     bar:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+    bar:SetScale(RallyPowerCP_Settings.uiScale or 1)
     bar:SetMovable(true)
     bar:EnableMouse(true)
     bar:RegisterForDrag("LeftButton")
-    bar:SetScript("OnDragStart", function() bar:StartMoving() end)
+    bar:SetScript("OnDragStart", function()
+        if RallyPowerCP_Settings.locked then return end
+        bar:StartMoving()
+    end)
     bar:SetScript("OnDragStop", function() bar:StopMovingOrSizing(); SavePosition() end)
 
     -- Restore saved position, else default to center-right.
@@ -835,6 +844,7 @@ local RefreshPopout              -- forward decl (defined in the pop-out section
 -- Build the Have / Need / Not Here / Dead tooltip for whatever buff a button is
 -- currently set to. Re-callable so a scroll refreshes the open tooltip in place.
 local function ShowBuffTooltip(btn)
+    if RallyPowerCP_Settings.tooltips == false then return end
     local bb = ACTIVE_BUFFS and ACTIVE_BUFFS[btn.buffIndex]
     if not bb then return end
     GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
@@ -894,6 +904,7 @@ end
 local function LayoutUtilityRow(topY)
     for _, ub in pairs(utilButtons) do ub:Hide() end
     if not ACTIVE_UTILITY then return 0 end
+    if RallyPowerCP_Settings.utilRow == false then return 0 end
 
     -- only utilities whose spell the player knows
     local usable = {}
@@ -916,6 +927,7 @@ local function LayoutUtilityRow(topY)
             ub.icon = ic
             ub:SetScript("OnClick", UtilityOnClick)
             ub:SetScript("OnEnter", function()
+                if RallyPowerCP_Settings.tooltips == false then return end
                 local uu = ACTIVE_UTILITY[this.utilIndex]
                 GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
                 GameTooltip:SetText(uu.name, 1, 1, 1)
@@ -1313,6 +1325,7 @@ local function CreatePopout()
     p:SetBackdrop(ROW_BACKDROP)
     p:SetBackdropColor(0, 0, 0, 0.85)
     p:SetFrameStrata("DIALOG")
+    p:SetScale(RallyPowerCP_Settings.uiScale or 1)
     p:EnableMouse(true)
     p:Hide()
     p:SetScript("OnUpdate", PopoutOnUpdate)
@@ -1639,6 +1652,7 @@ f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:SetScript("OnEvent", function()
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         Activate()
+        RallyPowerCP_ApplyVisibility()    -- honor show-solo/party/raid
         RallyPowerCP_ApplyMinimapSkin()   -- restore the saved icon skin
         if event == "PLAYER_LOGIN" and not HAS_SUPERWOW and not RallyPowerCP_Settings._swowNagged then
             RallyPowerCP_Settings._swowNagged = true
@@ -1652,6 +1666,11 @@ f:SetScript("OnEvent", function()
         if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
             RebuildKnownSpells()
             LayoutButtons()
+            auraDirty = true
+        end
+    elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
+        RallyPowerCP_ApplyVisibility()    -- group size may have crossed a show rule
+        if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
             auraDirty = true
         end
     elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
@@ -1716,6 +1735,83 @@ function RallyPowerCP_IsClassBarUser()
 end
 
 --=============================================================================
+-- OPTIONS HOOKS  (shared by /rpc and Core\RallyPowerCP_Options.lua)
+--=============================================================================
+
+-- Central test-mode switch: one code path for /rpc test AND the options check.
+function RallyPowerCP_SetTestMode(on)
+    on = on and true or false
+    if on == (RallyPowerCP_Settings.testMode and true or false) then return end
+    RallyPowerCP_Settings.testMode = on
+    if on then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Test mode off - back to live casting and your real spellbook.")
+    end
+    if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
+        RallyPowerCP.active:OnActivate()
+    elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
+        RebuildKnownSpells(); LayoutButtons(); auraDirty = true
+    end
+end
+
+-- Options hook: a gridbuff_*/utilRow flag changed - re-derive and re-lay out.
+function RallyPowerCP_GridRefresh()
+    if not ACTIVE_BUFFS then return end
+    RebuildKnownSpells()
+    LayoutButtons()
+    auraDirty = true
+end
+
+-- Show-when-solo/party/raid gate (Settings tab; absent settings mean shown).
+function RallyPowerCP_VisibilityAllowed()
+    local key
+    if GetNumRaidMembers() > 0 then key = "showRaid"
+    elseif GetNumPartyMembers() > 0 then key = "showParty"
+    else key = "showSolo" end
+    return RallyPowerCP_Settings[key] ~= false
+end
+
+-- ANDed with the per-frame hidden flags: hiding here never overwrites what the
+-- user toggled by hand, and the Paladin legacy frames are deliberately exempt.
+function RallyPowerCP_ApplyVisibility()
+    local ok = RallyPowerCP_VisibilityAllowed()
+    if RallyPowerCP.strips then
+        for k, S in pairs(RallyPowerCP.strips) do
+            if not ok then S.frame:Hide()
+            elseif not RallyPowerCP_Settings["stripHidden_" .. k] then S.frame:Show() end
+        end
+    end
+    if bar and ACTIVE_BUFFS then
+        if not ok then bar:Hide()
+        elseif not RallyPowerCP_Settings.hidden then bar:Show() end
+    end
+end
+
+-- Options hook: live UI-scale application (strips + class bar + pop-out; the
+-- Paladin engine keeps its own scale settings under /pp Options).
+function RallyPowerCP_ApplyUIScale()
+    local s = RallyPowerCP_Settings.uiScale or 1
+    if RallyPowerCP.strips then
+        for _, S in pairs(RallyPowerCP.strips) do S.frame:SetScale(s) end
+    end
+    if bar then bar:SetScale(s) end
+    if popout then popout:SetScale(s) end
+end
+
+-- Bar back to its default anchor (shared by /rpc reset and Reset Frames).
+function RallyPowerCP_ResetBarPosition()
+    RallyPowerCP_Settings.barPoint = nil
+    RallyPowerCP_Settings.barRelPoint = nil
+    RallyPowerCP_Settings.barX = nil
+    RallyPowerCP_Settings.barY = nil
+    if bar then
+        bar:ClearAllPoints()
+        bar:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
+    end
+end
+
+--=============================================================================
 -- MINIMAP ICON SKINS  (shared minimap button -> works for every class)
 --=============================================================================
 RallyPowerCP_MinimapSkins = { "blue", "ivory", "white", "gold", "pearl" }
@@ -1730,6 +1826,7 @@ local SKIN_LABEL = {
     blue="Blue & Gold", ivory="Ivory & Gold", white="White & Gold",
     gold="Gold & White", pearl="Pearl & Gold",
 }
+RallyPowerCP_MinimapSkinLabels = SKIN_LABEL   -- exposed for the options dropdown
 
 function RallyPowerCP_ApplyMinimapSkin(name)
     name = name or RallyPowerCP_Settings.minimapSkin or "blue"
@@ -1780,30 +1877,22 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
     -- Test mode: preview every option and simulate casts (for under-levelled
     -- characters). Available to every class.
     if msg == "test" then
-        RallyPowerCP_Settings.testMode = not RallyPowerCP_Settings.testMode
-        if RallyPowerCP_Settings.testMode then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
-        else
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Test mode off - back to live casting and your real spellbook.")
-        end
-        if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
-            RallyPowerCP.active:OnActivate()
-        elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
-            RebuildKnownSpells(); LayoutButtons(); auraDirty = true
-        end
+        RallyPowerCP_SetTestMode(not RallyPowerCP_Settings.testMode)
+        return
+    end
+
+    -- Options frame: every class (the Buttons tab adapts; Paladins get a note).
+    if msg == "options" or msg == "opt" or msg == "config" then
+        if RallyPowerCP_OptionsToggle then RallyPowerCP_OptionsToggle() end
         return
     end
 
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc icon changes the minimap icon.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc options opens the RallyPowerCP settings; /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then
-        RallyPowerCP_Settings.barPoint = nil
-        if bar then
-            bar:ClearAllPoints()
-            bar:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
-        end
+        RallyPowerCP_ResetBarPosition()
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Bar position reset.")
         return
     end

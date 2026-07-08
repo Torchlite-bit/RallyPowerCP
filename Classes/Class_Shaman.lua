@@ -187,3 +187,40 @@ function M:Toggle()
     if not strip then BuildUI() end
     strip:Toggle()
 end
+
+--------------------------------------------------------------------------
+-- Options descriptor (Buttons tab): per-element button enables + totem
+-- choices. The selects bind to the same shamanSel.* keys the mouse-wheel
+-- writes - dropdown and wheel are two views of one setting.
+--------------------------------------------------------------------------
+M.optionsInfo = {}
+table.insert(M.optionsInfo, { type = "header", label = "Totem buttons" })
+for _, el in ipairs(ELEMENTS) do
+    local elc = el
+    table.insert(M.optionsInfo, {
+        type = "check", key = "btn_" .. string.lower(elc.key),
+        label = elc.key .. " totem button", default = true,
+        onChange = function() RallyPowerCP.ReflowStrips() end,
+    })
+end
+table.insert(M.optionsInfo, { type = "header", label = "Selected totems" })
+for _, el in ipairs(ELEMENTS) do
+    local elc = el
+    table.insert(M.optionsInfo, {
+        type = "select", key = "shamanSel." .. elc.key, label = elc.key,
+        values = function()
+            local out = {}
+            for _, t in ipairs(KnownList(elc)) do
+                local nm = string.gsub(t.name, " Totem$", "")
+                if t._sim then nm = nm .. " *" end
+                table.insert(out, { value = t.name, text = nm })
+            end
+            return out
+        end,
+        get = function()
+            local t = Selected(elc)
+            if t then return t.name end
+            return nil
+        end,
+    })
+end

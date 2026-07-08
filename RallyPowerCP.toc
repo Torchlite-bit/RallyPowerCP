@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: RallyPowerCP
 ## Author: Subtilizer (Torchlite)
-## Version: 0.9.0
+## Version: 0.10.0
 ## Notes: All-class buff management for Turtle WoW 1.18.1 (1.12 client). Paladin grid as PallyPower; auto-tailored buff tracker for every other class.
 ## Notes-deDE: Ein Paladin-Segen-Helfer
 ## DefaultState: Enabled
@@ -28,5 +28,7 @@ Classes\Class_Shaman.lua
 Classes\Class_Hunter.lua
 Classes\Class_Warlock.lua
 Classes\Class_Rogue.lua
+
+Core\RallyPowerCP_Options.lua
 
 Core\RallyPowerCP_Popout.lua

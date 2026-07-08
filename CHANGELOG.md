@@ -24,6 +24,52 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.10.0] — 2026-07-08
+**Options UI, Milestone A** — the tabbed options frame from
+`docs/OPTIONS_UI_SPEC.md`: **Settings** and **Buttons** tabs live, **Raid**
+tab stubbed until the Assignment & Sync milestone.
+
+### Added
+- **Tabbed options frame** (`Core/RallyPowerCP_Options.lua`), hand-built from
+  1.12 building blocks (no Ace3): tooltip-skinned frame, hand-styled tabs,
+  `OptionsCheckButtonTemplate` / `OptionsSliderTemplate` /
+  `UIDropDownMenuTemplate` / `GameMenuButtonTemplate` widgets, ESC-close via
+  `UISpecialFrames`. Open with **`/rpc options`** (any class) or
+  **right-click the minimap icon** (non-Paladins; Paladins keep
+  `PallyPower_Options`).
+- **Settings tab** (all local, per character, applied live): show when
+  solo / in party / in raid; show tooltips; test mode (same flag as
+  `/rpc test`); UI scale slider 0.5–1.5 (default 1.0 — strips, class bar and
+  pop-out; the Paladin engine keeps its own `/pp` scale); minimap icon skin
+  dropdown; lock frame positions; Reset Frames button.
+- **Buttons tab, generated per class** via the `M.optionsInfo` module
+  descriptor contract (`check`/`select`/`slider`/`button`/`header`/`note`
+  entries bound to `RallyPowerCP_Settings` keys, optional `get`/`set`/
+  `onChange`). Strip classes (Shaman, Hunter, Warlock, Rogue) declare
+  per-button enables (`btn_*`; strips re-flow and collapse) and dropdowns
+  bound to the **same keys the mouse-wheel writes** (`shamanSel.*`,
+  `hunterSting`, `lockCurse`, `roguePoison.*`) — dropdown and wheel are two
+  views of one setting. Grid classes (Priest, Mage, Druid, Warrior) get
+  auto-generated per-buff checks from `M.buffs` (`gridbuff_*`, honored in the
+  buff-usable check) plus a utility-row toggle. Paladins see a note pointing
+  at the authoritative legacy `/pp` options.
+- **Raid tab** — deferred note; arrives with Assignment & Sync (Milestone B).
+
+### Changed
+- `/rpc test`, the options checkbox and the minimap flow all drive one shared
+  `RallyPowerCP_SetTestMode`; `/rpc reset` shares its logic with the Reset
+  Frames button.
+
+### Limitations
+- Turtle-unverified: built against 1.12 FrameXML templates that PallyPower's
+  own XML already uses on this client, but the frame has not yet been
+  exercised in-game — `/rpc options` on a strip class AND a grid class is the
+  required on-realm test.
+- The reference panel's background/border/status-color pickers are
+  deliberately omitted (locked 3.3.5-parity decision).
+
+---
+
 ## [0.9.0] — 2026-07-07
 **Test mode** — preview and exercise the whole addon on an under-levelled
 character. Toggle with **`/rpc test`** (any class).
