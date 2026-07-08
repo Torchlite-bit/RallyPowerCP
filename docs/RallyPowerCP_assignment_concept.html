@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RallyPowerCP — Assignment Panel Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --zone-0:#14120f;--gold:#c8aa6e;--gold-bright:#f4e0a8;--gold-dim:#7a6642;
+    --ink:#e9ddc7;--ink-dim:#9a8e78;--ink-faint:#6b6252;--rule:#3b3227;
+    --frame:#0d0c0a;--panel:#131110;--cell:#191612;--cell-hi:#221d15;
+    --ok:#2f8a3b;--gap:#a12f2f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(120% 90% at 72% -10%,#2a2318 0%,var(--zone-0) 55%,#0c0b09 100%);
+    color:var(--ink);font-family:'Rajdhani',system-ui,sans-serif;min-height:100vh;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1220px;margin:0 auto;padding:28px 22px 60px}
+
+  header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;
+    flex-wrap:wrap;border-bottom:1px solid var(--rule);padding-bottom:16px}
+  .eyebrow{font-weight:600;letter-spacing:.32em;text-transform:uppercase;font-size:11px;color:var(--gold);opacity:.85}
+  h1{font-family:'Cinzel';font-weight:700;font-size:29px;margin:4px 0 0;color:var(--gold-bright);text-shadow:0 1px 0 #000}
+  .sub{color:var(--ink-dim);font-size:14px;max-width:56ch;line-height:1.45;margin-top:6px}
+  .who{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+  .pill{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);
+    background:#15120d;border:1px solid var(--rule);border-radius:20px;padding:5px 12px;cursor:pointer;user-select:none;
+    transition:color .12s,border-color .12s,background .12s}
+  .pill:hover{color:var(--ink)}
+  .pill .dot{width:8px;height:8px;border-radius:50%;background:#4a4a4a}
+  .pill.on{color:#bfe6c4;border-color:#2f6a37;background:#12240f}
+  .pill.on .dot{background:#5be07a;box-shadow:0 0 6px rgba(90,224,120,.6)}
+  .pill.sync{color:#cbdcff;border-color:#2f477a}
+  .pill.sync .dot{background:#5b8fff;box-shadow:0 0 6px rgba(91,143,255,.6)}
+
+  /* tabs */
+  .tabs{display:flex;gap:4px;margin-top:22px;flex-wrap:wrap}
+  .tab{font-family:'Cinzel';font-weight:600;font-size:13px;letter-spacing:.03em;cursor:pointer;
+    color:var(--ink-dim);background:linear-gradient(180deg,#161310,#100e0b);
+    border:1px solid var(--rule);border-bottom:none;border-radius:7px 7px 0 0;padding:10px 16px;position:relative;
+    transition:color .12s,background .12s}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--gold-bright);background:linear-gradient(180deg,#241f16,#17130d);border-color:var(--gold-dim)}
+  .tab .badge{font-family:'Rajdhani';font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+    margin-left:8px;padding:1px 6px;border-radius:20px;vertical-align:middle}
+  .tab .badge.live{color:#bfe6c4;background:#12240f;border:1px solid #2f6a37}
+  .tab .badge.soon{color:#e6d3a8;background:#241d0f;border:1px solid #6a5a2f}
+
+  .panel{border:1px solid var(--gold-dim);border-radius:0 8px 8px 8px;
+    background:linear-gradient(180deg,#151310,#100e0b);padding:0;overflow:hidden}
+  .phead{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:14px 18px;border-bottom:1px solid var(--rule);background:linear-gradient(180deg,#1b1710,#141109)}
+  .phead h2{font-family:'Cinzel';font-weight:700;font-size:17px;margin:0;color:var(--gold-bright)}
+  .phead .desc{font-size:13px;color:var(--ink-dim);max-width:60ch;line-height:1.4}
+  .roadmap-note{font-size:11.5px;color:#d8b98a;background:#241a0e;border:1px solid #5c4522;
+    border-radius:5px;padding:6px 10px;max-width:52ch;line-height:1.4}
+
+  .scroller{overflow-x:auto;padding:16px 18px 20px}
+
+  /* assignment grid */
+  table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:640px}
+  table.grid th,table.grid td{padding:0}
+  .corner{text-align:left;font-family:'Cinzel';font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--gold-dim);padding:0 12px 8px 4px!important;vertical-align:bottom;white-space:nowrap}
+  .colh{padding:0 4px 8px!important;text-align:center;vertical-align:bottom}
+  .colh .ci{width:34px;height:34px;margin:0 auto 3px;border-radius:5px;display:grid;place-items:center;font-size:18px;
+    background:radial-gradient(circle at 35% 30%,#2b2f3a,#12151b);border:1px solid #000}
+  .colh .cl{font-size:11px;font-weight:600;color:var(--ink-dim);letter-spacing:.02em}
+  .rowh{padding:0 12px 0 4px!important;white-space:nowrap}
+  .rowh .rn{font-family:'Rajdhani';font-weight:700;font-size:15px;line-height:1;color:var(--rc,#e9ddc7)}
+  .rowh .rr{font-size:10px;color:var(--ink-faint);letter-spacing:.06em;text-transform:uppercase}
+
+  .cell{width:52px;height:46px;border:1px solid #000;border-radius:5px;margin:3px;cursor:pointer;
+    background:var(--cell);display:grid;place-items:center;position:relative;
+    box-shadow:0 0 0 1px rgba(255,255,255,.03) inset;transition:transform .07s,box-shadow .12s,background .12s}
+  td{ text-align:center }
+  .cell:hover{transform:translateY(-1px);background:var(--cell-hi);box-shadow:0 0 0 1px var(--gold-dim) inset,0 2px 8px rgba(0,0,0,.5)}
+  .cell.empty{opacity:.5}
+  .cell.empty::after{content:"+";color:var(--ink-faint);font-size:18px;font-weight:400}
+  .chip{width:34px;height:34px;border-radius:5px;display:grid;place-items:center;
+    font-family:'Rajdhani';font-weight:700;font-size:15px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);
+    border:1px solid rgba(0,0,0,.5)}
+  .cell .sub{position:absolute;bottom:1px;right:3px;font-size:8px;color:rgba(255,255,255,.7)}
+
+  /* coverage strip */
+  .coverage{display:flex;gap:6px;flex-wrap:wrap;padding:12px 18px 18px;border-top:1px solid var(--rule)}
+  .cov{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-dim);
+    background:#100e0b;border:1px solid var(--rule);border-radius:6px;padding:6px 10px}
+  .cov .icn{width:16px;height:16px;border-radius:3px;display:grid;place-items:center;font-size:11px;background:#1c1f27}
+  .cov .st{width:8px;height:8px;border-radius:50%}
+  .cov .st.ok{background:#5be07a;box-shadow:0 0 5px rgba(90,224,120,.5)}
+  .cov .st.gap{background:#ff6b6b;box-shadow:0 0 5px rgba(255,90,90,.5)}
+  .cov .lst{color:var(--ink);font-weight:600;font-size:12px}
+
+  /* duty list (debuffs / utility / raid buffs) */
+  .duties{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;padding:16px 18px 20px}
+  .duty{display:flex;align-items:center;gap:12px;background:var(--cell);border:1px solid var(--rule);
+    border-radius:7px;padding:11px 13px}
+  .duty .di{width:38px;height:38px;border-radius:5px;display:grid;place-items:center;font-size:19px;flex:none;
+    background:radial-gradient(circle at 35% 30%,#3a3324,#171310);border:1px solid #000}
+  .duty .dm{flex:1;min-width:0}
+  .duty .dn{font-family:'Rajdhani';font-weight:700;font-size:15px;color:var(--ink)}
+  .duty .dt{font-size:11.5px;color:var(--ink-faint)}
+  .duty .assign{font-family:'Rajdhani';font-weight:700;font-size:14px;cursor:pointer;user-select:none;
+    padding:6px 11px;border-radius:6px;border:1px solid var(--rule);background:#100e0b;white-space:nowrap;
+    transition:border-color .12s,background .12s}
+  .duty .assign:hover{border-color:var(--gold-dim);background:#1a160f}
+  .duty .assign.unset{color:var(--ink-faint)}
+  .duty .assign.set{color:var(--ac,#e9ddc7)}
+
+  .hint{font-size:12px;color:var(--ink-faint);padding:0 18px 16px;line-height:1.5}
+  .hint b{color:var(--ink-dim)}
+  footer{margin-top:26px;border-top:1px solid var(--rule);padding-top:14px;font-size:12px;color:var(--ink-faint);line-height:1.6}
+  footer b{color:var(--ink-dim)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-dim);align-items:center}
+  .legend .lc{display:flex;align-items:center;gap:5px}
+  .legend .chip{width:16px;height:16px;font-size:9px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <span class="eyebrow">RallyPowerCP · assignment panel concept</span>
+      <h1>Who covers what</h1>
+      <p class="sub">The raid-leader coordination grid. <b style="color:var(--ink)">Blessings</b> works this way
+      in PallyPower today; the other tabs show how the same panel extends to every support class down the road.
+      Click any cell or slot to assign — assignments sync to the raid over the shared <b style="color:var(--ink)">PLPWR</b> channel.</p>
+    </div>
+    <div class="who">
+      <span class="pill on" id="leaderPill"><span class="dot"></span>You are Raid Leader</span>
+      <span class="pill" id="freePill"><span class="dot"></span>Free Assignment: off</span>
+      <span class="pill sync"><span class="dot"></span>Sync · PLPWR</span>
+    </div>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+  <section class="panel" id="panel"></section>
+
+  <footer>
+    <b>Concept mockup.</b> Icons are placeholder glyphs, not Blizzard art. The <b>Blessings</b> grid mirrors
+    PallyPower's live assignment window; <b>Totems, Raid Buffs, Debuffs</b> and <b>Utility</b> are the roadmap
+    (built once the shared assignment/sync layer lands). Targets Turtle WoW 1.18.1 (1.12 client) + SuperWoW + VanillaFixes.
+    <b>Free Assignment</b> lets non-leaders edit their own row; otherwise only the leader assigns.
+  </footer>
+</div>
+
+<script>
+const CC={WARRIOR:'#C79C6E',PALADIN:'#F58CBA',HUNTER:'#ABD473',ROGUE:'#FFF569',
+  PRIEST:'#e9e9e9',SHAMAN:'#3aa0ff',MAGE:'#69CCF0',WARLOCK:'#9482C9',DRUID:'#FF7D0A'};
+const CIC={WARRIOR:'⚔️',PALADIN:'🛡️',HUNTER:'🏹',ROGUE:'🗡️',PRIEST:'☀️',
+  SHAMAN:'⚡',MAGE:'🧙',WARLOCK:'💀',DRUID:'🌲',PET:'🐾'};
+
+/* ---- Blessings (LIVE) ---- */
+const TARGETS=['WARRIOR','ROGUE','PRIEST','DRUID','PALADIN','HUNTER','MAGE','WARLOCK','SHAMAN','PET'];
+const BLESS={
+  none:{k:'none'},
+  might:{k:'Might',ab:'M',c:'#b23b2e'},
+  wisdom:{k:'Wisdom',ab:'W',c:'#2f6fb0'},
+  kings:{k:'Kings',ab:'K',c:'#7c4bb0'},
+  salv:{k:'Salvation',ab:'S',c:'#6d7a86'},
+  light:{k:'Light',ab:'L',c:'#d4a52a'},
+  sanct:{k:'Sanctuary',ab:'Sc',c:'#2a9d55'},
+};
+const BORDER=['none','might','wisdom','kings','salv','light','sanct'];
+const PALADINS=['Torchlite','Lightsworn','Dawnforge','Aegis'];
+// assignments[paladin][target] = blessing key
+let bAssign={
+  Torchlite:{WARRIOR:'might',ROGUE:'might',HUNTER:'might',PET:'might'},
+  Lightsworn:{PRIEST:'wisdom',MAGE:'wisdom',WARLOCK:'wisdom',DRUID:'wisdom',SHAMAN:'wisdom',PALADIN:'wisdom'},
+  Dawnforge:{WARRIOR:'kings',ROGUE:'kings',HUNTER:'kings',DRUID:'kings'},
+  Aegis:{MAGE:'salv',WARLOCK:'salv',PRIEST:'salv',PALADIN:'light'},
+};
+
+/* ---- Totems (ROADMAP) — shamans x elements ---- */
+const SHAMANS=['Stormtide','Earthcaller','Tidewarden'];
+const ELEMENTS=['Earth','Fire','Water','Air'];
+const EIC={Earth:'🪨',Fire:'🔥',Water:'💧',Air:'🌪️'};
+const TOTEMS={
+  Earth:['Stoneskin','Str. of Earth','Tremor','Earthbind'],
+  Fire:['Searing','Magma','Fire Nova','Frost Res'],
+  Water:['Mana Spring','Healing Str.','Mana Tide','Cleansing'],
+  Air:['Windfury','Grace of Air','Grounding','Nature Res'],
+};
+const ECOL={Earth:'#8b5a2b',Fire:'#d3691e',Water:'#2f7fb0',Air:'#1f9e86'};
+let tAssign={
+  Stormtide:{Air:'Windfury',Fire:'Searing'},
+  Earthcaller:{Earth:'Str. of Earth',Fire:'Magma'},
+  Tidewarden:{Water:'Mana Spring',Air:'Grace of Air'},
+};
+let tParty={Stormtide:'Group 1',Earthcaller:'Group 2',Tidewarden:'Group 3'};
+const PARTIES=['Group 1','Group 2','Group 3','Group 4','Group 5','Group 6','Group 7','Group 8'];
+
+/* ---- Raid buffs (ROADMAP) ---- */
+const RAIDBUFFS=[
+  {ic:'🛡️',n:'Power Word: Fortitude',t:'Priest · whole raid',pool:['Seraphine','Mindveil'],set:'Seraphine'},
+  {ic:'✨',n:'Divine Spirit',t:'Priest · spirit',pool:['Mindveil','Seraphine','—'],set:'Mindveil'},
+  {ic:'🌑',n:'Shadow Protection',t:'Priest · shadow resist',pool:['Seraphine','—'],set:'—'},
+  {ic:'🔮',n:'Arcane Intellect',t:'Mage · casters',pool:['Frostweave','Cinderfall'],set:'Frostweave'},
+  {ic:'🐾',n:'Mark of the Wild',t:'Druid · whole raid',pool:['Barkheart','Moonwhisper'],set:'Barkheart'},
+  {ic:'🌵',n:'Thorns',t:'Druid · tanks',pool:['Moonwhisper','Barkheart','—'],set:'Moonwhisper'},
+];
+
+/* ---- Debuff duty (ROADMAP) — who maintains it on the target ---- */
+const DEBUFFS=[
+  {ic:'⚔️',n:'Sunder Armor',t:'Warrior · armor stacks',pool:['Ironclad','Warbringer'],set:'Ironclad',c:'#C79C6E'},
+  {ic:'🗡️',n:'Expose Armor',t:'Rogue · armor (vs Sunder)',pool:['Shadowstep','—'],set:'—',c:'#FFF569'},
+  {ic:'💥',n:'Thunder Clap',t:'Warrior · attack speed',pool:['Warbringer','Ironclad'],set:'Warbringer',c:'#C79C6E'},
+  {ic:'😱',n:'Demoralizing Shout',t:'Warrior · attack power',pool:['Ironclad','Warbringer','—'],set:'—',c:'#C79C6E'},
+  {ic:'☠️',n:'Curse of the Elements',t:'Warlock · magic taken',pool:['Soulbrand','Hexweaver'],set:'Soulbrand',c:'#9482C9'},
+  {ic:'🕷️',n:'Curse of Shadow',t:'Warlock · shadow/arcane',pool:['Hexweaver','Soulbrand','—'],set:'Hexweaver',c:'#9482C9'},
+  {ic:'❄️',n:'Winter\u2019s Chill / Scorch',t:'Mage · spell crit / fire',pool:['Cinderfall','Frostweave'],set:'Cinderfall',c:'#69CCF0'},
+  {ic:'🏹',n:'Serpent Sting',t:'Hunter · assigned sting',pool:['Hawkeye','—'],set:'Hawkeye',c:'#ABD473'},
+];
+
+/* ---- Utility (ROADMAP) ---- */
+const UTILITY=[
+  {ic:'💎',n:'Soulstone',t:'Warlock · rez insurance',pool:['Seraphine (Healer)','Mindveil (Healer)','Torchlite (Tank)'],set:'Seraphine (Healer)',c:'#9482C9'},
+  {ic:'🐍',n:'Fear Ward',t:'Priest · on the tank',pool:['Ironclad (MT)','Warbringer (OT)'],set:'Ironclad (MT)',c:'#e9e9e9'},
+  {ic:'💠',n:'Power Word: Shield',t:'Priest · tank shield duty',pool:['Seraphine','Mindveil'],set:'Seraphine',c:'#e9e9e9'},
+  {ic:'🌟',n:'Innervate',t:'Druid · on a healer',pool:['Seraphine (Healer)','Mindveil (Healer)','—'],set:'—',c:'#FF7D0A'},
+];
+
+const TABS=[
+  {id:'bless',name:'Blessings',badge:'live'},
+  {id:'totem',name:'Totems',badge:'soon'},
+  {id:'buffs',name:'Raid Buffs',badge:'soon'},
+  {id:'debuff',name:'Debuffs',badge:'soon'},
+  {id:'util',name:'Utility',badge:'soon'},
+];
+let cur='bless', freeAssign=false;
+
+const tabsEl=document.getElementById('tabs'), panelEl=document.getElementById('panel');
+TABS.forEach(t=>{
+  const e=document.createElement('div'); e.className='tab'; e.dataset.id=t.id;
+  e.innerHTML=`${t.name}<span class="badge ${t.badge}">${t.badge}</span>`;
+  e.onclick=()=>{cur=t.id;draw();};
+  tabsEl.appendChild(e);
+});
+
+function cycle(list,val){ let i=list.indexOf(val); return list[(i+1)%list.length]; }
+
+function draw(){
+  document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('active',e.dataset.id===cur));
+  if(cur==='bless') drawBless();
+  else if(cur==='totem') drawTotem();
+  else if(cur==='buffs') drawDuties('Raid buff coverage',
+     'Which caster keeps each raid-wide buff up. One owner per buff avoids overlap and reagent waste.',RAIDBUFFS,null);
+  else if(cur==='debuff') drawDuties('Target debuff duty',
+     'Who is responsible for maintaining each debuff on the primary target. The shared model behind Warrior, Rogue, Mage, Hunter and Warlock.',DEBUFFS,null);
+  else if(cur==='util') drawDuties('Utility &amp; cooldowns',
+     'One-off assignments: soulstone insurance, tank shields, fear ward, innervate targets.',UTILITY,null);
+}
+
+function chip(bk){
+  const b=BLESS[bk]; if(!b||bk==='none') return '';
+  return `<div class="chip" style="background:${b.c}">${b.ab}</div>`;
+}
+
+function drawBless(){
+  let cols=TARGETS.map(t=>`<th class="colh"><div class="ci">${CIC[t]}</div><div class="cl">${t.charAt(0)+t.slice(1).toLowerCase()}</div></th>`).join('');
+  let rows=PALADINS.map(p=>{
+    let cells=TARGETS.map(t=>{
+      const v=(bAssign[p]&&bAssign[p][t])||'none';
+      const cls=v==='none'?'cell empty':'cell';
+      return `<td><div class="${cls}" data-p="${p}" data-t="${t}">${chip(v)}</div></td>`;
+    }).join('');
+    return `<tr><td class="rowh"><div class="rn" style="--rc:${CC.PALADIN}">${p}</div><div class="rr">Paladin</div></td>${cells}</tr>`;
+  }).join('');
+  // coverage: union of blessings each target class receives
+  let cov=TARGETS.map(t=>{
+    let got=[]; PALADINS.forEach(p=>{ const v=bAssign[p]&&bAssign[p][t]; if(v&&v!=='none'&&got.indexOf(v)<0) got.push(v); });
+    const ok=got.length>0;
+    const list=got.map(g=>BLESS[g].ab).join(' ');
+    return `<div class="cov"><span class="st ${ok?'ok':'gap'}"></span><span class="icn">${CIC[t]}</span>
+      ${ok?`<span class="lst">${list}</span>`:'<span style="color:#ff9b9b">unassigned</span>'}</div>`;
+  }).join('');
+
+  panelEl.innerHTML=`
+   <div class="phead">
+     <div><h2>Blessings</h2><div class="desc">Each Paladin's assignment per class — greater blessings across the raid.</div></div>
+     <div class="legend">${BORDER.filter(k=>k!=='none').map(k=>`<span class="lc"><span class="chip" style="background:${BLESS[k].c}">${BLESS[k].ab}</span>${BLESS[k].k}</span>`).join('')}</div>
+   </div>
+   <div class="scroller"><table class="grid"><thead><tr><th class="corner">Caster \\ Class</th>${cols}</tr></thead><tbody>${rows}</tbody></table></div>
+   <div class="hint"><b>Click a cell</b> to cycle the blessing that Paladin gives that class. Coverage below flags any class with no blessing assigned.</div>
+   <div class="coverage">${cov}</div>`;
+
+  panelEl.querySelectorAll('.cell').forEach(c=>c.onclick=()=>{
+    if(!canEdit('PALADIN',c.dataset.p)) return flash(c);
+    bAssign[c.dataset.p]=bAssign[c.dataset.p]||{};
+    bAssign[c.dataset.p][c.dataset.t]=cycle(BORDER,(bAssign[c.dataset.p][c.dataset.t]||'none'));
+    drawBless();
+  });
+}
+
+function drawTotem(){
+  let cols=ELEMENTS.map(e=>`<th class="colh"><div class="ci" style="background:radial-gradient(circle at 35% 30%,${ECOL[e]},#12100b)">${EIC[e]}</div><div class="cl">${e}</div></th>`).join('');
+  cols=`<th class="colh"><div class="cl" style="padding-top:34px">Party</div></th>`+cols;
+  let rows=SHAMANS.map(s=>{
+    let party=`<td><div class="cell" data-s="${s}" data-party="1" style="width:78px"><div style="font-size:11px;color:var(--ink)">${tParty[s]}</div></div></td>`;
+    let cells=ELEMENTS.map(e=>{
+      const v=(tAssign[s]&&tAssign[s][e]);
+      const cls=v?'cell':'cell empty';
+      const inner=v?`<div class="chip" style="background:${ECOL[e]};font-size:9px;width:44px;height:34px;line-height:1.05;padding:2px">${v}</div>`:'';
+      return `<td><div class="${cls}" data-s="${s}" data-e="${e}" style="width:54px">${inner}</div></td>`;
+    }).join('');
+    return `<tr><td class="rowh"><div class="rn" style="--rc:${CC.SHAMAN}">${s}</div><div class="rr">Shaman</div></td>${party}${cells}</tr>`;
+  }).join('');
+  let cov=ELEMENTS.map(e=>{
+    let got=[]; SHAMANS.forEach(s=>{ const v=tAssign[s]&&tAssign[s][e]; if(v&&got.indexOf(v)<0) got.push(v);});
+    const ok=got.length>0;
+    return `<div class="cov"><span class="st ${ok?'ok':'gap'}"></span><span class="icn">${EIC[e]}</span>${ok?`<span class="lst">${got.join(', ')}</span>`:'<span style="color:#ff9b9b">none dropped</span>'}</div>`;
+  }).join('');
+
+  panelEl.innerHTML=`
+   <div class="phead">
+     <div><h2>Totems <span style="font-size:12px;color:var(--ink-faint)">· roadmap</span></h2>
+       <div class="desc">Assign which totem each Shaman drops per element, and which party they cover.</div></div>
+     <div class="roadmap-note">🧭 Enabled by SuperWoW's totem owner-suffix — "whose totem is whose" is finally trackable on the 1.12 client.</div>
+   </div>
+   <div class="scroller"><table class="grid"><thead><tr><th class="corner">Caster \\ Element</th>${cols}</tr></thead><tbody>${rows}</tbody></table></div>
+   <div class="hint"><b>Click an element</b> to cycle that Shaman's totem; <b>click Party</b> to change which group they cover.</div>
+   <div class="coverage">${cov}</div>`;
+
+  panelEl.querySelectorAll('.cell[data-e]').forEach(c=>c.onclick=()=>{
+    if(!canEdit('SHAMAN',c.dataset.s)) return flash(c);
+    const e=c.dataset.e, s=c.dataset.s;
+    tAssign[s]=tAssign[s]||{};
+    const opts=[null].concat(TOTEMS[e]);
+    tAssign[s][e]=cycle(opts,tAssign[s][e]||null);
+    drawTotem();
+  });
+  panelEl.querySelectorAll('.cell[data-party]').forEach(c=>c.onclick=()=>{
+    if(!canEdit('SHAMAN',c.dataset.s)) return flash(c);
+    tParty[c.dataset.s]=cycle(PARTIES,tParty[c.dataset.s]);
+    drawTotem();
+  });
+}
+
+function drawDuties(title,desc,list){
+  let items=list.map((d,i)=>{
+    const set=d.set&&d.set!=='—';
+    return `<div class="duty">
+      <div class="di">${d.ic}</div>
+      <div class="dm"><div class="dn">${d.n}</div><div class="dt">${d.t}</div></div>
+      <div class="assign ${set?'set':'unset'}" data-i="${i}" style="--ac:${d.c||'#e9ddc7'}">${d.set||'—'}</div>
+    </div>`;
+  }).join('');
+  let assigned=list.filter(d=>d.set&&d.set!=='—').length;
+  panelEl.innerHTML=`
+   <div class="phead">
+     <div><h2>${title} <span style="font-size:12px;color:var(--ink-faint)">· roadmap</span></h2><div class="desc">${desc}</div></div>
+     <div class="roadmap-note">${assigned}/${list.length} assigned · one owner each, synced to the raid so nobody doubles up.</div>
+   </div>
+   <div class="duties">${items}</div>
+   <div class="hint"><b>Click an assignment</b> to cycle who's responsible. "—" means the duty is currently uncovered.</div>`;
+
+  panelEl.querySelectorAll('.assign').forEach(a=>a.onclick=()=>{
+    if(!canEditLeaderOnly()) return flash(a);
+    const d=list[+a.dataset.i];
+    const opts=d.pool.indexOf('—')>=0?d.pool:d.pool.concat('—');
+    d.set=cycle(opts,d.set);
+    drawDuties(title,desc,list);
+  });
+}
+
+/* permissions: leader edits anything; with Free Assignment, a caster edits own row.
+   (This mockup always lets you edit — the toggle just narrates the rule.) */
+function canEdit(_cls,_name){ return true; }
+function canEditLeaderOnly(){ return true; }
+function flash(el){ el.animate([{outline:'2px solid #ff6b6b'},{outline:'2px solid transparent'}],{duration:500}); }
+
+document.getElementById('freePill').onclick=function(){
+  freeAssign=!freeAssign;
+  this.classList.toggle('on',freeAssign);
+  this.querySelector('.dot').nextSibling; this.childNodes[1].textContent='Free Assignment: '+(freeAssign?'on':'off');
+};
+
+draw();
+</script>
+</body>
+</html>
