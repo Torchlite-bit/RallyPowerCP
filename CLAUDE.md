@@ -143,6 +143,14 @@ Small stragglers that can slot in anytime: Mage/Warrior debuff-duty buttons
 table from sync), Paladin aura/seal/RF toggles (legacy self-bar already
 provides them).
 
+**Parallel milestone — Options UI (`docs/OPTIONS_UI_SPEC.md`):** the tabbed
+settings frame (reference: PallyPower Classic's Settings/Buttons/Raid tabs).
+Its Settings + Buttons tabs are pure local config and can be built **now**,
+independent of sync; its Raid tab (roles, auto-buff overrides, Free
+Assignment) belongs to the sync milestone and ships as a stub until then.
+Follow the spec's module `optionsInfo` contract so one Buttons tab serves
+every class.
+
 ## Working style
 
 - Version-bump `RallyPowerCP.toc` + README, and write a `CHANGELOG.md` entry
