@@ -286,3 +286,31 @@ function M:Toggle()
     if not strip then BuildUI() end
     strip:Toggle()
 end
+
+-- Options descriptor (Buttons tab). The curse select binds to the lockCurse
+-- key the mouse-wheel writes; `get` shows the effective (fallback) selection.
+M.optionsInfo = {
+    { type = "header", label = "Strip buttons" },
+    { type = "check", key = "btn_armor", label = "Armor button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "check", key = "btn_soulstone", label = "Soulstone button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "check", key = "btn_curse", label = "Curse button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "header", label = "Curse duty" },
+    { type = "select", key = "lockCurse", label = "Curse",
+      values = function()
+          local out = {}
+          for _, c in ipairs(KnownCurses()) do
+              local nm = string.gsub(c.name, "^Curse of ", "")
+              if c._sim then nm = nm .. " *" end
+              table.insert(out, { value = c.name, text = nm })
+          end
+          return out
+      end,
+      get = function()
+          local c = SelectedCurse()
+          if c then return c.name end
+          return nil
+      end },
+}

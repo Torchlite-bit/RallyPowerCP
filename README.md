@@ -1,7 +1,7 @@
 # RallyPowerCP
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
-By **Subtilizer (Torchlite)** · version **0.9.0** · see [CHANGELOG.md](CHANGELOG.md).
+By **Subtilizer (Torchlite)** · version **0.10.0** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
@@ -75,6 +75,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
 | `/pp`, `/pallypower`, `/rp`, `/rallypower` | Paladin grid / buff bar (PallyPower) |
 | `/rpc` | Toggle the all-class buff bar (non-Paladins) |
 | `/rpc test` | **Test mode** — show every option (unlearned marked `*`) and simulate casts with real timers, for previewing on low-level characters |
+| `/rpc options` | **Options frame** (any class; or **right-click** the minimap icon on non-Paladins) — Settings tab (show rules, tooltips, test mode, UI scale, minimap skin, lock/reset frames) and a per-class Buttons tab |
 | `/rpc reset` | Reset the class bar's position |
 | `/rpc icon` | Cycle the minimap icon skin (any class; or **shift-click** the icon) |
 | `/rpc icon <name>` | Set a skin directly: `blue`, `ivory`, `white`, `gold`, `pearl` |

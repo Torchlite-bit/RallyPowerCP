@@ -182,3 +182,34 @@ function M:Toggle()
     if not strip then BuildUI() end
     strip:Toggle()
 end
+
+-- Options descriptor (Buttons tab). The poison selects bind to the same
+-- roguePoison.mh/.oh keys the mouse-wheel writes; `get` shows the effective
+-- (fallback) selection.
+local function PoisonSelectEntry(handKey, label)
+    return { type = "select", key = "roguePoison." .. handKey, label = label,
+      values = function()
+          local out = {}
+          for _, p in ipairs(BagPoisons()) do
+              table.insert(out, { value = p, text = string.gsub(p, " Poison$", "") })
+          end
+          return out
+      end,
+      get = function()
+          local p = SelectedPoison(handKey)   -- first return only (drops the list)
+          return p
+      end }
+end
+
+M.optionsInfo = {
+    { type = "header", label = "Strip buttons" },
+    { type = "check", key = "btn_expose", label = "Expose Armor button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "check", key = "btn_poison_mh", label = "Main-hand button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "check", key = "btn_poison_oh", label = "Off-hand button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "header", label = "Poisons" },
+    PoisonSelectEntry("mh", "Main hand"),
+    PoisonSelectEntry("oh", "Off hand"),
+}

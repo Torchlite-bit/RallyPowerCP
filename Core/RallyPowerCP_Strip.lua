@@ -31,6 +31,10 @@ local HAS_SUPERWOW = (SUPERWOW_VERSION ~= nil)
 
 RallyPowerCP_Settings = RallyPowerCP_Settings or {}
 
+-- Registry of live strips ([key] = strip object). The options UI iterates it
+-- for re-flow, scale and position resets; only the active class's strip exists.
+RallyPowerCP.strips = RallyPowerCP.strips or {}
+
 local SKIN = {
     bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -195,11 +199,16 @@ function RallyPowerCP.NewStrip(key, title)
 
     local f = CreateFrame("Frame", "RallyPowerCP_Strip_" .. key, UIParent)
     S.frame = f
+    RallyPowerCP.strips[key] = S
     f:SetWidth(STRIP_W)
+    f:SetScale(RallyPowerCP_Settings.uiScale or 1)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function() f:StartMoving() end)
+    f:SetScript("OnDragStart", function()
+        if RallyPowerCP_Settings.locked then return end
+        f:StartMoving()
+    end)
     f:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
         local p, _, _, x, y = f:GetPoint()
@@ -259,6 +268,7 @@ function RallyPowerCP.NewStrip(key, title)
             if def.onWheel then def.onWheel(b, arg1); S:Refresh() end
         end)
         b:SetScript("OnEnter", function()
+            if RallyPowerCP_Settings.tooltips == false then return end
             if def.tooltip then
                 GameTooltip:SetOwner(b, "ANCHOR_LEFT")
                 def.tooltip(b, GameTooltip)
@@ -278,11 +288,28 @@ function RallyPowerCP.NewStrip(key, title)
         end
     end
 
-    function S:Finish()
-        local n = table.getn(self.buttons)
-        local h = 18 + n * BTN_H + 2
-        if n > 1 then h = h + (n - 1) * BTN_GAP end
+    -- Re-anchor only the enabled buttons and collapse the frame height around
+    -- them. A button is disabled when the options Buttons tab wrote an explicit
+    -- false to "btn_" .. lower(def.key); absent means enabled.
+    function S:Reflow()
+        local shown = 0
+        for _, b in ipairs(self.buttons) do
+            if RallyPowerCP_Settings["btn_" .. string.lower(b.def.key or "")] == false then
+                b:Hide()
+            else
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -18 - shown * (BTN_H + BTN_GAP))
+                b:Show()
+                shown = shown + 1
+            end
+        end
+        local h = 18 + shown * BTN_H + 2
+        if shown > 1 then h = h + (shown - 1) * BTN_GAP end
         f:SetHeight(h)
+    end
+
+    function S:Finish()
+        self:Reflow()
         local pos = RallyPowerCP_Settings[posKey]
         if pos then f:SetPoint(pos.p, UIParent, pos.p, pos.x, pos.y)
         else f:SetPoint("CENTER", UIParent, "CENTER", 260, 0) end
@@ -305,4 +332,12 @@ function RallyPowerCP.NewStrip(key, title)
     function S:Show() f:Show(); RallyPowerCP_Settings[hidKey] = false end
 
     return S
+end
+
+-- Options hook: re-flow every live strip after a per-button enable changed.
+function RallyPowerCP.ReflowStrips()
+    for _, S in pairs(RallyPowerCP.strips) do
+        S:Reflow()
+        S:Refresh()
+    end
 end

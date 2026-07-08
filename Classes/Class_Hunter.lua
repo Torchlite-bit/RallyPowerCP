@@ -141,3 +141,26 @@ function M:Toggle()
     if not strip then BuildUI() end
     strip:Toggle()
 end
+
+-- Options descriptor (Buttons tab). The select binds to the hunterSting key
+-- the mouse-wheel writes; `get` shows the effective (fallback) selection.
+M.optionsInfo = {
+    { type = "header", label = "Sting duty" },
+    { type = "check", key = "btn_sting", label = "Sting button", default = true,
+      onChange = function() RallyPowerCP.ReflowStrips() end },
+    { type = "select", key = "hunterSting", label = "Sting",
+      values = function()
+          local out = {}
+          for _, s in ipairs(Known()) do
+              local nm = string.gsub(s.name, " Sting$", "")
+              if s._sim then nm = nm .. " *" end
+              table.insert(out, { value = s.name, text = nm })
+          end
+          return out
+      end,
+      get = function()
+          local s = Selected()
+          if s then return s.name end
+          return nil
+      end },
+}
