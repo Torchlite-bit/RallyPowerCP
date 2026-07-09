@@ -31,5 +31,6 @@ Classes\Class_Warlock.lua
 Classes\Class_Rogue.lua
 
 Core\RallyPowerCP_Options.lua
+Core\RallyPowerCP_AssignPanel.lua
 
 Core\RallyPowerCP_Popout.lua

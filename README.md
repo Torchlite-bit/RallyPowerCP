@@ -76,6 +76,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
 | `/rpc` | Toggle the all-class buff bar (non-Paladins) |
 | `/rpc test` | **Test mode** — show every option (unlearned marked `*`) and simulate casts with real timers, for previewing on low-level characters |
 | `/rpc options` | **Options frame** (any class; or **right-click** the minimap icon) — Settings tab (show rules, tooltips, test mode, UI scale, minimap skin/button, lock/reset frames) and a per-class Buttons tab; Paladins get the merged classic PallyPower settings |
+| `/rpc assign` | **Assignment panel** (any class; or **right-click** a strip's title) — Blessings tab drives the classic PallyPower assignments (byte-compatible with stock PallyPower users), plus Totems / Buffs / Debuffs / Utility tabs over the shared assignment model |
 | `/rpc legacy` | The classic PallyPower options frame (escape hatch in case something wasn't migrated) |
 | `/rpc reset` | Reset the class bar's position |
 | `/rpc icon` | Cycle the minimap icon skin (any class; or **shift-click** the icon) |
