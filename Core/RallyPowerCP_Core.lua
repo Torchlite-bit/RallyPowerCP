@@ -1420,7 +1420,11 @@ function RallyPowerCP_SetTestMode(on)
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()
     end
-    if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
+    if PLAYER_CLASS == "PALADIN" then
+        -- Repaint the legacy bar now so its test-mode all-class buttons appear
+        -- (or clear) immediately instead of on the next engine scan.
+        if PallyPower_UpdateUI then PallyPower_UpdateUI() end
+    elseif PLAYER_CLASS then
         RebuildKnownSpells()
         if classStrip then classStrip:Reflow() end
         auraDirty = true

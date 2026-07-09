@@ -370,3 +370,65 @@ end
 function PallyPowerBuffButton_OnEnter(btn)
     RallyPowerCP_BlessingPopout_Show(btn)
 end
+
+--=============================================================================
+-- TEST MODE: force ALL blessing class buttons visible on the legacy bar.
+--
+-- The engine only shows a class button for a class that has an assignment AND
+-- present members, so solo/out of a raid the bar is empty. In test mode we
+-- wrap PallyPower_UpdateUI (global, late-bound - the engine is not touched) and
+-- repaint the ten class buttons it left hidden, so a paladin can preview the
+-- full blessing layout the same way /rpc test shows every other class its full
+-- set. We leave each button's classID/buffID as the empty tables the engine's
+-- own cleanup set, so a click early-returns (no cast) - the buttons are a
+-- decorative preview only.
+--=============================================================================
+local BLESS_DEMO = 1     -- Might icon as the placeholder blessing art
+
+local orig_PallyPower_UpdateUI = PallyPower_UpdateUI
+function PallyPower_UpdateUI()
+    if orig_PallyPower_UpdateUI then orig_PallyPower_UpdateUI() end
+    if not (RallyPowerCP and RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode()) then return end
+    local _, eclass = UnitClass("player")
+    if eclass ~= "PALADIN" then return end
+    if not PallyPowerBuffBar then return end
+    -- Horizontal re-anchoring is the engine's job; only handle the common
+    -- vertical bar (the default).
+    if PP_PerUser and PP_PerUser.horizontal then return end
+
+    local alpha = (PP_PerUser and PP_PerUser.transparency) or 0.5
+    local shown = 0
+    for class = 0, 9 do
+        local n = class + 1
+        local btn = getglobal("PallyPowerBuffBarBuff" .. n)
+        if btn then
+            local ci = getglobal("PallyPowerBuffBarBuff" .. n .. "ClassIcon")
+            local bi = getglobal("PallyPowerBuffBarBuff" .. n .. "BuffIcon")
+            if ci and PallyPower_ClassTexture and PallyPower_ClassTexture[class] then
+                ci:SetTexture(PallyPower_ClassTexture[class])
+            end
+            if bi and BlessingIcon and BlessingIcon[BLESS_DEMO] then
+                bi:SetTexture(BlessingIcon[BLESS_DEMO])
+            end
+            local txt = getglobal("PallyPowerBuffBarBuff" .. n .. "Text")
+            local t1  = getglobal("PallyPowerBuffBarBuff" .. n .. "Time")
+            local t2  = getglobal("PallyPowerBuffBarBuff" .. n .. "Time2")
+            if txt then txt:SetText("") end
+            if t1 then t1:SetText("") end
+            if t2 then t2:SetText("") end
+            btn:SetBackdropColor(0, 1, 0, alpha)     -- green "covered" look
+            btn:Show()
+            shown = shown + 1
+        end
+    end
+
+    local specials = 0
+    if PP_PerUser then
+        if PP_PerUser.showrfbutton   then specials = specials + 1 end
+        if PP_PerUser.showaurabutton then specials = specials + 1 end
+        if PP_PerUser.showsealbutton then specials = specials + 1 end
+    end
+    PallyPowerBuffBar:SetHeight(32 + 36 * shown + 36 * specials)
+    PallyPowerBuffBar:SetWidth(110)
+    PallyPowerBuffBar:Show()
+end
