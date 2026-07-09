@@ -18,6 +18,7 @@ PallyPower\PallyPower.xml
 PallyPower\MinimapButton.lua
 PallyPower\MinimapButton.xml
 
+Core\RallyPowerCP_UI.lua
 Core\RallyPowerCP_Core.lua
 Core\RallyPowerCP_Strip.lua
 Classes\Class_Priest.lua
