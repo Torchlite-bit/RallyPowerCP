@@ -35,20 +35,8 @@ RallyPowerCP_Settings = RallyPowerCP_Settings or {}
 -- for re-flow, scale and position resets; only the active class's strip exists.
 RallyPowerCP.strips = RallyPowerCP.strips or {}
 
-local SKIN = {
-    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = false, tileSize = 8, edgeSize = 8,
-    insets = { left = 0, right = 0, top = 0, bottom = 0 },
-}
-local COLORS = {
-    good = { 0, 0.7, 0, 0.5 },
-    need = { 1, 0,   0, 0.5 },
-    off  = { 0.25, 0.25, 0.25, 0.5 },
-}
-
--- Paladin-template geometry: PallyPower's buttons are 100x34 with a 26px icon;
--- the strip mirrors that exactly so every class reads as one family.
+-- Paladin-template geometry (the shared factory owns the skin/colours/anatomy;
+-- the strip keeps these for its own stacking maths).
 local STRIP_W = 100
 local BTN_H   = 34
 local BTN_GAP = 2
@@ -182,16 +170,6 @@ local function fmtTime(t)
 end
 RallyPowerCP.FmtTime = fmtTime
 
-local function Btn_SetIcon(self, tex)  self.icon:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark") end
-local function Btn_SetLabel(self, txt) self.eln:SetText(txt or "") end
-local function Btn_SetSub(self, txt)   self.tn:SetText(txt or "") end
-local function Btn_SetTimer(self, txt) self.tm:SetText(txt or "") end
-local function Btn_SetState(self, st)
-    local c = COLORS[st] or COLORS.off
-    self:SetBackdropColor(c[1], c[2], c[3], c[4])
-    self.icon:SetAlpha(st == "good" and 1 or 0.55)
-end
-
 function RallyPowerCP.NewStrip(key, title)
     local S = { key = key, buttons = {} }
     local posKey = "stripPos_" .. key
@@ -201,7 +179,8 @@ function RallyPowerCP.NewStrip(key, title)
     S.frame = f
     RallyPowerCP.strips[key] = S
     f:SetWidth(STRIP_W)
-    f:SetScale(RallyPowerCP_Settings.uiScale or 1)
+    f:SetScale(RallyPowerCP.UI.EffectiveScale(key))
+    RallyPowerCP.UI.AddScaleGrip(f, key)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
@@ -220,45 +199,17 @@ function RallyPowerCP.NewStrip(key, title)
     S.header = hdr
     S.title = title
     local function SetHeader()
-        if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then
-            hdr:SetText("|cffffd100" .. title .. "|r |cffff8800[TEST]|r")
-        else
-            hdr:SetText("|cffffd100" .. title .. "|r")
-        end
+        hdr:SetText(RallyPowerCP.UI.HeaderText(title))
     end
     S.SetHeader = SetHeader
     SetHeader()
 
     function S:AddButton(def)
         local i = table.getn(self.buttons) + 1
-        local b = CreateFrame("Button", "RallyPowerCP_Strip_" .. key .. "_" .. i, f)
-        b:SetWidth(STRIP_W); b:SetHeight(BTN_H)
+        local b = RallyPowerCP.UI.CreateButton(f, "RallyPowerCP_Strip_" .. key .. "_" .. i)
         b:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -18 - (i - 1) * (BTN_H + BTN_GAP))
-        b:SetBackdrop(SKIN)
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:EnableMouseWheel(true)
-
-        local icon = b:CreateTexture(nil, "ARTWORK")
-        icon:SetWidth(26); icon:SetHeight(26)                 -- template icon size
-        icon:SetPoint("LEFT", b, "LEFT", 4, 0)
-        b.icon = icon
-
-        local eln = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        eln:SetPoint("TOPLEFT", icon, "TOPRIGHT", 4, -3); eln:SetJustifyH("LEFT")
-        b.eln = eln
-
-        local tm = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tm:SetPoint("TOPRIGHT", b, "TOPRIGHT", -4, -5); tm:SetJustifyH("RIGHT")
-        b.tm = tm
-
-        local tn = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tn:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 4, 3)
-        tn:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -4, 3)
-        tn:SetJustifyH("LEFT")
-        b.tn = tn
-
-        b.SetIcon = Btn_SetIcon; b.SetLabel = Btn_SetLabel
-        b.SetSub = Btn_SetSub; b.SetTimer = Btn_SetTimer; b.SetState = Btn_SetState
         b.def = def
 
         b:SetScript("OnClick", function()

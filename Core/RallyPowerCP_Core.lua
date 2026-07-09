@@ -287,6 +287,13 @@ local function BuildClassPresence()
         end
     end
     for k = table.getn(presentClasses), 1, -1 do presentClasses[k] = nil end
+    -- Test mode: preview the full layout solo by showing one row per class in
+    -- CLASS_ORDER, regardless of the real roster. Classes with real members
+    -- keep them (real pop-out entries); empty classes get synthetic entries.
+    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then
+        for ci = 1, table.getn(CLASS_ORDER) do presentClasses[ci] = CLASS_ORDER[ci] end
+        return
+    end
     local n = 0
     for ci = 1, table.getn(CLASS_ORDER) do
         local ct = CLASS_ORDER[ci]
@@ -338,9 +345,8 @@ local PAD        = 6
 local ROW_H      = BTN_SIZE + 4
 local TIMER_W    = 44                      -- room for "59:59" beside the icon
 local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
-local UTIL_SIZE  = 28
-local UTIL_GAP   = 4
-local UTIL_ROW_H = UTIL_SIZE + 6
+-- (Utility buttons now use the shared 100x34 template button, stacked
+-- vertically like a strip — no separate small-icon geometry needed.)
 -- Single scrollable class row, sized to EXACTLY match the paladin template
 -- (100x34, 26px icons, Smooth skin + Blizzard Tooltip border - locked).
 local ROW_W      = 100
@@ -806,7 +812,8 @@ local function CreateBar()
     })
     bar:SetBackdropColor(0, 0, 0, 0.7)
     bar:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-    bar:SetScale(RallyPowerCP_Settings.uiScale or 1)
+    bar:SetScale(RallyPowerCP.UI.EffectiveScale("bar"))
+    RallyPowerCP.UI.AddScaleGrip(bar, "bar")
     bar:SetMovable(true)
     bar:EnableMouse(true)
     bar:RegisterForDrag("LeftButton")
@@ -825,12 +832,13 @@ local function CreateBar()
         bar:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
     end
 
-    -- Title strip
+    -- Title strip (gold, and "[TEST]"-tagged like the strips via HeaderText)
     local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("TOP", bar, "TOP", 0, -4)
     local cname = PLAYER_CLASS and (string.sub(PLAYER_CLASS,1,1)
                   .. string.lower(string.sub(PLAYER_CLASS,2))) or "Buffs"
-    title:SetText(cname)
+    bar.baseTitle = cname
+    title:SetText(RallyPowerCP.UI.HeaderText(cname))
     bar.title = title
 
     return bar
@@ -902,6 +910,16 @@ local function CycleButtonBuff(btn, dir)
     ShowBuffTooltip(btn)                           -- refresh the open tooltip
 end
 
+-- Short display label for a utility button: the part after a ": " if present
+-- ("Power Word: Shield" -> "Shield"), else the full name ("Fear Ward").
+local function UtilShortName(name)
+    local _, _, after = string.find(name, ": (.+)")
+    return after or name
+end
+
+-- Utility buttons now use the SHARED button anatomy (icon + gold label + grey
+-- sub), stacked vertically above the class rows like a strip. Returns the
+-- total height consumed.
 local function LayoutUtilityRow(topY)
     for _, ub in pairs(utilButtons) do ub:Hide() end
     if not ACTIVE_UTILITY then return 0 end
@@ -914,18 +932,15 @@ local function LayoutUtilityRow(topY)
     end
     if table.getn(usable) == 0 then return 0 end
 
-    local x = PAD
+    local BH, BG = RallyPowerCP.UI.BTN_H, RallyPowerCP.UI.BTN_GAP
+    local y = topY
     for slot = 1, table.getn(usable) do
         local uidx = usable[slot]
         local u = ACTIVE_UTILITY[uidx]
         local ub = utilButtons[slot]
         if not ub then
-            ub = CreateFrame("Button", "RallyPowerCP_Util" .. slot, bar)
-            ub:SetWidth(UTIL_SIZE); ub:SetHeight(UTIL_SIZE)
+            ub = RallyPowerCP.UI.CreateButton(bar, "RallyPowerCP_Util" .. slot)
             ub:RegisterForClicks("LeftButtonUp")
-            local ic = ub:CreateTexture(nil, "ARTWORK")
-            ic:SetAllPoints(ub)
-            ub.icon = ic
             ub:SetScript("OnClick", UtilityOnClick)
             ub:SetScript("OnEnter", function()
                 if RallyPowerCP_Settings.tooltips == false then return end
@@ -940,13 +955,17 @@ local function LayoutUtilityRow(topY)
         end
         ub.utilIndex = uidx
         local tex = GetSpellIconByName(u.name) or ("Interface\\Icons\\" .. (u.icon or "INV_Misc_QuestionMark"))
-        ub.icon:SetTexture(tex)
+        ub:SetIcon(tex)
+        ub:SetLabel("|cffffd100" .. UtilShortName(u.name) .. "|r")
+        ub:SetSub(u.tip and ("|cff999999" .. u.tip .. "|r") or "")
+        ub:SetTimer("")
+        ub:SetState("off")
         ub:ClearAllPoints()
-        ub:SetPoint("TOPLEFT", bar, "TOPLEFT", x, topY)
+        ub:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
         ub:Show()
-        x = x + UTIL_SIZE + UTIL_GAP
+        y = y - (BH + BG)
     end
-    return UTIL_ROW_H
+    return table.getn(usable) * (BH + BG)
 end
 
 -- Helper: ensure shownIndex points at a usable buff (the globally-selected one).
@@ -1175,8 +1194,17 @@ local function HidePopout()
     popoutClass = nil; popoutRow = nil
 end
 
+-- Test mode: synthetic pop-out entries so an empty class still previews the
+-- four states solo. Names are placeholders keyed off the class token.
+local TEST_POP_STATES = { "have", "need", "nothere", "dead" }
+local popoutSynthetic = false       -- the current pop-out is showing fakes
+
 -- Click a player row: left = group on their subgroup, right = single on them.
 local function PopoutPlayerOnClick()
+    if this.synthetic then                         -- fake row: never cast
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would buff " .. (this.pname or "?"))
+        return
+    end
     local unit = this.unit
     if not unit or not UnitExists(unit) then return end
     if IsControlKeyDown() then                     -- CTRL+click: assign role (local)
@@ -1232,11 +1260,50 @@ function RefreshPopout()
     local units = classUnits[popoutClass] or {}
     local now = GetTime()
     local iconTex = b and b.icons and ("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+
+    -- Synthetic preview: render the four states with placeholder names.
+    if popoutSynthetic then
+        local title = string.upper(string.sub(popoutClass, 1, 1)) .. string.lower(string.sub(popoutClass, 2))
+        for i = 1, table.getn(popoutRows) do
+            local pr = popoutRows[i]
+            local st = TEST_POP_STATES[i]
+            if st then
+                pr.synthetic = true; pr.unit = nil
+                pr.pname = "Test" .. title .. i
+                pr.name:SetText(pr.pname)
+                if iconTex then pr.icon:SetTexture(iconTex) end
+                pr.tank:SetAlpha(0)
+                pr.dead:SetAlpha(0)
+                pr.timer:SetText("")
+                if st == "have" then
+                    pr:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
+                    pr.icon:SetAlpha(1); pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                    pr.timer:SetText("9:59")
+                elseif st == "need" then
+                    pr:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
+                    pr.icon:SetAlpha(0.4); pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                elseif st == "nothere" then
+                    pr:SetBackdropColor(C_SPECIAL.r, C_SPECIAL.g, C_SPECIAL.b, C_SPECIAL.t)
+                    pr.icon:SetAlpha(0.4); pr.rng:SetTextColor(1, 0, 0); pr.rng:SetAlpha(1)
+                else -- dead
+                    pr:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
+                    pr.icon:SetAlpha(0.4); pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                    pr.dead:SetTextColor(1, 0, 0); pr.dead:SetAlpha(1)
+                end
+                pr:Show()
+            else
+                pr:Hide()
+            end
+        end
+        return
+    end
+
     for i = 1, table.getn(popoutRows) do
         local pr = popoutRows[i]
         local unit = units[i]
         if unit and b and UnitExists(unit) then
             pr.unit = unit
+            pr.synthetic = false
             local nm = UnitName(unit)
             pr.name:SetText(nm or "?")
             if iconTex then pr.icon:SetTexture(iconTex) end
@@ -1380,7 +1447,10 @@ local function ShowPopout(row)
     popoutRow = row
 
     local units = classUnits[popoutClass] or {}
-    local count = table.getn(units)
+    local realCount = table.getn(units)
+    -- In test mode, a class with no real members previews synthetic entries.
+    popoutSynthetic = (RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() and realCount == 0) or false
+    local count = popoutSynthetic and table.getn(TEST_POP_STATES) or realCount
     local y = 0
     for i = 1, count do
         local pr = GetPopoutRow(i)
@@ -1398,43 +1468,47 @@ local function ShowPopout(row)
     popout:Show()
 end
 
--- Build one class row, styled exactly like the PallyPower buff-bar button.
+-- Build one class row on the SHARED button factory (strip anatomy): 26px
+-- class icon + gold class-name label + grey buff-name sub-label + timer +
+-- needy count, with a small buff-icon badge on the class icon's corner.
+-- Intentionally diverges from PallyPower 3.3.5's two-icon class button so the
+-- grid and strip classes read as one family (see CHANGELOG 0.12.0).
 local function CreateClassRow(ct)
-    local row = CreateFrame("Button", "RallyPowerCP_Row_" .. ct, bar)
-    row:SetWidth(ROW_W); row:SetHeight(ROW_HEIGHT)
+    local row = RallyPowerCP.UI.CreateButton(bar, "RallyPowerCP_Row_" .. ct)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    row:SetBackdrop(ROW_BACKDROP)
-    row:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
+    row:EnableMouseWheel(true)
+    row:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)   -- until the first tick
     row.classToken = ct
 
-    local classIcon = row:CreateTexture(nil, "ARTWORK")
-    classIcon:SetWidth(ROW_ICON); classIcon:SetHeight(ROW_ICON)
-    classIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -4)
+    -- the factory's left icon identifies which class this row is for; the gold
+    -- label names it.
     local cls = string.upper(string.sub(ct, 1, 1)) .. string.lower(string.sub(ct, 2))
-    classIcon:SetTexture("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
-    row.classIcon = classIcon
+    row:SetIcon("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
+    row:SetLabel("|cffffd100" .. cls .. "|r")
+    row.classIcon = row.icon
+    row.timer = row.tm                       -- UpdateDisplays writes row.timer
 
-    local icon = row:CreateTexture(nil, "ARTWORK")
-    icon:SetWidth(ROW_ICON); icon:SetHeight(ROW_ICON)
-    icon:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 4, 0)
-    row.icon = icon
+    -- small buff-icon badge on the class icon's bottom-right corner
+    local badge = row:CreateTexture(nil, "OVERLAY")
+    badge:SetWidth(12); badge:SetHeight(12)
+    badge:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", 0, 0)
+    row.badge = badge
 
+    -- brief "just cast" dim over the class icon (throttle feedback)
     local dim = row:CreateTexture(nil, "OVERLAY")
-    dim:SetAllPoints(icon); dim:SetTexture(0, 0, 0, 0.55); dim:Hide()
+    dim:SetAllPoints(row.icon); dim:SetTexture(0, 0, 0, 0.55); dim:Hide()
     row.dim = dim
 
-    local timer = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    timer:SetWidth(40); timer:SetHeight(16); timer:SetJustifyH("RIGHT")
-    timer:SetPoint("TOPRIGHT", row, "TOPRIGHT", -5, 0)
-    row.timer = timer
-
+    -- needy count at the very bottom-right; shrink the sub-label to leave room
+    row.tn:ClearAllPoints()
+    row.tn:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 4, 3)
+    row.tn:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -26, 3)
     local count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    count:SetWidth(40); count:SetHeight(16); count:SetJustifyH("RIGHT")
-    count:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -5, 0)
+    count:SetWidth(22); count:SetHeight(16); count:SetJustifyH("RIGHT")
+    count:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -4, 3)
     row.count = count
 
     row:SetScript("OnClick", ClassRowOnClick)
-    row:EnableMouseWheel(true)
     row:SetScript("OnMouseWheel", function() CycleRowBuff(this.classToken, (arg1 and arg1 > 0) and 1 or -1) end)
     row:SetScript("OnEnter", function() ShowPopout(this) end)
     row:SetScript("OnLeave", function() end)   -- pop-out self-hides when the cursor leaves both
@@ -1444,6 +1518,11 @@ end
 local function LayoutButtons()
     if not bar then return end
     EnsureShownBuff()
+
+    -- Refresh the header so the "[TEST]" tag tracks test mode.
+    if bar.title and bar.baseTitle then
+        bar.title:SetText(RallyPowerCP.UI.HeaderText(bar.baseTitle))
+    end
 
     -- Hide all class rows first.
     for _, row in pairs(classRows) do row:Hide() end
@@ -1466,17 +1545,10 @@ local function LayoutButtons()
         shown = shown + 1
     end
 
-    -- Size the bar to fit the utility row and the class rows.
-    local utilWidth = 0
-    if ACTIVE_UTILITY and utilH > 0 then
-        local nUtil = 0
-        for i = 1, table.getn(ACTIVE_UTILITY) do
-            if KNOWN[ACTIVE_UTILITY[i].name] then nUtil = nUtil + 1 end
-        end
-        utilWidth = PAD + nUtil * (UTIL_SIZE + UTIL_GAP) - UTIL_GAP + PAD
-    end
-    local rowWidth = (shown > 0) and (PAD + ROW_W + PAD) or 0
-    bar:SetWidth(math.max(math.max(BAR_W, utilWidth), rowWidth))
+    -- Size the bar. Utility buttons and class rows are both full 100-wide
+    -- template buttons, so the content width is one column (PAD + ROW_W + PAD).
+    local contentWidth = ((shown > 0 or utilH > 0) and (PAD + ROW_W + PAD)) or 0
+    bar:SetWidth(math.max(BAR_W, contentWidth))
     bar:SetHeight(18 + utilH + shown * (ROW_HEIGHT + ROW_GAP) + 6)
     if shown == 0 and utilH == 0 then bar:Hide() end
 end
@@ -1522,8 +1594,14 @@ function UpdateDisplays()
         if row and row:IsShown() then
             local bi = RowBuffIndex(ct)
             local b = bi and ACTIVE_BUFFS[bi]
-            if b and b.icons then
-                row.icon:SetTexture("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+            if b then
+                row:SetSub(b.name or b.group or "")     -- grey sub-label = assigned buff
+                if b.icons then
+                    row.badge:SetTexture("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+                    row.badge:Show()
+                else
+                    row.badge:Hide()
+                end
             end
             local need = (bi and rowNeed[ct] and rowNeed[ct][bi]) or 0
             local dl = bi and rowDeadline[ct] and rowDeadline[ct][bi]
@@ -1789,7 +1867,9 @@ function RallyPowerCP_SetTestMode(on)
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()
     elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
-        RebuildKnownSpells(); LayoutButtons(); auraDirty = true
+        -- ScanRoster re-derives presentClasses (all nine in test mode) so the
+        -- full grid appears/reverts at once, not on the next tick.
+        RebuildKnownSpells(); ScanRoster(); LayoutButtons(); auraDirty = true
     end
 end
 
@@ -1826,15 +1906,17 @@ function RallyPowerCP_ApplyVisibility()
     end
 end
 
--- Options hook: live UI-scale application (strips + class bar + pop-out; the
--- Paladin engine keeps its own scale settings under /pp Options).
+-- Options hook: live UI-scale application. A per-frame scale grip override
+-- (scale_<key>) wins over the global slider; EffectiveScale resolves which.
+-- The pop-out has no grip, so it tracks the global slider directly.
 function RallyPowerCP_ApplyUIScale()
-    local s = RallyPowerCP_Settings.uiScale or 1
     if RallyPowerCP.strips then
-        for _, S in pairs(RallyPowerCP.strips) do S.frame:SetScale(s) end
+        for k, S in pairs(RallyPowerCP.strips) do
+            S.frame:SetScale(RallyPowerCP.UI.EffectiveScale(k))
+        end
     end
-    if bar then bar:SetScale(s) end
-    if popout then popout:SetScale(s) end
+    if bar then bar:SetScale(RallyPowerCP.UI.EffectiveScale("bar")) end
+    if popout then popout:SetScale(RallyPowerCP_Settings.uiScale or 1) end
 end
 
 -- Bar back to its default anchor (shared by /rpc reset and Reset Frames).
