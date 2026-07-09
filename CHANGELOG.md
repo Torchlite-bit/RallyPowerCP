@@ -24,6 +24,58 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.12.0] — 2026-07-09
+**One visual family: every non-paladin class is now a strip.** Priest, Mage,
+Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
+classes look and behave the same way; the bespoke grid bar is gone.
+
+### Changed
+- **Priest / Mage / Druid → the class-buff strip** (`RallyPowerCP.BuildClassBuffs`):
+  one 100×34 strip button per raid class, showing that class's assigned buff
+  (buff icon + gold class-name label + grey buff sub-label), red with a
+  need-count when members lack it, green/yellow with a timer when covered.
+  Scroll a button to change that class's buff (Fortitude / Divine Spirit /
+  Shadow Protection, Intellect, Mark / Thorns), left-click casts the group
+  version, right-click tops off the next member, hover opens the same player
+  pop-out the paladin bar uses. Priest's utility buttons (PW: Shield / Fear
+  Ward) are appended to the strip with the same anatomy. The frame, drag,
+  scale grip and saved position all come from the strip engine, so these read
+  identically to Shaman / Hunter / Warlock / Rogue.
+- **Warrior → a self-contained self-cast strip** (the Warlock-armor pattern):
+  one Battle Shout button, green with a cast-derived timer while the shout is
+  on you, red when it's missing; click casts (refreshing nearby party), test
+  mode simulates. `btn_shout` options toggle.
+- **The hand-rolled buff bar is retired.** `Core/RallyPowerCP_Core.lua` dropped
+  `CreateBar` / `LayoutButtons` / the class-row + utility-row builders / the
+  single-button click-cycle-tooltip helpers / `SavePosition` and the
+  `ROW_`/`BAR_`/`UTIL_` geometry (~560 lines). The roster/coverage scan,
+  timers, casting, pop-out, expiry ding, SmartBuff key binding and options
+  hooks are unchanged and now feed the strip.
+
+### Added
+- **Strip engine**: buttons gain an optional `def.onEnter`/`def.onLeave` (the
+  class-buff buttons use it to open the pop-out instead of a tooltip) and a
+  `def.visible()` predicate (roster-presence gating; all class buttons show in
+  test mode).
+- **Test mode — all class buttons everywhere.** Priest/Mage/Druid show one
+  button per class regardless of the real roster (scroll each to preview its
+  buffs). **Paladin**: the legacy blessing bar is grafted to force all ten
+  class buttons visible in test mode (wrapping the global `PallyPower_UpdateUI`;
+  `PallyPower.lua` is untouched) so a paladin previews the full layout solo,
+  the same way `/rpc test` shows every other class its full set.
+
+### Notes / limitations
+- Turtle-unverified: exercised statically only (`scripts/verify.py`). On-realm
+  checklist — a grid class (Druid/Priest): `/rpc test` shows all nine class
+  buttons, the sub-labels name the right buffs and the wheel cycles; a strip
+  class (Shaman/Rogue): no regressions; a Paladin: the legacy bar fills with
+  all class buttons in test mode and is otherwise untouched.
+- The paladin test-mode buttons are a decorative preview (they keep the empty
+  `classID`/`buffID` the engine set, so clicks don't cast); only the common
+  vertical bar layout is repainted.
+
+---
+
 ## [0.11.0] — 2026-07-09
 **3.3.5 pop-out parity for the grid classes + the options panel absorbs the
 classic PallyPower options** (right-click the minimap icon on any class).
