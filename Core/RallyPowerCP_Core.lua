@@ -1580,8 +1580,15 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
 
+    -- Assignment panel: every class (Blessings tab drives the legacy PLPWR
+    -- tables; the other tabs drive the shared assignment model).
+    if msg == "assign" or msg == "assignments" then
+        if RallyPowerCP_AssignPanelToggle then RallyPowerCP_AssignPanelToggle() end
+        return
+    end
+
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc assign opens the assignment panel; /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then

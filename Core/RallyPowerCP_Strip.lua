@@ -216,6 +216,13 @@ function RallyPowerCP.NewStrip(key, title)
         local p, _, _, x, y = f:GetPoint()
         RallyPowerCP_Settings[posKey] = { p = p, x = x, y = y }
     end)
+    -- Right-click on the strip frame (the title area - the buttons swallow
+    -- their own clicks) opens the assignment panel.
+    f:SetScript("OnMouseUp", function()
+        if arg1 == "RightButton" and RallyPowerCP_AssignPanelToggle then
+            RallyPowerCP_AssignPanelToggle()
+        end
+    end)
 
     local hdr = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     hdr:SetPoint("TOP", f, "TOP", 0, -2)

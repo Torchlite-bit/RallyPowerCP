@@ -47,6 +47,31 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Added (Assignment & Sync — step 3: the assignment panel)
+One frame for the whole raid's assignments (`Core/RallyPowerCP_AssignPanel.lua`),
+opened by **right-clicking a strip's title area** or **`/rpc assign`** (works for
+every class, Paladin included). Five tabs:
+- **Blessings — live and PLPWR-byte-compatible.** Rows are the paladins known
+  from `PLPWR` broadcasts; cells cycle through the legacy engine's OWN
+  `PallyPower_PerformCycle`/`Backwards` (permission-gated by
+  `PallyPower_CanControl`), so edits write the untouched PallyPower tables and
+  send the same `ASSIGN` messages the `/pp` grid sends. A paladin can use this
+  panel **instead of** the classic grid, and raid paladins on stock
+  PallyPower/PallyPowerTW receive the assignments unchanged. Left-click next /
+  right-click previous / wheel; shift sets all classes (legacy `MASSIGN`).
+- **Totems** — shaman × element grid plus a "covered party" column, over the
+  shared assignment model (click/wheel cycles the catalog; `-` = unassigned;
+  `own` = their own subgroup).
+- **Buffs / Debuffs / Utility** — the module-declared duty catalogs with a
+  "who's responsible" cell per duty: lead/assist cycles through the class's
+  candidates, everyone else claims/unclaims themselves.
+- The non-blessing tabs are **local until the sync milestone**: your own row
+  already drives your strip buttons (step 1b); rows set for others start
+  broadcasting when `RPCX` sync lands.
+- Pooled rows, ESC-closes, movable, remembers its last tab; 1s repaint plus
+  instant repaint on any model change. In **test mode** you are always listed
+  as a candidate, so every tab is exercisable solo.
+
 ### Added (Assignment & Sync — step 1b: strips are views of my own row)
 The first live consumer of the data model (design §9). Solo behaviour is
 unchanged; the model simply follows your picks — and when the sync milestone
