@@ -179,7 +179,8 @@ function RallyPowerCP.NewStrip(key, title)
     S.frame = f
     RallyPowerCP.strips[key] = S
     f:SetWidth(STRIP_W)
-    f:SetScale(RallyPowerCP_Settings.uiScale or 1)
+    f:SetScale(RallyPowerCP.UI.EffectiveScale(key))
+    RallyPowerCP.UI.AddScaleGrip(f, key)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")

@@ -812,7 +812,8 @@ local function CreateBar()
     })
     bar:SetBackdropColor(0, 0, 0, 0.7)
     bar:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-    bar:SetScale(RallyPowerCP_Settings.uiScale or 1)
+    bar:SetScale(RallyPowerCP.UI.EffectiveScale("bar"))
+    RallyPowerCP.UI.AddScaleGrip(bar, "bar")
     bar:SetMovable(true)
     bar:EnableMouse(true)
     bar:RegisterForDrag("LeftButton")
@@ -1905,15 +1906,17 @@ function RallyPowerCP_ApplyVisibility()
     end
 end
 
--- Options hook: live UI-scale application (strips + class bar + pop-out; the
--- Paladin engine keeps its own scale settings under /pp Options).
+-- Options hook: live UI-scale application. A per-frame scale grip override
+-- (scale_<key>) wins over the global slider; EffectiveScale resolves which.
+-- The pop-out has no grip, so it tracks the global slider directly.
 function RallyPowerCP_ApplyUIScale()
-    local s = RallyPowerCP_Settings.uiScale or 1
     if RallyPowerCP.strips then
-        for _, S in pairs(RallyPowerCP.strips) do S.frame:SetScale(s) end
+        for k, S in pairs(RallyPowerCP.strips) do
+            S.frame:SetScale(RallyPowerCP.UI.EffectiveScale(k))
+        end
     end
-    if bar then bar:SetScale(s) end
-    if popout then popout:SetScale(s) end
+    if bar then bar:SetScale(RallyPowerCP.UI.EffectiveScale("bar")) end
+    if popout then popout:SetScale(RallyPowerCP_Settings.uiScale or 1) end
 end
 
 -- Bar back to its default anchor (shared by /rpc reset and Reset Frames).
