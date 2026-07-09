@@ -14,10 +14,12 @@
 
 local M = RallyPowerCP:NewClass("HUNTER")
 
+-- duty = the sting's key in the shared assignment model (each sting is its
+-- own duty key; the wheel holds exactly one at a time).
 local STINGS = {
-    { name = "Serpent Sting", dur = 15 },
-    { name = "Scorpid Sting", dur = 20 },
-    { name = "Viper Sting",   dur = 8  },
+    { name = "Serpent Sting", dur = 15, duty = "STING_SERPENT" },
+    { name = "Scorpid Sting", dur = 20, duty = "STING_SCORPID" },
+    { name = "Viper Sting",   dur = 8,  duty = "STING_VIPER"   },
 }
 
 local strip
@@ -42,14 +44,37 @@ local function Known()
     return out
 end
 
+-- Effective selection (DESIGN_ASSIGNMENTS.md 9): the sting duty I hold in the
+-- shared model first, my local preference second, first known sting last.
 local function Selected()
     local list = Known()
     if table.getn(list) == 0 then return nil, list end
-    local want = RallyPowerCP_Settings.hunterSting
+    local want
+    for _, s in ipairs(STINGS) do
+        if not want and RallyPowerCP.Assign.GetDuty(UnitName("player"), s.duty) then
+            want = s.name
+        end
+    end
+    if not want then want = RallyPowerCP_Settings.hunterSting end
     for _, s in ipairs(list) do
         if s.name == want then return s, list end
     end
     return list[1], list
+end
+
+-- Pick a sting: writes the local preference AND self-assigns in the shared
+-- model, clearing any other sting duty I held (one sting at a time). The
+-- wheel and the options dropdown both come through here.
+local function SelectSting(name)
+    RallyPowerCP_Settings.hunterSting = name
+    local me = UnitName("player")
+    for _, s in ipairs(STINGS) do
+        if s.name == name then
+            RallyPowerCP.Assign.SetDuty(me, s.duty, true)
+        elseif RallyPowerCP.Assign.GetDuty(me, s.duty) then
+            RallyPowerCP.Assign.ClearDuty(me, s.duty)
+        end
+    end
 end
 
 local function BuildUI()
@@ -116,7 +141,7 @@ local function BuildUI()
             for i, s in ipairs(list) do if s.name == sel.name then idx = i end end
             idx = idx + (delta > 0 and -1 or 1)
             if idx < 1 then idx = n elseif idx > n then idx = 1 end
-            RallyPowerCP_Settings.hunterSting = list[idx].name
+            SelectSting(list[idx].name)
         end,
         tooltip = function(b, tt)
             tt:AddLine("Sting duty")
@@ -162,7 +187,8 @@ M.optionsInfo = {
           local s = Selected()
           if s then return s.name end
           return nil
-      end },
+      end,
+      set = function(v) SelectSting(v) end },   -- preference + self-assign
 }
 
 -- Assignment model: Hunter sting duties (each sting is its own key). Wids stable.

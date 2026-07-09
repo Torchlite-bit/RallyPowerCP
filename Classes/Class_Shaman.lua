@@ -82,15 +82,31 @@ local function KnownList(el)
     return out
 end
 
+-- Effective selection (design DESIGN_ASSIGNMENTS.md 9): my assignment in the
+-- shared model first, my local preference second, first known totem last.
+-- An assignment naming a totem I don't know falls through gracefully.
 local function Selected(el)
     local list = KnownList(el)
     if table.getn(list) == 0 then return nil, list end
     RallyPowerCP_Settings.shamanSel = RallyPowerCP_Settings.shamanSel or {}
-    local want = RallyPowerCP_Settings.shamanSel[el.key]
+    local want = RallyPowerCP.Assign.GetTotem(UnitName("player"), el.key)
+    if want then
+        for _, t in ipairs(list) do if t.name == want then return t, list end end
+    end
+    want = RallyPowerCP_Settings.shamanSel[el.key]
     if want then
         for _, t in ipairs(list) do if t.name == want then return t, list end end
     end
     return list[1], list
+end
+
+-- Pick a totem for an element: writes the local preference AND self-assigns in
+-- the shared model (wheeling = editing my own row, PallyPower free-assign
+-- style). The wheel and the options dropdown both come through here.
+local function SelectTotem(el, name)
+    RallyPowerCP_Settings.shamanSel = RallyPowerCP_Settings.shamanSel or {}
+    RallyPowerCP_Settings.shamanSel[el.key] = name
+    RallyPowerCP.Assign.SetTotem(UnitName("player"), el.key, name)
 end
 
 local function DropTotem(el)
@@ -153,8 +169,7 @@ local function ElementButton(el)
             for i, t in ipairs(list) do if t.name == sel.name then idx = i end end
             idx = idx + (delta > 0 and -1 or 1)
             if idx < 1 then idx = n elseif idx > n then idx = 1 end
-            RallyPowerCP_Settings.shamanSel = RallyPowerCP_Settings.shamanSel or {}
-            RallyPowerCP_Settings.shamanSel[el.key] = list[idx].name
+            SelectTotem(el, list[idx].name)
         end,
         tooltip = function(b, tt)
             tt:AddLine(el.key .. " Totem")
@@ -222,6 +237,7 @@ for _, el in ipairs(ELEMENTS) do
             if t then return t.name end
             return nil
         end,
+        set = function(v) SelectTotem(elc, v) end,   -- preference + self-assign
     })
 end
 

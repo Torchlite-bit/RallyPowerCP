@@ -24,14 +24,16 @@ local ARMORS = {
     { name = "Demon Armor", dur = 30 * 60 },
     { name = "Demon Skin",  dur = 30 * 60 },
 }
+-- duty = the curse's key in the shared assignment model (each curse is its
+-- own duty key; the wheel holds exactly one at a time).
 local CURSES = {
-    { name = "Curse of the Elements",  dur = 5 * 60 },
-    { name = "Curse of Shadow",        dur = 5 * 60 },
-    { name = "Curse of Weakness",      dur = 2 * 60 },
-    { name = "Curse of Recklessness",  dur = 2 * 60 },
-    { name = "Curse of Tongues",       dur = 30 },
-    { name = "Curse of Agony",         dur = 24 },
-    { name = "Curse of Doom",          dur = 60 },
+    { name = "Curse of the Elements",  dur = 5 * 60, duty = "CURSE_ELEMENTS" },
+    { name = "Curse of Shadow",        dur = 5 * 60, duty = "CURSE_SHADOW" },
+    { name = "Curse of Weakness",      dur = 2 * 60, duty = "CURSE_WEAKNESS" },
+    { name = "Curse of Recklessness",  dur = 2 * 60, duty = "CURSE_RECKLESSNESS" },
+    { name = "Curse of Tongues",       dur = 30,     duty = "CURSE_TONGUES" },
+    { name = "Curse of Agony",         dur = 24,     duty = "CURSE_AGONY" },
+    { name = "Curse of Doom",          dur = 60,     duty = "CURSE_DOOM" },
 }
 
 local strip
@@ -85,12 +87,35 @@ local function KnownCurses()
     return out
 end
 
+-- Effective selection (DESIGN_ASSIGNMENTS.md 9): the curse duty I hold in the
+-- shared model first, my local preference second, first known curse last.
 local function SelectedCurse()
     local list = KnownCurses()
     if table.getn(list) == 0 then return nil, list end
-    local want = RallyPowerCP_Settings.lockCurse
+    local want
+    for _, c in ipairs(CURSES) do
+        if not want and RallyPowerCP.Assign.GetDuty(UnitName("player"), c.duty) then
+            want = c.name
+        end
+    end
+    if not want then want = RallyPowerCP_Settings.lockCurse end
     for _, c in ipairs(list) do if c.name == want then return c, list end end
     return list[1], list
+end
+
+-- Pick a curse: writes the local preference AND self-assigns in the shared
+-- model, clearing any other curse duty I held (one curse at a time). The
+-- wheel and the options dropdown both come through here.
+local function SelectCurse(name)
+    RallyPowerCP_Settings.lockCurse = name
+    local me = UnitName("player")
+    for _, c in ipairs(CURSES) do
+        if c.name == name then
+            RallyPowerCP.Assign.SetDuty(me, c.duty, true)
+        elseif RallyPowerCP.Assign.GetDuty(me, c.duty) then
+            RallyPowerCP.Assign.ClearDuty(me, c.duty)
+        end
+    end
 end
 
 -- highest "Create Soulstone" rank in the spellbook
@@ -262,7 +287,7 @@ local function BuildUI()
             for i, c in ipairs(list) do if c.name == sel.name then idx = i end end
             idx = idx + (delta > 0 and -1 or 1)
             if idx < 1 then idx = n elseif idx > n then idx = 1 end
-            RallyPowerCP_Settings.lockCurse = list[idx].name
+            SelectCurse(list[idx].name)
         end,
         tooltip = function(b, tt)
             tt:AddLine("Curse duty")
@@ -312,13 +337,20 @@ M.optionsInfo = {
           local c = SelectedCurse()
           if c then return c.name end
           return nil
-      end },
+      end,
+      set = function(v) SelectCurse(v) end },   -- preference + self-assign
 }
 
--- Assignment model: Warlock duties (curses + soulstone). Wids are stable.
+-- Assignment model: Warlock duties (curses + soulstone). Wids are stable and
+-- append-only (21-25 were added after the first catalog batch - never renumber).
 if RallyPowerCP.Assign then
     local D = RallyPowerCP.Assign.RegisterDuty
-    D{ key="CURSE_ELEMENTS", wid=11, class="WARLOCK", tab="debuff",  spell="Curse of the Elements",   target="none",   multi=false, dur=5*60 }
-    D{ key="CURSE_SHADOW",   wid=12, class="WARLOCK", tab="debuff",  spell="Curse of Shadow",         target="none",   multi=false, dur=5*60 }
-    D{ key="SOULSTONE",      wid=17, class="WARLOCK", tab="utility", spell="Soulstone Resurrection",  target="player", multi=true,  dur=0 }
+    D{ key="CURSE_ELEMENTS",     wid=11, class="WARLOCK", tab="debuff",  spell="Curse of the Elements",  target="none",   multi=false, dur=5*60 }
+    D{ key="CURSE_SHADOW",       wid=12, class="WARLOCK", tab="debuff",  spell="Curse of Shadow",        target="none",   multi=false, dur=5*60 }
+    D{ key="SOULSTONE",          wid=17, class="WARLOCK", tab="utility", spell="Soulstone Resurrection", target="player", multi=true,  dur=0 }
+    D{ key="CURSE_WEAKNESS",     wid=21, class="WARLOCK", tab="debuff",  spell="Curse of Weakness",      target="none",   multi=false, dur=2*60 }
+    D{ key="CURSE_RECKLESSNESS", wid=22, class="WARLOCK", tab="debuff",  spell="Curse of Recklessness",  target="none",   multi=false, dur=2*60 }
+    D{ key="CURSE_TONGUES",      wid=23, class="WARLOCK", tab="debuff",  spell="Curse of Tongues",       target="none",   multi=false, dur=30 }
+    D{ key="CURSE_AGONY",        wid=24, class="WARLOCK", tab="debuff",  spell="Curse of Agony",         target="none",   multi=false, dur=24 }
+    D{ key="CURSE_DOOM",         wid=25, class="WARLOCK", tab="debuff",  spell="Curse of Doom",          target="none",   multi=false, dur=60 }
 end
