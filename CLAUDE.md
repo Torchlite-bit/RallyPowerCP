@@ -12,7 +12,7 @@ standard is PallyPower 3.3.5 (WotLK)** — reference source:
 `github.com/AznamirWoW/PallyPower` (clone it; `PallyPower_Wrath.xml` +
 `PallyPowerValues.lua` are the spec for frames, colors, dimensions).
 
-Current version: **0.11.0**. See `CHANGELOG.md` for the full history and
+Current version: **0.12.0**. See `CHANGELOG.md` for the full history and
 `docs/` for the design documents and interactive HTML concepts.
 
 ## Hard environment rules (violating these bricks the addon)
@@ -67,11 +67,19 @@ Load order (`RallyPowerCP.toc`):
 ```
 Locale\*                       localization
 PallyPower\*                   the ORIGINAL PallyPower engine (see below)
-Core\RallyPowerCP_Core.lua     class-independent grid engine
-Core\RallyPowerCP_Strip.lua    shared utility-strip engine + helpers
+Core\RallyPowerCP_Core.lua     class-independent coverage engine + class-buff strip
+Core\RallyPowerCP_Strip.lua    shared strip engine + helpers
 Classes\Class_*.lua            one module per class
-Core\RallyPowerCP_Popout.lua   loads LAST (replaces a legacy hover handler)
+Core\RallyPowerCP_Options.lua  the tabbed options frame
+Core\RallyPowerCP_Popout.lua   loads LAST (legacy hover handler + paladin test graft)
 ```
+
+**Every non-paladin class is now a strip.** There is one visual family: the
+100×34 paladin-template button, stacked in a movable titled strip (drag dot,
+scale grip, saved position). Priest/Mage/Druid render the **class-buff strip**
+(`RallyPowerCP.BuildClassBuffs`, one button per raid class, with the player
+pop-out on hover); Warrior/Shaman/Hunter/Warlock/Rogue render their own
+self-contained strips. No bespoke grid bar exists anymore.
 
 **Paladin = the legacy engine, wrapped not rewritten (locked decision).**
 `PallyPower\PallyPower.lua/.xml` run unmodified; `PallyPower.xml` loads its lua
@@ -84,14 +92,17 @@ exact replica of the WotLK `PallyPowerPopupTemplate` (100×34, Smooth skin +
 Blizzard Tooltip border, official colors: Good `0,0.7,0` / NeedAll `1,0,0` /
 Special `0,0,1`, all 0.5 alpha).
 
-**Grid classes** (Priest, Mage, Druid, Warrior): declare
+**Class-buff classes** (Priest, Mage, Druid): declare
 `M = RallyPowerCP:NewClass("TOKEN"); M.buffs = { {name, group, icons, ids?,
-pet, dur, gdur, selfcast}, ... }`. The Core scans the roster, detects by
-SuperWoW spell-id (learned from the icon seed) with icon fallback, and casts
-via `CastBuffOn`.
+pet, dur, gdur, selfcast}, ... }` (+ optional `M.utility`), plus
+`M:OnActivate()` = `RallyPowerCP.BuildClassBuffs()` and `M:Toggle()` =
+`RallyPowerCP.BuildClassBuffs():Toggle()`. The Core scans the roster, detects
+by SuperWoW spell-id (learned from the icon seed) with icon fallback, casts via
+`CastBuffOn`, and renders one strip button per raid class (wheel = which buff
+for that class, L = group cast, R = smart single, hover = player pop-out).
 
-**Strip classes** (Shaman, Hunter, Warlock, Rogue): declare `M:OnActivate()`
-(build UI) and `M:Toggle()`. Build UI with the strip engine:
+**Strip classes** (Warrior, Shaman, Hunter, Warlock, Rogue): declare
+`M:OnActivate()` (build UI) and `M:Toggle()`. Build UI with the strip engine:
 ```
 strip = RallyPowerCP.NewStrip(key, title)
 strip:AddButton{ refresh=fn(b), onClick=fn(b,btn), onWheel=fn(b,delta), tooltip=fn(b,tt) }
