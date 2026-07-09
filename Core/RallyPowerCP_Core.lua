@@ -341,27 +341,28 @@ local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
 local UTIL_SIZE  = 28
 local UTIL_GAP   = 4
 local UTIL_ROW_H = UTIL_SIZE + 6
--- Single scrollable class row, sized to EXACTLY match PallyPower's buff-bar
--- button (100x36 with two 26x26 icons and a tooltip-textured backdrop coloured
--- by status), so it looks identical to the Paladin row.
+-- Single scrollable class row, sized to EXACTLY match the paladin template
+-- (100x34, 26px icons, Smooth skin + Blizzard Tooltip border - locked).
 local ROW_W      = 100
-local ROW_HEIGHT = 36
+local ROW_HEIGHT = 34
 local ROW_ICON   = 26
-local ROW_GAP    = 0
-local ROW_ALPHA  = 0.8
+local ROW_GAP    = 2
 local ROW_BACKDROP = {
-    bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 8, edgeSize = 8,
-    insets = { left = 2, right = 2, top = 3, bottom = 2 },
+    tile = false, tileSize = 8, edgeSize = 8,
+    insets = { left = 0, right = 0, top = 0, bottom = 0 },
 }
 
--- Hover pop-out side panel: a stack of colour-coded player bars (PallyPower
--- player-list style), expanding to the LEFT of the class rows.
-local POP_W       = 160          -- panel width
-local POP_BAR_H   = 26           -- per-player bar height
-local POP_BAR_GAP = 2            -- gap between player bars
-local POP_PAD     = 4            -- inner padding
+-- Hover pop-out: 100x34 player rows replicating PallyPowerPopupTemplate,
+-- stacked flush and floating bare, expanding to the LEFT of the class rows
+-- (mirror of Core\RallyPowerCP_Popout.lua, the Paladin reference).
+local POP_ROW_W = 100
+local POP_ROW_H = 34
+-- official presets from PallyPowerValues.lua
+local C_GOOD    = { r = 0, g = 0.7, b = 0, t = 0.5 }
+local C_NEEDALL = { r = 1, g = 0,   b = 0, t = 0.5 }
+local C_SPECIAL = { r = 0, g = 0,   b = 1, t = 0.5 }
 
 local function SavePosition()
     if not bar then return end
@@ -1000,15 +1001,6 @@ local function CycleRole(name)
     local nxt = ROLE_NEXT[RallyPowerCP_Roles[name] or ""] or ""
     if nxt == "" then RallyPowerCP_Roles[name] = nil else RallyPowerCP_Roles[name] = nxt end
 end
-local function RoleLabel(name)
-    return (name and RallyPowerCP_Roles[name]) or "R"   -- unassigned shows an "R" slot
-end
-local function RoleColor(name)
-    local r = name and RallyPowerCP_Roles[name]
-    if r == "MT" then return 1, 0.82, 0          -- tank: gold
-    elseif r == "MA" then return 0.4, 0.8, 1     -- assist: cyan
-    else return 0.5, 1, 0.5 end                  -- unassigned: green (matches PallyPower)
-end
 
 -- Next member of class ct who needs buff b (renew=true also returns an already-
 -- buffed member once everyone is covered, so a click can still refresh).
@@ -1227,7 +1219,12 @@ local function PopoutPlayerOnClick()
     auraDirty = true; lastScan = SCAN_INTERVAL
 end
 
--- Refresh each visible player bar: status colour, buff icon, name, personal timer.
+-- Refresh each visible player row with the official popup states:
+--   not visible -> C_SPECIAL (blue), dim icon, red R
+--   dead        -> C_NEEDALL (red),  dim icon, green R, red D
+--   has buff    -> C_GOOD (green),   full icon
+--   needs it    -> C_NEEDALL (red),  dim icon
+-- Local MT/MA role markers ride the official tank icon (white / cyan tint).
 function RefreshPopout()
     if not popout or not popoutClass then return end
     local bi = RowBuffIndex(popoutClass)
@@ -1240,18 +1237,25 @@ function RefreshPopout()
         local unit = units[i]
         if unit and b and UnitExists(unit) then
             pr.unit = unit
-            pr.name:SetText(UnitName(unit) or "?")
-            if iconTex then pr.icon:SetTexture(iconTex) end
             local nm = UnitName(unit)
-            pr.role:SetText(RoleLabel(nm))
-            pr.role:SetTextColor(RoleColor(nm))
+            pr.name:SetText(nm or "?")
+            if iconTex then pr.icon:SetTexture(iconTex) end
             local timerText = ""
             if not UnitIsVisible(unit) then
-                pr:SetBackdropColor(0.3, 0.3, 0.9, ROW_ALPHA)      -- Not Here (blue)
+                pr:SetBackdropColor(C_SPECIAL.r, C_SPECIAL.g, C_SPECIAL.b, C_SPECIAL.t)
+                pr.icon:SetAlpha(0.4)
+                pr.rng:SetTextColor(1, 0, 0); pr.rng:SetAlpha(1)
+                pr.dead:SetAlpha(0)
             elseif UnitIsDeadOrGhost(unit) then
-                pr:SetBackdropColor(0.5, 0.1, 0.1, ROW_ALPHA)      -- Dead (dark red)
+                pr:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
+                pr.icon:SetAlpha(0.4)
+                pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                pr.dead:SetTextColor(1, 0, 0); pr.dead:SetAlpha(1)
             elseif UnitHasBuff(unit, b) then
-                pr:SetBackdropColor(0, 1, 0, ROW_ALPHA)            -- Have (green)
+                pr:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
+                pr.icon:SetAlpha(1)
+                pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                pr.dead:SetAlpha(0)
                 local dl
                 if UnitIsUnit(unit, "player") then
                     local left = PlayerBuffTimeLeft(b)
@@ -1265,9 +1269,20 @@ function RefreshPopout()
                     timerText = string.format("%d:%02d", m, math.floor(rem - m * 60))
                 end
             else
-                pr:SetBackdropColor(1, 0, 0, ROW_ALPHA)            -- Need (red)
+                pr:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
+                pr.icon:SetAlpha(0.4)
+                pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                pr.dead:SetAlpha(0)
             end
             pr.timer:SetText(timerText)
+            local role = nm and RallyPowerCP_Roles[nm]
+            if role == "MT" then
+                pr.tank:SetVertexColor(1, 1, 1); pr.tank:SetAlpha(1)
+            elseif role == "MA" then
+                pr.tank:SetVertexColor(0.4, 0.8, 1); pr.tank:SetAlpha(1)
+            else
+                pr.tank:SetAlpha(0)
+            end
             pr:Show()
         else
             pr:Hide()
@@ -1290,43 +1305,69 @@ local function PopoutOnUpdate()
     if popoutAccum >= 0.2 then popoutAccum = 0; RefreshPopout() end
 end
 
+-- Build one popup row, laid out exactly like PallyPowerPopupTemplate
+-- (mirror of GetRow in Core\RallyPowerCP_Popout.lua).
 local function GetPopoutRow(i)
     local pr = popoutRows[i]
     if pr then return pr end
     pr = CreateFrame("Button", "RallyPowerCP_PopRow" .. i, popout)
-    pr:SetWidth(POP_W - 2 * POP_PAD); pr:SetHeight(POP_BAR_H)
+    pr:SetWidth(POP_ROW_W); pr:SetHeight(POP_ROW_H)
+    pr:SetFrameStrata("DIALOG")
     pr:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     pr:SetBackdrop(ROW_BACKDROP)
-    pr:SetBackdropColor(0, 1, 0, ROW_ALPHA)
     local hl = pr:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(pr); hl:SetTexture(1, 1, 1, 0.18)
-    local icon = pr:CreateTexture(nil, "ARTWORK")
-    icon:SetWidth(POP_BAR_H - 8); icon:SetHeight(POP_BAR_H - 8)
-    icon:SetPoint("LEFT", pr, "LEFT", 4, 0)
+
+    local icon = pr:CreateTexture(nil, "OVERLAY")           -- $parentBuffIcon
+    icon:SetWidth(16); icon:SetHeight(16)
+    icon:SetPoint("TOPLEFT", pr, "TOPLEFT", 4, -4)
     pr.icon = icon
-    local name = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    name:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-    name:SetPoint("RIGHT", pr, "RIGHT", -32, 0); name:SetJustifyH("LEFT")
-    pr.name = name
-    local role = pr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    role:SetPoint("TOPRIGHT", pr, "TOPRIGHT", -4, -2); role:SetJustifyH("RIGHT")
-    pr.role = role
+
     local timer = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    timer:SetPoint("BOTTOMRIGHT", pr, "BOTTOMRIGHT", -4, 2); timer:SetJustifyH("RIGHT")
+    timer:SetWidth(40); timer:SetHeight(16)                 -- $parentTime
+    timer:SetPoint("TOPLEFT", icon, "TOPRIGHT", 1, 0)
+    timer:SetJustifyH("LEFT")
     pr.timer = timer
+
+    local name = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    name:SetWidth(92); name:SetHeight(16)                   -- $parentName
+    name:SetPoint("BOTTOMRIGHT", pr, "BOTTOMRIGHT", -5, 3)
+    name:SetJustifyH("RIGHT")
+    pr.name = name
+
+    local rng = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    rng:SetWidth(10); rng:SetHeight(10)                     -- $parentRng
+    rng:SetPoint("TOPRIGHT", pr, "TOPRIGHT", -6, -6)
+    rng:SetJustifyH("RIGHT")
+    rng:SetText("R")
+    pr.rng = rng
+
+    local dead = pr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    dead:SetWidth(10); dead:SetHeight(10)                   -- $parentDead
+    dead:SetPoint("RIGHT", rng, "LEFT", -3, 0)
+    dead:SetJustifyH("RIGHT")
+    dead:SetText("D")
+    pr.dead = dead
+
+    local tank = pr:CreateTexture(nil, "OVERLAY")           -- $parentTankIcon
+    tank:SetWidth(11); tank:SetHeight(11)
+    tank:SetTexture("Interface\\GroupFrame\\UI-Group-MainTankIcon")
+    tank:SetPoint("RIGHT", dead, "LEFT", -3, 0)
+    pr.tank = tank
+
     pr:SetScript("OnClick", PopoutPlayerOnClick)
     popoutRows[i] = pr
     return pr
 end
 
 local function CreatePopout()
+    -- Bare container: the official popup rows float with their own backdrops,
+    -- so this frame exists only for layout and the keep-open hit-test.
     local p = CreateFrame("Frame", "RallyPowerCP_Popout", UIParent)
-    p:SetWidth(POP_W); p:SetHeight(40)
-    p:SetBackdrop(ROW_BACKDROP)
-    p:SetBackdropColor(0, 0, 0, 0.85)
+    p:SetWidth(POP_ROW_W); p:SetHeight(POP_ROW_H)
     p:SetFrameStrata("DIALOG")
     p:SetScale(RallyPowerCP_Settings.uiScale or 1)
-    p:EnableMouse(true)
+    p:EnableMouse(false)
     p:Hide()
     p:SetScript("OnUpdate", PopoutOnUpdate)
     popout = p
@@ -1340,21 +1381,18 @@ local function ShowPopout(row)
 
     local units = classUnits[popoutClass] or {}
     local count = table.getn(units)
-    local y = -POP_PAD
+    local y = 0
     for i = 1, count do
         local pr = GetPopoutRow(i)
         pr:ClearAllPoints()
-        pr:SetPoint("TOPLEFT", popout, "TOPLEFT", POP_PAD, y)
-        pr:SetWidth(POP_W - 2 * POP_PAD)
-        y = y - (POP_BAR_H + POP_BAR_GAP)
+        pr:SetPoint("TOPLEFT", popout, "TOPLEFT", 0, y)
+        y = y - POP_ROW_H                                -- stacked flush
     end
     for i = count + 1, table.getn(popoutRows) do popoutRows[i]:Hide() end
 
-    local h = POP_PAD * 2 + count * POP_BAR_H
-    if count > 1 then h = h + (count - 1) * POP_BAR_GAP end
-    popout:SetHeight(h)
+    popout:SetHeight(count * POP_ROW_H)
     popout:ClearAllPoints()
-    popout:SetPoint("TOPRIGHT", row, "TOPLEFT", -2, 0)   -- expand to the LEFT
+    popout:SetPoint("TOPRIGHT", row, "TOPLEFT", -4, 0)   -- expand to the LEFT
     popoutNotOver = 0
     RefreshPopout()
     popout:Show()
@@ -1366,12 +1404,12 @@ local function CreateClassRow(ct)
     row:SetWidth(ROW_W); row:SetHeight(ROW_HEIGHT)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetBackdrop(ROW_BACKDROP)
-    row:SetBackdropColor(0, 1, 0, ROW_ALPHA)
+    row:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
     row.classToken = ct
 
     local classIcon = row:CreateTexture(nil, "ARTWORK")
     classIcon:SetWidth(ROW_ICON); classIcon:SetHeight(ROW_ICON)
-    classIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -5)
+    classIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -4)
     local cls = string.upper(string.sub(ct, 1, 1)) .. string.lower(string.sub(ct, 2))
     classIcon:SetTexture("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
     row.classIcon = classIcon
@@ -1491,13 +1529,13 @@ function UpdateDisplays()
             local dl = bi and rowDeadline[ct] and rowDeadline[ct][bi]
             local mr = dl and (dl - now) or nil
             if need > 0 then
-                row:SetBackdropColor(1, 0, 0, ROW_ALPHA)        -- red: someone needs it
+                row:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
                 row.count:SetText(need)
             elseif mr and mr <= WARN_TIME then
-                row:SetBackdropColor(1, 1, 0.5, ROW_ALPHA)      -- yellow: covered but expiring
+                row:SetBackdropColor(1, 1, 0.5, 0.5)            -- yellow: covered but expiring
                 row.count:SetText("")
             else
-                row:SetBackdropColor(0, 1, 0, ROW_ALPHA)        -- green: all covered
+                row:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
                 row.count:SetText("")
             end
             if mr and mr > 0 then
@@ -1881,14 +1919,22 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
 
-    -- Options frame: every class (the Buttons tab adapts; Paladins get a note).
+    -- Options frame: every class (the Settings + Buttons tabs adapt per class;
+    -- Paladins get the merged legacy PallyPower settings).
     if msg == "options" or msg == "opt" or msg == "config" then
         if RallyPowerCP_OptionsToggle then RallyPowerCP_OptionsToggle() end
         return
     end
 
+    -- Escape hatch: the classic PallyPower options frame, in case something
+    -- wasn't migrated into the panel.
+    if msg == "legacy" then
+        if PallyPower_Options then PallyPower_Options() end
+        return
+    end
+
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc options opens the RallyPowerCP settings; /rpc icon changes the minimap icon.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then

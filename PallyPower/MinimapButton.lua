@@ -16,9 +16,9 @@ function PallyPower_MinimapButton_OnClick(mouseBtn)
 			PallyPower_SlashCommandHandler("");
 		end
 	else
-		-- RallyPowerCP: right-click routes non-Paladins to the RallyPowerCP
-		-- options frame; Paladins keep the original PallyPower options.
-		if RallyPowerCP_IsClassBarUser and RallyPowerCP_IsClassBarUser() and RallyPowerCP_OptionsToggle then
+		-- RallyPowerCP: right-click opens the RallyPowerCP options for EVERY
+		-- class (the classic PallyPower frame stays reachable at /rpc legacy).
+		if RallyPowerCP_OptionsToggle then
 			RallyPowerCP_OptionsToggle();
 		else
 			PallyPower_Options();

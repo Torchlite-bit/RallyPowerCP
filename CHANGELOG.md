@@ -24,6 +24,61 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.11.0] — 2026-07-09
+**3.3.5 pop-out parity for the grid classes + the options panel absorbs the
+classic PallyPower options** (right-click the minimap icon on any class).
+
+### Changed
+- **Grid pop-out unified to the PallyPowerPopupTemplate replica** (Priest,
+  Mage, Druid, Warrior — previously 0.3-era 26px colour bars in a 160px
+  panel): 100×34 rows with the Smooth skin + Blizzard Tooltip border, the
+  official `C_GOOD`/`C_NEEDALL`/`C_SPECIAL` presets (0.5 alpha), 16×16 buff
+  icon dimmed to 0.4 on players missing the buff, "R" range letter
+  (green/red), "D" dead marker, and the main-tank icon — identical to the
+  Paladin pop-out. Rows stack flush in a bare floating container anchored
+  `TOPRIGHT → TOPLEFT (-4, 0)` of the class row.
+- **Class rows are now 100×34 with a 2px gap** and the Smooth-skin backdrop,
+  matching the paladin template; row status colours use the official presets
+  (expiring stays yellow `1,1,0.5,0.5`).
+- **Local MT/MA roles render on the tank icon** (white / cyan tint;
+  CTRL+click still cycles MT → MA → none). The old role letter and the
+  `RoleLabel`/`RoleColor` helpers are gone; "R" now means range, as in the
+  reference.
+- **Minimap right-click opens the RallyPowerCP options for every class**,
+  Paladin included. The classic PallyPower frame stays reachable via
+  **`/rpc legacy`** as an escape hatch.
+
+### Added
+- **Classic PallyPower options merged into the panel** without forking
+  state: checkboxes drive the same XML widgets + handler functions the
+  classic frame uses (its `uiDirty` refresh flag is file-local, so the
+  engine's own handlers are the only sanctioned path — and the classic
+  frame's widgets stay in sync); sliders write `PP_PerUser` and call
+  `PallyPower_UpdateUI` / `PallyPowerGrid_Update`. `PallyPower.lua` is
+  untouched.
+  - Paladin **Settings**: lock frames · horizontal buff bar · hide Blizzard
+    aura bar · buff-bar scale · grid scale · transparency · minimap
+    button/skin · test mode.
+  - Paladin **Buttons**: Aura / Seal / Righteous Fury buttons · smart
+    buffs · normal-blessing preference · expiry sound · HD icons · color
+    buff bar · UnitXP SP3 line-of-sight · scan frequency.
+  - All classes: **Show minimap button** (the shared `minimapbuttonshow`).
+- Buttons-tab audit fix: the utility-row toggle no longer requires the
+  module to also declare grid buffs.
+
+### Limitations
+- Turtle-unverified: exercised statically only. On-realm test: hover a
+  Priest/Druid class row (pop-out parity + CTRL+click roles), toggle strip
+  buttons on a Shaman, and on a Paladin flip Aura/Seal/RF/scale from the
+  panel and `/reload` to confirm persistence.
+- 3.3.5-only options with no counterpart in this PallyPower fork (report
+  channel, Show Pets, Salv in Combat, aura/seal tracker dropdowns, Wait for
+  Players, buff-duration and layout dropdowns) are omitted — the fork's
+  real `PP_PerUser` keys are authoritative. Background/border/status-colour
+  pickers stay fixed at the 3.3.5 defaults (locked decision).
+
+---
+
 ## [0.10.0] — 2026-07-08
 **Options UI, Milestone A** — the tabbed options frame from
 `docs/OPTIONS_UI_SPEC.md`: **Settings** and **Buttons** tabs live, **Raid**

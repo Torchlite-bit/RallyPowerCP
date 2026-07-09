@@ -341,23 +341,45 @@ local function ResetFramePositions()
     DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Frame positions reset.")
 end
 
-local SETTINGS_INFO = {
-    { type = "header", label = "When to show" },
-    { type = "check", key = "showSolo",  label = "Show when solo",  default = true,
-      onChange = function() RallyPowerCP_ApplyVisibility() end },
-    { type = "check", key = "showParty", label = "Show in a party", default = true,
-      onChange = function() RallyPowerCP_ApplyVisibility() end },
-    { type = "check", key = "showRaid",  label = "Show in a raid",  default = true,
-      onChange = function() RallyPowerCP_ApplyVisibility() end },
-    { type = "check", key = "tooltips",  label = "Show tooltips",   default = true },
-    { type = "check", key = "testMode",  label = "Test mode",       default = false,
-      tip = "Same as /rpc test: every option is shown (unlearned ones marked *) and clicks simulate casts.",
-      set = function(v) RallyPowerCP_SetTestMode(v) end },
-    { type = "header", label = "Looks" },
-    { type = "slider", key = "uiScale", label = "UI scale",
-      min = 0.5, max = 1.5, step = 0.05, default = 1.0,
-      onChange = function() RallyPowerCP_ApplyUIScale() end },
-    { type = "select", key = "minimapSkin", label = "Minimap icon", default = "blue",
+--------------------------------------------------------------------------
+-- Legacy PallyPower bindings (classic options merged into this panel).
+-- NEVER fork state: checks drive the SAME XML checkbox + handler function
+-- the classic frame uses (the engine's uiDirty flag is file-local in
+-- PallyPower.lua, so its own handlers are the only sanctioned refresh
+-- path, and the classic frame's widgets stay in sync for /rpc legacy);
+-- sliders write PP_PerUser and call the engine's own redraw.
+--------------------------------------------------------------------------
+
+local function LegacyCheck(label, ppKey, chkName, handlerName, dflt, tip)
+    return { type = "check", label = label, tip = tip,
+        get = function()
+            if PP_PerUser and PP_PerUser[ppKey] ~= nil then return PP_PerUser[ppKey] end
+            return dflt
+        end,
+        set = function(v)
+            local chk = getglobal(chkName)
+            local handler = getglobal(handlerName)
+            if not chk or not handler then return end
+            chk:SetChecked(v and 1 or nil)
+            handler()
+        end }
+end
+
+local function LegacySlider(label, ppKey, lo, hi, step, dflt, apply)
+    return { type = "slider", label = label, min = lo, max = hi, step = step,
+        get = function()
+            if PP_PerUser and PP_PerUser[ppKey] ~= nil then return PP_PerUser[ppKey] end
+            return dflt
+        end,
+        set = function(v)
+            if not PP_PerUser then return end
+            PP_PerUser[ppKey] = v
+            if apply then apply() end
+        end }
+end
+
+local function MinimapSkinEntry()
+    return { type = "select", key = "minimapSkin", label = "Minimap icon", default = "blue",
       values = function()
           local out = {}
           for i = 1, table.getn(RallyPowerCP_MinimapSkins) do
@@ -367,11 +389,72 @@ local SETTINGS_INFO = {
           end
           return out
       end,
-      set = function(v) RallyPowerCP_ApplyMinimapSkin(v) end },
-    { type = "check", key = "locked", label = "Lock frame positions", default = false },
-    { type = "button", label = "Reset Frames", func = ResetFramePositions,
-      tip = "Move every RallyPowerCP frame back to its default position." },
-}
+      set = function(v) RallyPowerCP_ApplyMinimapSkin(v) end }
+end
+
+local function TestModeEntry()
+    return { type = "check", key = "testMode", label = "Test mode", default = false,
+      tip = "Same as /rpc test: every option is shown (unlearned ones marked *) and clicks simulate casts.",
+      set = function(v) RallyPowerCP_SetTestMode(v) end }
+end
+
+local function ShowMinimapButtonEntry()
+    return LegacyCheck("Show minimap button", "minimapbuttonshow",
+        "MinimapButtonOptionChk", "PallyPower_MinimapButtonOption", true)
+end
+
+-- The Settings tab is class-aware: non-Paladins get the strip/grid controls;
+-- Paladins get the merged frame-level engine settings instead (our show
+-- rules / uiScale / lock only touch the strip+grid frames, which Paladins
+-- don't run - the legacy engine has its own equivalents below).
+local function SettingsTabEntries()
+    local entries = {}
+    local _, cls = UnitClass("player")
+    if cls == "PALADIN" then
+        entries = {
+            { type = "header", label = "General" },
+            TestModeEntry(),
+            ShowMinimapButtonEntry(),
+            { type = "header", label = "Looks" },
+            MinimapSkinEntry(),
+            { type = "header", label = "PallyPower engine" },
+            LegacyCheck("Lock frames", "frameslocked",
+                "FramesLockedOptionChk", "PallyPower_FramesLockedOption", false),
+            LegacyCheck("Horizontal buff bar", "horizontal",
+                "HorizontalLayoutOptionChk", "PallyPower_HorizontalLayoutOption", false),
+            LegacyCheck("Hide Blizzard aura bar", "hideblizzaura",
+                "HideBlizzardFrameOptionChk", "PallyPower_HideBlizzardAuraFrameOption", false),
+            LegacySlider("Buff bar scale", "scalebar", 0.5, 1.5, 0.05, 1,
+                function() if PallyPower_UpdateUI then PallyPower_UpdateUI() end end),
+            LegacySlider("Grid scale", "scalemain", 0.5, 1.5, 0.05, 1,
+                function() if PallyPowerGrid_Update then PallyPowerGrid_Update(1) end end),
+            LegacySlider("Transparency", "transparency", 0, 1, 0.05, 0.5,
+                function() if PallyPower_UpdateUI then PallyPower_UpdateUI() end end),
+        }
+        return entries
+    end
+    entries = {
+        { type = "header", label = "When to show" },
+        { type = "check", key = "showSolo",  label = "Show when solo",  default = true,
+          onChange = function() RallyPowerCP_ApplyVisibility() end },
+        { type = "check", key = "showParty", label = "Show in a party", default = true,
+          onChange = function() RallyPowerCP_ApplyVisibility() end },
+        { type = "check", key = "showRaid",  label = "Show in a raid",  default = true,
+          onChange = function() RallyPowerCP_ApplyVisibility() end },
+        { type = "check", key = "tooltips",  label = "Show tooltips",   default = true },
+        TestModeEntry(),
+        { type = "header", label = "Looks" },
+        { type = "slider", key = "uiScale", label = "UI scale",
+          min = 0.5, max = 1.5, step = 0.05, default = 1.0,
+          onChange = function() RallyPowerCP_ApplyUIScale() end },
+        MinimapSkinEntry(),
+        ShowMinimapButtonEntry(),
+        { type = "check", key = "locked", label = "Lock frame positions", default = false },
+        { type = "button", label = "Reset Frames", func = ResetFramePositions,
+          tip = "Move every RallyPowerCP frame back to its default position." },
+    }
+    return entries
+end
 
 -- The Buttons tab: generated from the active class module. Grid classes get
 -- auto-checks from M.buffs/M.utility; strip classes declare M.optionsInfo;
@@ -380,10 +463,34 @@ local function ButtonsTabEntries()
     local entries = {}
     local _, cls = UnitClass("player")
     if cls == "PALADIN" then
-        table.insert(entries, { type = "note", height = 56, label =
-            "Paladin buttons are configured in the classic PallyPower options: "
-            .. "/pp, then Options. The legacy engine stays authoritative for the "
-            .. "blessing grid; aura/seal/RF extras arrive in a later milestone." })
+        entries = {
+            { type = "header", label = "Bar buttons" },
+            LegacyCheck("Aura button", "showaurabutton",
+                "AuraOptionChk", "PallyPower_AuraOption", true),
+            LegacyCheck("Seal button", "showsealbutton",
+                "SealOptionChk", "PallyPower_SealOption", true),
+            LegacyCheck("Righteous Fury button", "showrfbutton",
+                "RighteousFuryOptionChk", "PallyPower_RighteousFuryOption", true),
+            { type = "header", label = "Buffing & extras" },
+            { type = "check", label = "Smart buffs",
+              tip = "Skip players who already carry a suitable blessing.",
+              get = function() return PP_PerUser and PP_PerUser.smartbuffs end,
+              set = function(v) if PP_PerUser then PP_PerUser.smartbuffs = v and 1 or false end end },
+            { type = "check", label = "Use normal (non-Greater) blessings",
+              get = function() return PP_PerUser and PP_PerUser.regularblessings end,
+              set = function(v) if PP_PerUser then PP_PerUser.regularblessings = (v and true or false) end end },
+            LegacyCheck("Sound when a buff runs out", "playsoundwhen0",
+                "PlaySoundOptionChk", "PallyPower_PlaySoundOption", true),
+            LegacyCheck("HD icons", "usehdicons",
+                "UseHDIconsOptionChk", "PallyPower_UseHDIconsOption", false),
+            LegacyCheck("Color buff bar", "colorbuffbar",
+                "ColorBuffBarOptionChk", "PallyPower_ColorBuffBarOption", false),
+            LegacyCheck("UnitXP SP3 line-of-sight", "useunitxp_sp3",
+                "UseUnitXPSP3OptionChk", "PallyPower_UseUnitXPSP3Option", false),
+            LegacySlider("Scan frequency (s)", "scanfreq", 0.1, 2, 0.1, 1, nil),
+            { type = "note", height = 26, label =
+                "Blessing grid: /pp. Classic options frame: /rpc legacy." },
+        }
         return entries
     end
     local M = RallyPowerCP.active
@@ -401,11 +508,11 @@ local function ButtonsTabEntries()
                 label = nm, default = true,
                 onChange = function() RallyPowerCP_GridRefresh() end })
         end
-        if M.utility and table.getn(M.utility) > 0 then
-            table.insert(entries, { type = "check", key = "utilRow",
-                label = "Utility buttons (top row)", default = true,
-                onChange = function() RallyPowerCP_GridRefresh() end })
-        end
+    end
+    if M.utility and table.getn(M.utility) > 0 then
+        table.insert(entries, { type = "check", key = "utilRow",
+            label = "Utility buttons (top row)", default = true,
+            onChange = function() RallyPowerCP_GridRefresh() end })
     end
     if M.optionsInfo then
         for i = 1, table.getn(M.optionsInfo) do
@@ -455,7 +562,7 @@ local function ShowTab(i)
     local p = panels[i]
     if not p.built then
         p.built = true
-        if i == 1 then BuildControls(p, SETTINGS_INFO)
+        if i == 1 then BuildControls(p, SettingsTabEntries())
         elseif i == 2 then BuildControls(p, ButtonsTabEntries())
         else BuildControls(p, RAID_INFO) end
     end
