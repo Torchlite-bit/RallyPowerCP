@@ -326,13 +326,9 @@ end
 --------------------------------------------------------------------------
 
 local function ResetFramePositions()
-    -- Drop saved positions AND per-frame scale-grip overrides (so the global
-    -- UI-scale slider governs again).
     local kill = {}
     for k in pairs(RallyPowerCP_Settings) do
-        if string.find(k, "^stripPos_") or string.find(k, "^scale_") then
-            table.insert(kill, k)
-        end
+        if string.find(k, "^stripPos_") then table.insert(kill, k) end
     end
     for _, k in ipairs(kill) do RallyPowerCP_Settings[k] = nil end
     if RallyPowerCP.strips then
@@ -342,8 +338,7 @@ local function ResetFramePositions()
         end
     end
     RallyPowerCP_ResetBarPosition()
-    if RallyPowerCP_ApplyUIScale then RallyPowerCP_ApplyUIScale() end
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Frame positions and scale reset.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Frame positions reset.")
 end
 
 --------------------------------------------------------------------------
