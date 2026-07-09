@@ -287,6 +287,13 @@ local function BuildClassPresence()
         end
     end
     for k = table.getn(presentClasses), 1, -1 do presentClasses[k] = nil end
+    -- Test mode: preview the full layout solo by showing one row per class in
+    -- CLASS_ORDER, regardless of the real roster. Classes with real members
+    -- keep them (real pop-out entries); empty classes get synthetic entries.
+    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then
+        for ci = 1, table.getn(CLASS_ORDER) do presentClasses[ci] = CLASS_ORDER[ci] end
+        return
+    end
     local n = 0
     for ci = 1, table.getn(CLASS_ORDER) do
         local ct = CLASS_ORDER[ci]
@@ -1186,8 +1193,17 @@ local function HidePopout()
     popoutClass = nil; popoutRow = nil
 end
 
+-- Test mode: synthetic pop-out entries so an empty class still previews the
+-- four states solo. Names are placeholders keyed off the class token.
+local TEST_POP_STATES = { "have", "need", "nothere", "dead" }
+local popoutSynthetic = false       -- the current pop-out is showing fakes
+
 -- Click a player row: left = group on their subgroup, right = single on them.
 local function PopoutPlayerOnClick()
+    if this.synthetic then                         -- fake row: never cast
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would buff " .. (this.pname or "?"))
+        return
+    end
     local unit = this.unit
     if not unit or not UnitExists(unit) then return end
     if IsControlKeyDown() then                     -- CTRL+click: assign role (local)
@@ -1243,11 +1259,50 @@ function RefreshPopout()
     local units = classUnits[popoutClass] or {}
     local now = GetTime()
     local iconTex = b and b.icons and ("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
+
+    -- Synthetic preview: render the four states with placeholder names.
+    if popoutSynthetic then
+        local title = string.upper(string.sub(popoutClass, 1, 1)) .. string.lower(string.sub(popoutClass, 2))
+        for i = 1, table.getn(popoutRows) do
+            local pr = popoutRows[i]
+            local st = TEST_POP_STATES[i]
+            if st then
+                pr.synthetic = true; pr.unit = nil
+                pr.pname = "Test" .. title .. i
+                pr.name:SetText(pr.pname)
+                if iconTex then pr.icon:SetTexture(iconTex) end
+                pr.tank:SetAlpha(0)
+                pr.dead:SetAlpha(0)
+                pr.timer:SetText("")
+                if st == "have" then
+                    pr:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
+                    pr.icon:SetAlpha(1); pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                    pr.timer:SetText("9:59")
+                elseif st == "need" then
+                    pr:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
+                    pr.icon:SetAlpha(0.4); pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                elseif st == "nothere" then
+                    pr:SetBackdropColor(C_SPECIAL.r, C_SPECIAL.g, C_SPECIAL.b, C_SPECIAL.t)
+                    pr.icon:SetAlpha(0.4); pr.rng:SetTextColor(1, 0, 0); pr.rng:SetAlpha(1)
+                else -- dead
+                    pr:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
+                    pr.icon:SetAlpha(0.4); pr.rng:SetTextColor(0, 1, 0); pr.rng:SetAlpha(1)
+                    pr.dead:SetTextColor(1, 0, 0); pr.dead:SetAlpha(1)
+                end
+                pr:Show()
+            else
+                pr:Hide()
+            end
+        end
+        return
+    end
+
     for i = 1, table.getn(popoutRows) do
         local pr = popoutRows[i]
         local unit = units[i]
         if unit and b and UnitExists(unit) then
             pr.unit = unit
+            pr.synthetic = false
             local nm = UnitName(unit)
             pr.name:SetText(nm or "?")
             if iconTex then pr.icon:SetTexture(iconTex) end
@@ -1391,7 +1446,10 @@ local function ShowPopout(row)
     popoutRow = row
 
     local units = classUnits[popoutClass] or {}
-    local count = table.getn(units)
+    local realCount = table.getn(units)
+    -- In test mode, a class with no real members previews synthetic entries.
+    popoutSynthetic = (RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() and realCount == 0) or false
+    local count = popoutSynthetic and table.getn(TEST_POP_STATES) or realCount
     local y = 0
     for i = 1, count do
         local pr = GetPopoutRow(i)
@@ -1808,7 +1866,9 @@ function RallyPowerCP_SetTestMode(on)
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()
     elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
-        RebuildKnownSpells(); LayoutButtons(); auraDirty = true
+        -- ScanRoster re-derives presentClasses (all nine in test mode) so the
+        -- full grid appears/reverts at once, not on the next tick.
+        RebuildKnownSpells(); ScanRoster(); LayoutButtons(); auraDirty = true
     end
 end
 
