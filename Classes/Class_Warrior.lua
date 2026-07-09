@@ -99,3 +99,11 @@ M.optionsInfo = {
     { type = "check", key = "btn_shout", label = "Battle Shout button", default = true,
       onChange = function() RallyPowerCP.ReflowStrips() end },
 }
+
+-- Assignment model: Warrior debuff duties (no strip buttons yet - catalog only).
+if RallyPowerCP.Assign then
+    local D = RallyPowerCP.Assign.RegisterDuty
+    D{ key="SUNDER",      wid=7, class="WARRIOR", tab="debuff", spell="Sunder Armor",       target="none", multi=false, dur=30 }
+    D{ key="THUNDERCLAP", wid=8, class="WARRIOR", tab="debuff", spell="Thunder Clap",       target="none", multi=false, dur=30 }
+    D{ key="DEMOSHOUT",   wid=9, class="WARRIOR", tab="debuff", spell="Demoralizing Shout", target="none", multi=false, dur=30 }
+end

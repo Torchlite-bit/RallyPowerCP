@@ -224,3 +224,20 @@ for _, el in ipairs(ELEMENTS) do
         end,
     })
 end
+
+--------------------------------------------------------------------------
+-- Assignment model: register the totem catalog (sync + panel read this).
+-- Wids are positional over these fixed lists - append new totems at the END
+-- of an element, never reorder (wids must stay stable for the wire).
+--------------------------------------------------------------------------
+if RallyPowerCP.Assign then
+    local twid = 0
+    for _, el in ipairs(ELEMENTS) do
+        local list = {}
+        for _, t in ipairs(el.totems) do
+            twid = twid + 1
+            table.insert(list, { name = t.name, wid = twid, dur = t.dur })
+        end
+        RallyPowerCP.Assign.RegisterTotems(el.key, list)
+    end
+end

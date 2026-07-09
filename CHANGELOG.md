@@ -29,6 +29,24 @@ Author: **Subtilizer (Torchlite)**.
 Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
 classes look and behave the same way; the bespoke grid bar is gone.
 
+### Added (Assignment & Sync — step 1: the shared data model)
+Foundation only; nothing consumes it yet (sync = step 2, panel = step 3), so
+there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
+- **`Core/RallyPowerCP_Assign.lua`** — a caster-major store
+  (`RallyPowerCP_Assign`, new SavedVariablePerCharacter) covering the **totem**
+  and **duty** domains, with **blessings delegated to the untouched PallyPower
+  tables** (adapter accessors only; byte-compatible PLPWR interop preserved).
+  Mutators/readers (`SetTotem`/`SetDuty`/`GetDutyCasters`/`GetTotemCoverage`/…),
+  a `CanEdit` permission gate (self or lead/assist), roster pruning, a
+  `Subscribe` change event, and an ephemeral **`RallyPowerCP.AssignStatus`**
+  intent-vs-actually-up mirror (never saved). Stable append-only `wid`s and a
+  per-caster `seq` are reserved for the future `RPCX` wire format.
+- **Duty/totem catalogs** are declared by the class modules at load
+  (`RallyPowerCP.Assign.RegisterDuty` / `RegisterTotems`): Priest/Mage/Druid
+  raid buffs, Warrior/Rogue/Warlock/Mage/Hunter debuffs, Warlock/Priest/Druid
+  utility, and the Shaman totem lists — nothing class-specific lives in the
+  engine.
+
 ### Added (config options for the non-paladin classes)
 The options panel gained the applicable PallyPower-style settings for every
 non-paladin class, each wired to real behaviour:
