@@ -76,7 +76,17 @@ local ACTIVE_UTILITY             -- utility-spell list for PLAYER_CLASS (or nil)
 local KNOWN = {}                 -- set of spell names the player actually knows
 local NEEDCOUNT = {}             -- per-buff: how many roster members still need it
 local lastScan = 0
-local SCAN_INTERVAL = 1.0        -- seconds between roster rescans
+local SCAN_INTERVAL = 1.0        -- default seconds between roster rescans
+-- Scan-frequency slider (options): how often ScanRoster runs. The force idiom
+-- `lastScan = ScanInterval()` still triggers a scan on the next tick.
+local function ScanInterval() return RallyPowerCP_Settings.scanFreq or SCAN_INTERVAL end
+
+-- Line-of-sight gate: reuses the legacy engine's UnitXP SP3 check (shared
+-- PP_PerUser.useunitxp_sp3 setting). Returns true when the feature is off or
+-- UnitXP.dll isn't loaded, so targeting is unaffected unless the user opts in.
+local function InLoS(u)
+    return (not PallyPower_CheckTargetLoS) or PallyPower_CheckTargetLoS(u)
+end
 local lastCast = 0               -- throttle guard: GetTime() of the last cast
 local THROTTLE = 1.5             -- seconds a click is ignored after casting (= GCD)
 local FOUR_MIN = 240             -- right-click won't overwrite a buff with this much left
@@ -412,7 +422,7 @@ local function FindUnitToBuff(b, renew)
         local u = findRoster[idx]
         -- UnitIsVisible filters out members too far away to cast on, so a click
         -- never wastes itself on someone across the zone.
-        if UnitIsBuffable(u) and UnitIsVisible(u) then
+        if UnitIsBuffable(u) and UnitIsVisible(u) and InLoS(u) then
             local isPet = (string.find(u, "pet") ~= nil)
             if (not isPet or b.pet) then
                 if not UnitHasBuff(u, b) then
@@ -576,7 +586,7 @@ local function LowestHealthUnit()
     local best, bestPct = nil, 2
     for r = 1, count do
         local u = utilScratch[r]
-        if UnitIsBuffable(u) and UnitIsVisible(u) then
+        if UnitIsBuffable(u) and UnitIsVisible(u) and InLoS(u) then
             local mh = UnitHealthMax(u)
             if mh and mh > 0 then
                 local pct = UnitHealth(u) / mh
@@ -608,7 +618,7 @@ function RallyPowerCP_SmartBuff()
                 CastSpellByName(b.name)
                 RecordGroupExpiry("player", b, b.dur)
                 AnnounceBuff(b.name, "player", false)
-                auraDirty = true; lastScan = SCAN_INTERVAL
+                auraDirty = true; lastScan = ScanInterval()
                 return
             end
             local unit = FindUnitToBuff(b, false)
@@ -616,7 +626,7 @@ function RallyPowerCP_SmartBuff()
                 local spell = (b.name and KNOWN[b.name]) and b.name or b.group
                 CastBuffOn(spell, unit, b, (spell == b.name) and b.dur or b.gdur,
                            spell == b.group)
-                auraDirty = true; lastScan = SCAN_INTERVAL
+                auraDirty = true; lastScan = ScanInterval()
                 return
             end
         end
@@ -716,7 +726,7 @@ local function FindClassNeedy(ct, b, renew)
         local idx = start + step
         while idx > cnt do idx = idx - cnt end
         local u = units[idx]
-        if UnitIsBuffable(u) and UnitIsVisible(u) then
+        if UnitIsBuffable(u) and UnitIsVisible(u) and InLoS(u) then
             if not UnitHasBuff(u, b) then
                 classCursor[ct] = idx
                 return u
@@ -737,7 +747,7 @@ local function FindClassSmartTarget(ct, b)
     local lowU, lowRem
     for i = 1, table.getn(units) do
         local u = units[i]
-        if UnitIsBuffable(u) and UnitIsVisible(u) then
+        if UnitIsBuffable(u) and UnitIsVisible(u) and InLoS(u) then
             if not UnitHasBuff(u, b) then
                 return u
             else
@@ -770,7 +780,7 @@ local function ClassButtonOnClick(btn, mb)
             AnnounceBuff(b.name, "player", false)
             StartThrottle(btn)
         end
-        auraDirty = true; lastScan = SCAN_INTERVAL
+        auraDirty = true; lastScan = ScanInterval()
         return
     end
 
@@ -786,7 +796,7 @@ local function ClassButtonOnClick(btn, mb)
         end
         if b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(btn)
         elseif b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(btn) end
-        auraDirty = true; lastScan = SCAN_INTERVAL
+        auraDirty = true; lastScan = ScanInterval()
         return
     end
 
@@ -798,7 +808,7 @@ local function ClassButtonOnClick(btn, mb)
     end
     if b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(btn)
     elseif b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(btn) end
-    auraDirty = true; lastScan = SCAN_INTERVAL
+    auraDirty = true; lastScan = ScanInterval()
 end
 
 --=============================================================================
@@ -849,7 +859,7 @@ local function PopoutPlayerOnClick()
         elseif b.group and KNOWN[b.group] then
             CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
         end
-        auraDirty = true; lastScan = SCAN_INTERVAL
+        auraDirty = true; lastScan = ScanInterval()
         return
     end
 
@@ -858,8 +868,9 @@ local function PopoutPlayerOnClick()
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r group buffs are disabled in combat (right-click for a single buff).")
         return
     end
-    -- smart prevention: don't waste a group cast on someone already buffed
-    if UnitHasBuff(unit, b) then
+    -- Smart buffs (default on): don't waste a group cast on someone already
+    -- buffed. Turn the option off to allow re-casting on covered players.
+    if RallyPowerCP_Settings.smartBuffs ~= false and UnitHasBuff(unit, b) then
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. (UnitName(unit) or "?") .. " already has " .. (b.name or b.group) .. ".")
         return
     end
@@ -868,7 +879,7 @@ local function PopoutPlayerOnClick()
     elseif b.name and KNOWN[b.name] then
         CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
     end
-    auraDirty = true; lastScan = SCAN_INTERVAL
+    auraDirty = true; lastScan = ScanInterval()
 end
 
 -- Refresh each visible player row with the official popup states:
@@ -1089,7 +1100,7 @@ local function ClassButtonDef(ct)
                 b:SetState("need")                              -- red: someone needs it
                 b:SetTimer("|cffffffff" .. need .. "|r")
             elseif mr and mr <= WARN_TIME then
-                b:SetBackdropColor(1, 1, 0.5, 0.5)              -- yellow: covered but expiring
+                b:SetBackdropColor(1, 1, 0.5, RallyPowerCP_Settings.stripAlpha or 0.5)   -- yellow: covered but expiring
                 b.icon:SetAlpha(1)
                 local m = math.floor(mr / 60)
                 b:SetTimer(string.format("%d:%02d", m, math.floor(mr - m * 60)))
@@ -1180,7 +1191,10 @@ function UpdateDisplays()
                 if mr <= WARN_TIME then
                     if not warned[i] then
                         warned[i] = true
-                        PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                        -- "Sound when a buff runs out" toggle (default on).
+                        if RallyPowerCP_Settings.expirySound ~= false then
+                            PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                        end
                         local bb = ACTIVE_BUFFS[i]
                         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
                             .. (bb.name or bb.group) .. " is about to expire!")
@@ -1365,7 +1379,7 @@ f:SetScript("OnUpdate", function()
     local dt = arg1 or 0
     lastScan = lastScan + dt
     sinceFullScan = sinceFullScan + dt
-    if lastScan >= SCAN_INTERVAL then
+    if lastScan >= ScanInterval() then
         lastScan = 0
         -- Full roster scans only when something changed (or as a slow safety
         -- net); otherwise just the zero-API-call countdown tick.
