@@ -26,3 +26,11 @@ end
 function M:Toggle()
     RallyPowerCP.BuildClassBuffs():Toggle()
 end
+
+-- Assignment model: Druid duties. Wids are stable.
+if RallyPowerCP.Assign then
+    local D = RallyPowerCP.Assign.RegisterDuty
+    D{ key="MARK",      wid=5,  class="DRUID", tab="raidbuff", spell="Mark of the Wild", target="none",   multi=false, dur=30*60 }
+    D{ key="THORNS",    wid=6,  class="DRUID", tab="raidbuff", spell="Thorns",           target="none",   multi=false, dur=10*60 }
+    D{ key="INNERVATE", wid=20, class="DRUID", tab="utility",  spell="Innervate",        target="player", multi=true,  dur=0 }
+end

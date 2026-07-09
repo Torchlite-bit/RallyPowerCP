@@ -6,7 +6,7 @@
 ## Notes-deDE: Ein Paladin-Segen-Helfer
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
-## SavedVariablesPerCharacter: PallyPower_Assignments, PallyPower_AuraAssignments, PallyPower_SealAssignments, PallyPower_NormalAssignments, PP_PerUser, PP_Presets, RallyPowerCP_Settings, RallyPowerCP_Roles
+## SavedVariablesPerCharacter: PallyPower_Assignments, PallyPower_AuraAssignments, PallyPower_SealAssignments, PallyPower_NormalAssignments, PP_PerUser, PP_Presets, RallyPowerCP_Settings, RallyPowerCP_Roles, RallyPowerCP_Assign
 
 Locale\localization-enUS.lua
 Locale\localization-deDE.lua
@@ -20,6 +20,7 @@ PallyPower\MinimapButton.xml
 
 Core\RallyPowerCP_Core.lua
 Core\RallyPowerCP_Strip.lua
+Core\RallyPowerCP_Assign.lua
 Classes\Class_Priest.lua
 Classes\Class_Mage.lua
 Classes\Class_Druid.lua

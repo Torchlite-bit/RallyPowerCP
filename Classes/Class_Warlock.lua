@@ -314,3 +314,11 @@ M.optionsInfo = {
           return nil
       end },
 }
+
+-- Assignment model: Warlock duties (curses + soulstone). Wids are stable.
+if RallyPowerCP.Assign then
+    local D = RallyPowerCP.Assign.RegisterDuty
+    D{ key="CURSE_ELEMENTS", wid=11, class="WARLOCK", tab="debuff",  spell="Curse of the Elements",   target="none",   multi=false, dur=5*60 }
+    D{ key="CURSE_SHADOW",   wid=12, class="WARLOCK", tab="debuff",  spell="Curse of Shadow",         target="none",   multi=false, dur=5*60 }
+    D{ key="SOULSTONE",      wid=17, class="WARLOCK", tab="utility", spell="Soulstone Resurrection",  target="player", multi=true,  dur=0 }
+end

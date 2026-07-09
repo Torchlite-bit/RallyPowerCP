@@ -1,0 +1,363 @@
+--=============================================================================
+-- RallyPowerCP_Assign.lua  -  the shared assignment data model
+-- (docs\DESIGN_ASSIGNMENTS.md - step 1 of the Assignment & Sync milestone)
+--
+-- One caster-major store covering the totem and duty domains, with the
+-- blessing domain delegated to the UNTOUCHED PallyPower tables (locked
+-- interop decision: no blessing data is ever copied out of the legacy
+-- engine). The sync protocol (step 2) serializes caster blocks from here;
+-- the assignment panel (step 3) renders them; the strips already read their
+-- own row ("effective selection" = my assignment first, my local preference
+-- second).
+--
+--   RallyPowerCP_Assign = {                 -- SavedVariablePerCharacter
+--     v = 1,
+--     casters = {
+--       ["Stormtide"] = {
+--         class = "SHAMAN",                 -- English token, set on write
+--         seq   = 12,                       -- bumped on every local edit
+--                                           -- (reserved: sync LWW ordering)
+--         totem = { Earth = "Strength of Earth Totem", party = 2 },
+--         duty  = { SUNDER = true, SOULSTONE = "Seraphine", PWSHIELD = "@MT" },
+--       },
+--     },
+--   }
+--
+-- Duty values are scalars: true (untargeted - kill-target debuffs, raid
+-- buffs), "PlayerName" (Soulstone, Innervate), or "@ROLE" ("@MT"/"@MA"/...,
+-- resolved at cast time through the role tables; player names can never
+-- contain '@'). What a duty key MEANS lives in the catalog the class modules
+-- register at load (RegisterDuty); totem options come from Class_Shaman
+-- (RegisterTotems). Catalog `wid`s are the stable numeric wire ids reserved
+-- for the future RPCX protocol: append-only, never renumbered, never reused.
+--
+-- Runtime status ("actually up", vs "assigned") is the separate, NEVER-saved
+-- mirror RallyPowerCP.AssignStatus with the same keying; the strip modules
+-- write their own cast-derived timers through it today, and sync (step 2)
+-- fills other casters' entries from broadcast cast times.
+--=============================================================================
+
+RallyPowerCP_Assign = RallyPowerCP_Assign or {}
+if not RallyPowerCP_Assign.v then RallyPowerCP_Assign.v = 1 end
+RallyPowerCP_Assign.casters = RallyPowerCP_Assign.casters or {}
+
+RallyPowerCP.AssignStatus = {}   -- [caster][domain][slot] = { expires=, ... }
+
+local A = {}
+RallyPowerCP.Assign = A
+
+--------------------------------------------------------------------------
+-- catalogs (registered by the class modules at load; pure static data)
+--------------------------------------------------------------------------
+
+A.duties = {}          -- [key] = { key, wid, class, tab, spell, target, multi, dur }
+A.dutyOrder = {}       -- keys in registration order (the panel iterates this)
+A.totems = {}          -- [element] = { { name=, wid=, dur= }, ... }
+A.elements = {}        -- ordered element keys
+
+function A.RegisterDuty(def)
+    if not def or not def.key or A.duties[def.key] then return end
+    A.duties[def.key] = def
+    table.insert(A.dutyOrder, def.key)
+end
+
+function A.RegisterTotems(element, list)
+    if A.totems[element] then return end
+    A.totems[element] = list
+    table.insert(A.elements, element)
+end
+
+--------------------------------------------------------------------------
+-- change notification (the panel subscribes; strips poll their own tick)
+--------------------------------------------------------------------------
+
+local listeners = {}
+function A.Subscribe(fn) table.insert(listeners, fn) end
+
+local function Notify(domain, caster)
+    for _, fn in ipairs(listeners) do
+        local ok, err = pcall(fn, domain, caster)
+        if not ok then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+                .. tostring(err) .. " |cffaaaaaa(assignment listener)|r")
+        end
+    end
+end
+
+--------------------------------------------------------------------------
+-- store internals
+--------------------------------------------------------------------------
+
+-- English class token for a group member (nil when not resolvable).
+local function ClassOf(name)
+    if name == UnitName("player") then
+        local _, cls = UnitClass("player")
+        return cls
+    end
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do
+            if UnitName("raid" .. i) == name then
+                local _, cls = UnitClass("raid" .. i)
+                return cls
+            end
+        end
+        return nil
+    end
+    for i = 1, GetNumPartyMembers() do
+        if UnitName("party" .. i) == name then
+            local _, cls = UnitClass("party" .. i)
+            return cls
+        end
+    end
+    return nil
+end
+
+local function Block(name, create)
+    local c = RallyPowerCP_Assign.casters[name]
+    if not c and create then
+        c = { seq = 0 }
+        RallyPowerCP_Assign.casters[name] = c
+    end
+    return c
+end
+
+local function Touch(c, name)
+    c.seq = (c.seq or 0) + 1
+    c.class = c.class or ClassOf(name)
+end
+
+--------------------------------------------------------------------------
+-- permissions: self, or lead/assist. This is the LOCAL edit rule (strip
+-- self-assign and, later, the panel); acceptance of remote writes - and the
+-- Free Assignment flag - is the sync layer's job (step 2), exactly as in
+-- PallyPower's ASSIGN handling.
+--------------------------------------------------------------------------
+
+function A.CanEdit(editor, caster)
+    if editor == caster then return true end
+    if editor == UnitName("player") then
+        if GetNumRaidMembers() > 0 then
+            return (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
+        end
+        if GetNumPartyMembers() > 0 then
+            return IsPartyLeader() == 1
+        end
+    end
+    return false
+end
+
+local function Editable(caster)
+    return A.CanEdit(UnitName("player"), caster)
+end
+
+--------------------------------------------------------------------------
+-- totem domain: shaman x element -> totem spell name, plus a covered party
+--------------------------------------------------------------------------
+
+function A.SetTotem(caster, element, totemName)
+    if not Editable(caster) then return false end
+    local c = Block(caster, true)
+    c.totem = c.totem or {}
+    c.totem[element] = totemName
+    Touch(c, caster)
+    Notify("totem", caster)
+    return true
+end
+
+function A.GetTotem(caster, element)
+    local c = Block(caster)
+    return c and c.totem and c.totem[element]
+end
+
+-- party: 1-8 = the group this shaman covers; nil = their own subgroup
+function A.SetTotemParty(caster, party)
+    if not Editable(caster) then return false end
+    local c = Block(caster, true)
+    c.totem = c.totem or {}
+    c.totem.party = party
+    Touch(c, caster)
+    Notify("totem", caster)
+    return true
+end
+
+function A.GetTotemParty(caster)
+    local c = Block(caster)
+    return c and c.totem and c.totem.party
+end
+
+--------------------------------------------------------------------------
+-- duty domain: dutyKey -> true | "PlayerName" | "@ROLE"
+--------------------------------------------------------------------------
+
+function A.SetDuty(caster, dutyKey, value)
+    local def = A.duties[dutyKey]
+    if not def then return false end
+    if not Editable(caster) then return false end
+    if value ~= nil and def.target == "none" then value = true end
+    local c = Block(caster, true)
+    c.duty = c.duty or {}
+    c.duty[dutyKey] = value
+    Touch(c, caster)
+    Notify("duty", caster)
+    return true
+end
+
+function A.ClearDuty(caster, dutyKey)
+    return A.SetDuty(caster, dutyKey, nil)
+end
+
+function A.GetDuty(caster, dutyKey)
+    local c = Block(caster)
+    return c and c.duty and c.duty[dutyKey]
+end
+
+-- Whole caster block (the sync unit; treat as read-only outside this file).
+function A.GetCaster(name)
+    return Block(name)
+end
+
+--------------------------------------------------------------------------
+-- derived views (rebuilt on demand - raid-size loops are trivial next to
+-- the 1-second roster scan; never stored, never a second source of truth)
+--------------------------------------------------------------------------
+
+-- duty-major view: who holds a duty -> array of { caster =, target = }
+function A.GetDutyCasters(dutyKey)
+    local out = {}
+    for name, c in pairs(RallyPowerCP_Assign.casters) do
+        local v = c.duty and c.duty[dutyKey]
+        if v then table.insert(out, { caster = name, target = v }) end
+    end
+    return out
+end
+
+-- Which subgroup a member is in (raid 1-8; party/solo counts as group 1).
+local function SubgroupOf(name)
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do
+            local rname, _, subgroup = GetRaidRosterInfo(i)
+            if rname == name then return subgroup end
+        end
+    end
+    return 1
+end
+
+-- [party][element] = array of { caster =, totem = }; an explicit party
+-- assignment wins, otherwise the shaman covers their own subgroup.
+function A.GetTotemCoverage()
+    local cov = {}
+    for name, c in pairs(RallyPowerCP_Assign.casters) do
+        if c.totem then
+            local party = c.totem.party or SubgroupOf(name)
+            for i = 1, table.getn(A.elements) do
+                local el = A.elements[i]
+                local tn = c.totem[el]
+                if tn then
+                    cov[party] = cov[party] or {}
+                    cov[party][el] = cov[party][el] or {}
+                    table.insert(cov[party][el], { caster = name, totem = tn })
+                end
+            end
+        end
+    end
+    return cov
+end
+
+--------------------------------------------------------------------------
+-- roster pruning (mirrors PallyPower: leavers drop out of the plan; your
+-- own block always survives, so a leader's plan persists across relogs)
+--------------------------------------------------------------------------
+
+function A.PruneToRoster()
+    local present = {}
+    present[UnitName("player")] = true
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do
+            local rname = GetRaidRosterInfo(i)
+            if rname then present[rname] = true end
+        end
+    else
+        for i = 1, GetNumPartyMembers() do
+            local pn = UnitName("party" .. i)
+            if pn then present[pn] = true end
+        end
+    end
+    local kill = {}
+    for name in pairs(RallyPowerCP_Assign.casters) do
+        if not present[name] then table.insert(kill, name) end
+    end
+    for _, name in ipairs(kill) do
+        RallyPowerCP_Assign.casters[name] = nil
+        RallyPowerCP.AssignStatus[name] = nil
+    end
+    if table.getn(kill) > 0 then Notify("prune", nil) end
+end
+
+--------------------------------------------------------------------------
+-- blessing domain: ADAPTER over the untouched PallyPower engine. Reads and
+-- writes go straight to the legacy tables and out over the byte-identical
+-- PLPWR messages via the engine's own send path.
+--------------------------------------------------------------------------
+
+function A.GetBlessing(pally, classID)
+    local t = PallyPower_Assignments and PallyPower_Assignments[pally]
+    local v = t and t[classID]
+    if v == nil then return -1 end
+    return v
+end
+
+function A.SetBlessing(pally, classID, bid)
+    if not PallyPower_Assignments then return false end
+    if not Editable(pally) then return false end
+    PallyPower_Assignments[pally] = PallyPower_Assignments[pally] or {}
+    PallyPower_Assignments[pally][classID] = bid
+    if PallyPower_SendMessage then
+        PallyPower_SendMessage("ASSIGN " .. pally .. " " .. classID .. " " .. bid)
+    end
+    Notify("blessings", pally)
+    return true
+end
+
+function A.GetNormalBlessing(pally, classID, tname)
+    if GetNormalBlessings then
+        return GetNormalBlessings(pally, classID, tname)
+    end
+    return -1
+end
+
+function A.SetNormalBlessing(pally, classID, tname, bid)
+    if not SetNormalBlessings then return false end
+    if not Editable(pally) then return false end
+    SetNormalBlessings(pally, classID, tname, bid)
+    if PallyPower_SendMessage then
+        PallyPower_SendMessage("NASSIGN " .. pally .. " " .. classID .. " " .. tname .. " " .. bid)
+    end
+    Notify("blessings", pally)
+    return true
+end
+
+--------------------------------------------------------------------------
+-- runtime status mirror (assigned vs actually-up; GetTime-based, never
+-- saved). info tables carry { expires = <GetTime deadline>, name=/target= }.
+--------------------------------------------------------------------------
+
+function A.SetStatus(caster, domain, slot, info)
+    local S = RallyPowerCP.AssignStatus
+    if info == nil then
+        local c = S[caster]
+        if c and c[domain] then c[domain][slot] = nil end
+        return
+    end
+    S[caster] = S[caster] or {}
+    S[caster][domain] = S[caster][domain] or {}
+    S[caster][domain][slot] = info
+end
+
+function A.GetStatus(caster, domain, slot)
+    local c = RallyPowerCP.AssignStatus[caster]
+    local d = c and c[domain]
+    return d and d[slot]
+end

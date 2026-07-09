@@ -213,3 +213,9 @@ M.optionsInfo = {
     PoisonSelectEntry("mh", "Main hand"),
     PoisonSelectEntry("oh", "Off hand"),
 }
+
+-- Assignment model: Rogue debuff duty. Wid is stable.
+if RallyPowerCP.Assign then
+    RallyPowerCP.Assign.RegisterDuty{ key="EXPOSE", wid=10, class="ROGUE", tab="debuff",
+        spell="Expose Armor", target="none", multi=false, dur=30 }
+end
