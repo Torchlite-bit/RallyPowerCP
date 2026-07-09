@@ -47,6 +47,31 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Added (Assignment & Sync — step 1b: strips are views of my own row)
+The first live consumer of the data model (design §9). Solo behaviour is
+unchanged; the model simply follows your picks — and when the sync milestone
+lands, a leader's assignment will take over the same buttons automatically.
+- **Effective selection = assignment first, local preference second, first
+  known last.** The Shaman totem buttons, Hunter sting button and Warlock
+  curse button now read your own row in `RallyPowerCP_Assign` before the
+  `shamanSel`/`hunterSting`/`lockCurse` preferences (which remain the
+  solo/offline fallback — no migration). An assignment naming a spell you
+  don't know falls through gracefully.
+- **Wheeling (or picking in the options dropdown) self-assigns**: it writes
+  the local preference AND your own caster block in the shared model —
+  PallyPower free-assign style, editing your own row. Stings and curses hold
+  exactly one duty key at a time (picking one clears the others).
+- **Warlock curse catalog completed**: `CURSE_WEAKNESS` / `RECKLESSNESS` /
+  `TONGUES` / `AGONY` / `DOOM` registered with append-only wids 21–25, so
+  every wheel option is representable as a duty.
+- Out of scope by design: Rogue poisons (weapon buffs, not duties), the
+  Expose/Battle Shout buttons (no cycle to assign), and the Priest/Mage/Druid
+  per-class buff mapping (blessing-shaped, not a duty; the raid-buff duties
+  cover "who maintains it" instead).
+- **Solo test:** `/run RallyPowerCP.Assign.SetTotem(UnitName("player"),
+  "Earth", "Tremor Totem")` — the Earth button switches to Tremor on the next
+  tick; wheel it and `/run` `GetTotem` to see the assignment follow.
+
 ### Added (config options for the non-paladin classes)
 The options panel gained the applicable PallyPower-style settings for every
 non-paladin class, each wired to real behaviour:
