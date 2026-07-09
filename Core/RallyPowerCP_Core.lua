@@ -11,14 +11,17 @@
 --
 -- WHAT THE ENGINE DOES
 --   * PALADIN  -> uses the original PallyPower bar/grid, now enhanced with the
---                 hover player pop-out (RallyPowerCP_Popout.lua). No separate bar.
---   * Any class with a registered module -> a movable, PallyPower-styled bar:
---       - one button per group buff; red+count = members missing it, faded =
---         covered; a countdown timer and a Have/Need/Not Here/Dead tooltip.
---       - left-click buffs/renews the next member; right-click casts the group
---         version; scroll the wheel to switch which buff a button tracks.
---       - optional top-row utility buttons (e.g. Priest PW: Shield / Fear Ward).
---       - an expiry "ding", a Smart Buff key binding, and minimap icon skins.
+--                 hover player pop-out (RallyPowerCP_Popout.lua). No separate UI.
+--   * Priest/Mage/Druid -> the class-buff strip (RallyPowerCP.BuildClassBuffs):
+--       one strip button per raid class showing that class's assigned buff;
+--       red+count = members missing it, green+timer = covered; scroll a button
+--       to switch that class's buff, left-click casts the group version,
+--       right-click tops off the next member, hover opens the player pop-out.
+--       Priest also appends its utility buttons (PW: Shield / Fear Ward).
+--       Everything (frame, drag, scale grip, position) comes from the strip
+--       engine, so these read identically to Shaman/Hunter/Warlock/Rogue.
+--   * The engine also provides an expiry "ding", a Smart Buff key binding, and
+--     the shared minimap icon skins.
 --
 -- HOW BUFFS ARE DETECTED
 --   Turtle 1.18.1 runs SuperWoW, which makes UnitBuff() *also* return the aura's
@@ -74,19 +77,14 @@ local KNOWN = {}                 -- set of spell names the player actually knows
 local NEEDCOUNT = {}             -- per-buff: how many roster members still need it
 local lastScan = 0
 local SCAN_INTERVAL = 1.0        -- seconds between roster rescans
-local bar                        -- the bar frame (created lazily)
-local buttons = {}               -- bar buttons, one per active buff
-local utilButtons = {}           -- top-row utility buttons (e.g. PW:Shield)
-local shownIndex                 -- which buff the single class button currently shows
 local lastCast = 0               -- throttle guard: GetTime() of the last cast
 local THROTTLE = 1.5             -- seconds a click is ignored after casting (= GCD)
 local FOUR_MIN = 240             -- right-click won't overwrite a buff with this much left
-local smartRoster = {}           -- scratch for the smart-auto-buff scan
 local inCombat = false           -- tracked via PLAYER_REGEN_DISABLED/ENABLED (1.12-safe)
 
--- Class-grouped grid state (Option A). The bar shows one row per class present
--- in the group; each row tracks the globally-selected buff (scroll to change it)
--- and breaks coverage down by class.
+-- Class-grouped state: the class-buff strip shows one button per class present
+-- in the group; each button tracks its own selected buff (scroll to change it)
+-- and coverage is broken down by class.
 local CLASS_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
 local CLASS_SET = {}
 for _, c in pairs(CLASS_ORDER) do CLASS_SET[c] = true end
@@ -95,13 +93,13 @@ local presentClasses = {}        -- ordered list of class tokens with >=1 member
 local rowNeed       = {}         -- [classToken][buffIndex] = members of that class missing it
 local rowDeadline   = {}         -- [classToken][buffIndex] = earliest absolute expiry for that class
 local classCursor   = {}         -- [classToken] = round-robin index for right-click cycling
-local classRows     = {}         -- [classToken] = the row Button frame
 local roster        = {}         -- flat unit list, reused by presence + scan
 local lastPresentSig             -- signature of presentClasses, to detect changes
+local classStrip                 -- the class-buff strip (Priest/Mage/Druid; built lazily)
 local popout                     -- the hover pop-out side panel (created lazily)
 local popoutRows = {}            -- pooled per-player row buttons inside the panel
 local popoutClass                -- class token the pop-out is currently showing
-local popoutRow                  -- the class row the pop-out is anchored to
+local popoutRow                  -- the class button the pop-out is anchored to
 
 -- Timer tracking (PallyPower-style): we record an expiry time whenever WE cast
 -- a buff (keyed by the recipient's character name), and we read exact times for
@@ -331,47 +329,24 @@ local function BuffIsUsable(b)
 end
 
 --=============================================================================
--- THE BAR  (created in Lua, styled to match PallyPower's dark panel)
+-- SHARED LOOK  (the class-buff UI is a strip: Core\RallyPowerCP_Strip.lua
+-- builds the frame and buttons; only the pop-out geometry lives here)
 --=============================================================================
-local BTN_SIZE   = 32
-local PAD        = 6
-local ROW_H      = BTN_SIZE + 4
-local TIMER_W    = 44                      -- room for "59:59" beside the icon
-local BAR_W      = PAD + BTN_SIZE + 4 + TIMER_W + PAD
-local UTIL_SIZE  = 28
-local UTIL_GAP   = 4
-local UTIL_ROW_H = UTIL_SIZE + 6
--- Single scrollable class row, sized to EXACTLY match the paladin template
--- (100x34, 26px icons, Smooth skin + Blizzard Tooltip border - locked).
-local ROW_W      = 100
-local ROW_HEIGHT = 34
-local ROW_ICON   = 26
-local ROW_GAP    = 2
+-- Hover pop-out: 100x34 player rows replicating PallyPowerPopupTemplate,
+-- stacked flush and floating bare, expanding to the LEFT of the class buttons
+-- (mirror of Core\RallyPowerCP_Popout.lua, the Paladin reference).
+local POP_ROW_W = 100
+local POP_ROW_H = 34
 local ROW_BACKDROP = {
     bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
 }
-
--- Hover pop-out: 100x34 player rows replicating PallyPowerPopupTemplate,
--- stacked flush and floating bare, expanding to the LEFT of the class rows
--- (mirror of Core\RallyPowerCP_Popout.lua, the Paladin reference).
-local POP_ROW_W = 100
-local POP_ROW_H = 34
 -- official presets from PallyPowerValues.lua
 local C_GOOD    = { r = 0, g = 0.7, b = 0, t = 0.5 }
 local C_NEEDALL = { r = 1, g = 0,   b = 0, t = 0.5 }
 local C_SPECIAL = { r = 0, g = 0,   b = 1, t = 0.5 }
-
-local function SavePosition()
-    if not bar then return end
-    local point, _, relPoint, x, y = bar:GetPoint()
-    RallyPowerCP_Settings.barPoint   = point
-    RallyPowerCP_Settings.barRelPoint = relPoint
-    RallyPowerCP_Settings.barX = x
-    RallyPowerCP_Settings.barY = y
-end
 
 -- Exact remaining time of buff b on the PLAYER (real data via the 1.12 API).
 local function PlayerBuffTimeLeft(b)
@@ -612,28 +587,6 @@ local function LowestHealthUnit()
     return best
 end
 
--- Categorize the whole group for buff b into the 4 PallyPower tooltip lists.
-local tipScratch = {}
-local function BuildBuffStatus(b, have, need, range, dead)
-    local count = BuildRoster(tipScratch, b.pet and true or false)
-    for r = 1, count do
-        local u = tipScratch[r]
-        if UnitExists(u) and UnitIsConnected(u) then
-            local nm = UnitName(u) or "?"
-            if not UnitIsVisible(u) then
-                table.insert(range, nm)                 -- Not Here (out of range)
-            elseif UnitIsDeadOrGhost(u) then
-                if UnitHasBuff(u, b) then table.insert(have, nm)
-                else table.insert(dead, nm) end
-            elseif UnitHasBuff(u, b) then
-                table.insert(have, nm)
-            else
-                table.insert(need, nm)
-            end
-        end
-    end
-end
-
 -- Reliable single-target cast with no timer tracking (utility spells).
 local function CastSpellOnUnit(spell, unit)
     if RallyPowerCP_Settings.testMode then
@@ -670,34 +623,6 @@ function RallyPowerCP_SmartBuff()
     end
 end
 
--- Smart auto-buff target (right-click): the single most-needy member of the
--- raid for buff b. A member MISSING the buff is top priority; otherwise the one
--- with the least time left, but only if under the 4-minute reagent-saving floor.
--- Members we have no timer for (someone else buffed them) count as covered,
--- since the 1.12 client can't tell us how long their buff has left.
-local function FindSmartBuffTarget(b)
-    local count = BuildRoster(smartRoster, b.pet and true or false)
-    local lowU, lowRem
-    for r = 1, count do
-        local u = smartRoster[r]
-        if UnitIsBuffable(u) and UnitIsVisible(u) then
-            if not UnitHasBuff(u, b) then
-                return u                      -- missing it: cast now
-            else
-                local nm = UnitName(u)
-                local dl = nm and expiry[nm] and expiry[nm][b.name or b.group]
-                if dl then
-                    local rem = dl - GetTime()
-                    if rem < FOUR_MIN and (not lowRem or rem < lowRem) then
-                        lowRem = rem; lowU = u
-                    end
-                end
-            end
-        end
-    end
-    return lowU
-end
-
 -- Throttle guard: record the cast time and spin the button's cooldown swirl so
 -- it's visually obvious you can't usefully click again until the GCD is up.
 local function StartThrottle(btn)
@@ -705,69 +630,7 @@ local function StartThrottle(btn)
     if btn and btn.dim then btn.dim:Show() end
 end
 
-local function ButtonOnClick()
-    -- arg1 holds the mouse button on the 1.12 client
-    local idx = this.buffIndex
-    local b = ACTIVE_BUFFS[idx]
-    if not b then return end
-
-    -- Throttle guard: ignore a click that lands within the GCD of the last cast,
-    -- so a panicked double-click can't burn a second set of reagents.
-    if GetTime() - lastCast < THROTTLE then return end
-
-    -- Self-cast shouts/auras (e.g. Battle Shout): one cast refreshes nearby party.
-    if b.selfcast then
-        if KNOWN[b.name] then
-            CastSpellByName(b.name)
-            RecordGroupExpiry("player", b, b.dur)
-            AnnounceBuff(b.name, "player", false)
-            StartThrottle(this)
-        else
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r You haven't learned " .. b.name .. ".")
-        end
-        auraDirty = true; lastScan = SCAN_INTERVAL
-        return
-    end
-
-    if arg1 == "RightButton" then
-        -- Smart auto-buff: top off the single most-needy member with the normal
-        -- (single-target) version. Disabled in combat; respects the 4-min floor.
-        if inCombat then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r auto-buff is disabled in combat.")
-            return
-        end
-        local unit = FindSmartBuffTarget(b)
-        if not unit then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
-                .. (b.name or b.group) .. ": everyone in range is covered (4+ min left).")
-            return
-        end
-        if b.name and KNOWN[b.name] then
-            CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
-        elseif b.group and KNOWN[b.group] then
-            CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
-        end
-        auraDirty = true; lastScan = SCAN_INTERVAL
-        return
-    end
-
-    -- Left-click: cast the GROUP/raid-wide version, covering a whole subgroup at
-    -- once (renew-capable: tops off the next subgroup once everyone is covered).
-    local unit = FindUnitToBuff(b, true)
-    if not unit then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
-            .. (b.name or b.group) .. ": no group members in range.")
-        return
-    end
-    if b.group and KNOWN[b.group] then
-        CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
-    elseif b.name and KNOWN[b.name] then
-        CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
-    end
-    auraDirty = true; lastScan = SCAN_INTERVAL
-end
-
--- Click handler for a top-row utility button (PW: Shield, Fear Ward, ...).
+-- Click handler for a utility button (PW: Shield, Fear Ward, ...).
 local function UtilityOnClick()
     local u = ACTIVE_UTILITY and ACTIVE_UTILITY[this.utilIndex]
     if not u then return end
@@ -792,174 +655,12 @@ local function UtilityOnClick()
     end
 end
 
-local function CreateBar()
-    if bar then return bar end
+-- Forward declarations: the pop-out refresher and the class-strip refresher
+-- are defined further down but referenced by the wheel/scan closures above.
+local RefreshClassStrip
+local RefreshPopout
 
-    bar = CreateFrame("Frame", "RallyPowerCP_Bar", UIParent)
-    bar:SetWidth(BAR_W)
-    bar:SetHeight(ROW_H + 18)
-    bar:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    bar:SetBackdropColor(0, 0, 0, 0.7)
-    bar:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-    bar:SetScale(RallyPowerCP_Settings.uiScale or 1)
-    bar:SetMovable(true)
-    bar:EnableMouse(true)
-    bar:RegisterForDrag("LeftButton")
-    bar:SetScript("OnDragStart", function()
-        if RallyPowerCP_Settings.locked then return end
-        bar:StartMoving()
-    end)
-    bar:SetScript("OnDragStop", function() bar:StopMovingOrSizing(); SavePosition() end)
-
-    -- Restore saved position, else default to center-right.
-    if RallyPowerCP_Settings.barPoint then
-        bar:SetPoint(RallyPowerCP_Settings.barPoint, UIParent,
-                     RallyPowerCP_Settings.barRelPoint,
-                     RallyPowerCP_Settings.barX, RallyPowerCP_Settings.barY)
-    else
-        bar:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
-    end
-
-    -- Title strip
-    local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("TOP", bar, "TOP", 0, -4)
-    local cname = PLAYER_CLASS and (string.sub(PLAYER_CLASS,1,1)
-                  .. string.lower(string.sub(PLAYER_CLASS,2))) or "Buffs"
-    title:SetText(cname)
-    bar.title = title
-
-    return bar
-end
-
--- Build/refresh the top-row utility buttons. Returns the row height used.
--- Forward declaration: scroll/click closures below reach the display refresher,
--- whose full definition lives after the layout functions.
-local UpdateDisplays
-local RefreshPopout              -- forward decl (defined in the pop-out section)
-
--- Build the Have / Need / Not Here / Dead tooltip for whatever buff a button is
--- currently set to. Re-callable so a scroll refreshes the open tooltip in place.
-local function ShowBuffTooltip(btn)
-    if RallyPowerCP_Settings.tooltips == false then return end
-    local bb = ACTIVE_BUFFS and ACTIVE_BUFFS[btn.buffIndex]
-    if not bb then return end
-    GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-    GameTooltip:SetText(bb.name or bb.group or "Buff", 1, 1, 1)
-    local have, need, range, dead = {}, {}, {}, {}
-    BuildBuffStatus(bb, have, need, range, dead)
-    GameTooltip:AddLine(PallyPower_Have    .. table.concat(have,  ", "), 0.5, 1, 0.5)
-    GameTooltip:AddLine(PallyPower_Need    .. table.concat(need,  ", "), 1, 0.5, 0.5)
-    GameTooltip:AddLine(PallyPower_NotHere .. table.concat(range, ", "), 0.5, 0.5, 1)
-    GameTooltip:AddLine(PallyPower_Dead    .. table.concat(dead,  ", "), 1, 0, 0)
-    GameTooltip:AddLine(" ", 1, 1, 1)
-    if ACTIVE_BUFFS and table.getn(ACTIVE_BUFFS) > 1 then
-        GameTooltip:AddLine("Scroll: switch buff", 0.6, 0.8, 1)
-    end
-    if bb.selfcast then
-        GameTooltip:AddLine("Click: cast (refreshes nearby party)", 0.7, 0.7, 0.7)
-    else
-        if bb.group then
-            GameTooltip:AddLine("Left-click: " .. bb.group .. " (covers a group)", 0.7, 0.7, 0.7)
-        else
-            GameTooltip:AddLine("Left-click: buff / renew next member", 0.7, 0.7, 0.7)
-        end
-        GameTooltip:AddLine("Right-click: smart top-off (out of combat)", 0.7, 0.7, 0.7)
-    end
-    GameTooltip:Show()
-end
-
--- Point a button at buff index `idx` and refresh its icon.
-local function SetButtonBuff(btn, idx)
-    btn.buffIndex = idx
-    local b = ACTIVE_BUFFS[idx]
-    local iconName = (b.icons and b.icons[1]) or "INV_Misc_QuestionMark"
-    btn.icon:SetTexture("Interface\\Icons\\" .. iconName)
-end
-
--- Mouse-wheel: cycle a button through the class's usable buffs (dir +1/-1),
--- skipping unlearned spells and wrapping. The count, timer, button color and
--- the Have/Need/Not Here/Dead tooltip all follow automatically because they key
--- off the button's buffIndex (the scan already tracks every buff).
-local function CycleButtonBuff(btn, dir)
-    if not ACTIVE_BUFFS then return end
-    local n = table.getn(ACTIVE_BUFFS)
-    if n <= 1 then return end
-    local i = btn.buffIndex or 1
-    local tries = 0
-    repeat
-        i = i + dir
-        if i > n then i = 1 elseif i < 1 then i = n end
-        tries = tries + 1
-    until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= n
-    SetButtonBuff(btn, i)
-    shownIndex = i                                 -- remember across relayouts
-    if UpdateDisplays then UpdateDisplays() end   -- refresh count/timer at once
-    ShowBuffTooltip(btn)                           -- refresh the open tooltip
-end
-
-local function LayoutUtilityRow(topY)
-    for _, ub in pairs(utilButtons) do ub:Hide() end
-    if not ACTIVE_UTILITY then return 0 end
-    if RallyPowerCP_Settings.utilRow == false then return 0 end
-
-    -- only utilities whose spell the player knows
-    local usable = {}
-    for i = 1, table.getn(ACTIVE_UTILITY) do
-        if KNOWN[ACTIVE_UTILITY[i].name] then table.insert(usable, i) end
-    end
-    if table.getn(usable) == 0 then return 0 end
-
-    local x = PAD
-    for slot = 1, table.getn(usable) do
-        local uidx = usable[slot]
-        local u = ACTIVE_UTILITY[uidx]
-        local ub = utilButtons[slot]
-        if not ub then
-            ub = CreateFrame("Button", "RallyPowerCP_Util" .. slot, bar)
-            ub:SetWidth(UTIL_SIZE); ub:SetHeight(UTIL_SIZE)
-            ub:RegisterForClicks("LeftButtonUp")
-            local ic = ub:CreateTexture(nil, "ARTWORK")
-            ic:SetAllPoints(ub)
-            ub.icon = ic
-            ub:SetScript("OnClick", UtilityOnClick)
-            ub:SetScript("OnEnter", function()
-                if RallyPowerCP_Settings.tooltips == false then return end
-                local uu = ACTIVE_UTILITY[this.utilIndex]
-                GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-                GameTooltip:SetText(uu.name, 1, 1, 1)
-                GameTooltip:AddLine("Click: cast on " .. (uu.tip or "target"), 0.8, 0.8, 0.8)
-                GameTooltip:Show()
-            end)
-            ub:SetScript("OnLeave", function() GameTooltip:Hide() end)
-            utilButtons[slot] = ub
-        end
-        ub.utilIndex = uidx
-        local tex = GetSpellIconByName(u.name) or ("Interface\\Icons\\" .. (u.icon or "INV_Misc_QuestionMark"))
-        ub.icon:SetTexture(tex)
-        ub:ClearAllPoints()
-        ub:SetPoint("TOPLEFT", bar, "TOPLEFT", x, topY)
-        ub:Show()
-        x = x + UTIL_SIZE + UTIL_GAP
-    end
-    return UTIL_ROW_H
-end
-
--- Helper: ensure shownIndex points at a usable buff (the globally-selected one).
-local function EnsureShownBuff()
-    if not ACTIVE_BUFFS then shownIndex = nil; return end
-    if shownIndex and ACTIVE_BUFFS[shownIndex] and BuffIsUsable(ACTIVE_BUFFS[shownIndex]) then return end
-    for i = 1, table.getn(ACTIVE_BUFFS) do
-        if BuffIsUsable(ACTIVE_BUFFS[i]) then shownIndex = i; return end
-    end
-    shownIndex = nil
-end
-
--- Per-class buff selection: each class row independently tracks one of the
+-- Per-class buff selection: each class button independently tracks one of the
 -- player's buffs (scroll a row to change just that class's buff, PallyPower-style).
 local rowBuff = {}               -- [classToken] = buff index shown/cast for that class
 
@@ -988,7 +689,7 @@ local function CycleRowBuff(ct, dir)
         tries = tries + 1
     until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= nb
     rowBuff[ct] = i
-    if UpdateDisplays then UpdateDisplays() end
+    if RefreshClassStrip then RefreshClassStrip() end
     if RefreshPopout and popout and popout:IsShown() and popoutClass == ct then RefreshPopout() end
 end
 
@@ -1052,60 +753,11 @@ local function FindClassSmartTarget(ct, b)
     return lowU
 end
 
--- Scroll changes the globally-selected buff shown on every class row.
-local function CycleBuff(dir)
-    if not ACTIVE_BUFFS then return end
-    local nb = table.getn(ACTIVE_BUFFS)
-    if nb <= 1 then return end
-    EnsureShownBuff()
-    local i = shownIndex or 1
-    local tries = 0
-    repeat
-        i = i + dir
-        if i > nb then i = 1 elseif i < 1 then i = nb end
-        tries = tries + 1
-    until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= nb
-    shownIndex = i
-    if UpdateDisplays then UpdateDisplays() end
-end
-
--- Tooltip for a class row: that class's members by Have/Need/Not Here/Dead.
-local function ShowClassRowTooltip(row)
-    local ct = row.classToken
-    EnsureShownBuff()
-    local b = shownIndex and ACTIVE_BUFFS[shownIndex]
-    if not b then return end
-    local clsName = string.upper(string.sub(ct, 1, 1)) .. string.lower(string.sub(ct, 2))
-    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    GameTooltip:SetText(clsName .. "  -  " .. (b.name or b.group or "Buff"), 1, 1, 1)
-    local have, need, range, dead = {}, {}, {}, {}
-    local units = classUnits[ct] or {}
-    for i = 1, table.getn(units) do
-        local u = units[i]
-        if UnitExists(u) and UnitIsConnected(u) then
-            local nm = UnitName(u) or "?"
-            if not UnitIsVisible(u) then table.insert(range, nm)
-            elseif UnitIsDeadOrGhost(u) then
-                if UnitHasBuff(u, b) then table.insert(have, nm) else table.insert(dead, nm) end
-            elseif UnitHasBuff(u, b) then table.insert(have, nm)
-            else table.insert(need, nm) end
-        end
-    end
-    GameTooltip:AddLine(PallyPower_Have    .. table.concat(have,  ", "), 0.5, 1, 0.5)
-    GameTooltip:AddLine(PallyPower_Need    .. table.concat(need,  ", "), 1, 0.5, 0.5)
-    GameTooltip:AddLine(PallyPower_NotHere .. table.concat(range, ", "), 0.5, 0.5, 1)
-    GameTooltip:AddLine(PallyPower_Dead    .. table.concat(dead,  ", "), 1, 0, 0)
-    GameTooltip:AddLine(" ", 1, 1, 1)
-    if table.getn(ACTIVE_BUFFS) > 1 then GameTooltip:AddLine("Scroll: switch buff", 0.6, 0.8, 1) end
-    if b.group then GameTooltip:AddLine("Left-click: " .. b.group .. " on this class", 0.7, 0.7, 0.7) end
-    GameTooltip:AddLine("Right-click: top off the next " .. clsName, 0.7, 0.7, 0.7)
-    GameTooltip:Show()
-end
-
--- Click a class row: left = group version on this class, right = smart single
--- top-off within this class (combat-locked, 4-min floor).
-local function ClassRowOnClick()
-    local ct = this.classToken
+-- Click a class button: left = group version on this class, right = smart
+-- single top-off within this class (combat-locked, 4-min floor). `btn` is the
+-- strip button (carries .classToken); `mb` is the mouse button.
+local function ClassButtonOnClick(btn, mb)
+    local ct = btn.classToken
     local bi = RowBuffIndex(ct)
     local b = bi and ACTIVE_BUFFS[bi]
     if not b then return end
@@ -1116,13 +768,13 @@ local function ClassRowOnClick()
             CastSpellByName(b.name)
             RecordGroupExpiry("player", b, b.dur)
             AnnounceBuff(b.name, "player", false)
-            StartThrottle(this)
+            StartThrottle(btn)
         end
         auraDirty = true; lastScan = SCAN_INTERVAL
         return
     end
 
-    if arg1 == "RightButton" then
+    if mb == "RightButton" then
         if inCombat then
             DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r auto-buff is disabled in combat.")
             return
@@ -1132,8 +784,8 @@ local function ClassRowOnClick()
             DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. ct .. ": covered (4+ min left).")
             return
         end
-        if b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this)
-        elseif b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this) end
+        if b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(btn)
+        elseif b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(btn) end
         auraDirty = true; lastScan = SCAN_INTERVAL
         return
     end
@@ -1144,8 +796,8 @@ local function ClassRowOnClick()
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. ct .. ": no members in range.")
         return
     end
-    if b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(this)
-    elseif b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(this) end
+    if b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(btn)
+    elseif b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(btn) end
     auraDirty = true; lastScan = SCAN_INTERVAL
 end
 
@@ -1398,100 +1050,128 @@ local function ShowPopout(row)
     popout:Show()
 end
 
--- Build one class row, styled exactly like the PallyPower buff-bar button.
-local function CreateClassRow(ct)
-    local row = CreateFrame("Button", "RallyPowerCP_Row_" .. ct, bar)
-    row:SetWidth(ROW_W); row:SetHeight(ROW_HEIGHT)
-    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    row:SetBackdrop(ROW_BACKDROP)
-    row:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
-    row.classToken = ct
-
-    local classIcon = row:CreateTexture(nil, "ARTWORK")
-    classIcon:SetWidth(ROW_ICON); classIcon:SetHeight(ROW_ICON)
-    classIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -4)
-    local cls = string.upper(string.sub(ct, 1, 1)) .. string.lower(string.sub(ct, 2))
-    classIcon:SetTexture("Interface\\AddOns\\RallyPowerCP\\Icons\\" .. cls)
-    row.classIcon = classIcon
-
-    local icon = row:CreateTexture(nil, "ARTWORK")
-    icon:SetWidth(ROW_ICON); icon:SetHeight(ROW_ICON)
-    icon:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 4, 0)
-    row.icon = icon
-
-    local dim = row:CreateTexture(nil, "OVERLAY")
-    dim:SetAllPoints(icon); dim:SetTexture(0, 0, 0, 0.55); dim:Hide()
-    row.dim = dim
-
-    local timer = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    timer:SetWidth(40); timer:SetHeight(16); timer:SetJustifyH("RIGHT")
-    timer:SetPoint("TOPRIGHT", row, "TOPRIGHT", -5, 0)
-    row.timer = timer
-
-    local count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    count:SetWidth(40); count:SetHeight(16); count:SetJustifyH("RIGHT")
-    count:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -5, 0)
-    row.count = count
-
-    row:SetScript("OnClick", ClassRowOnClick)
-    row:EnableMouseWheel(true)
-    row:SetScript("OnMouseWheel", function() CycleRowBuff(this.classToken, (arg1 and arg1 > 0) and 1 or -1) end)
-    row:SetScript("OnEnter", function() ShowPopout(this) end)
-    row:SetScript("OnLeave", function() end)   -- pop-out self-hides when the cursor leaves both
-    return row
+-- Is class ct shown on the strip right now? Present in the group, or always in
+-- test mode (so the full nine-button layout previews solo).
+local function ClassPresent(ct)
+    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return true end
+    for i = 1, table.getn(presentClasses) do
+        if presentClasses[i] == ct then return true end
+    end
+    return false
 end
 
-local function LayoutButtons()
-    if not bar then return end
-    EnsureShownBuff()
+local function TitleCase(s)
+    return string.upper(string.sub(s, 1, 1)) .. string.lower(string.sub(s, 2))
+end
 
-    -- Hide all class rows first.
-    for _, row in pairs(classRows) do row:Hide() end
+-- One class-buff button def for the shared strip: icon = the class's selected
+-- buff, gold class-name label, grey buff sub-label, need-count / timer, backdrop
+-- coloured by coverage. Wheel cycles that class's buff; L = group cast, R = smart
+-- single top-off; hover opens the player pop-out (like the paladin bar).
+local function ClassButtonDef(ct)
+    return {
+        key = "cls_" .. string.lower(ct),
+        visible = function() return ClassPresent(ct) end,
+        refresh = function(b)
+            b:SetLabel("|cffffd100" .. TitleCase(ct) .. "|r")
+            local bi = RowBuffIndex(ct)
+            local bd = bi and ACTIVE_BUFFS[bi]
+            if not bd then
+                b:SetIcon(nil); b:SetSub(""); b:SetTimer(""); b:SetState("off"); return
+            end
+            b:SetIcon(bd.icons and ("Interface\\Icons\\" .. (bd.icons[1] or "INV_Misc_QuestionMark")) or nil)
+            b:SetSub("|cff999999" .. (bd.name or bd.group or "") .. "|r")
+            local need = (rowNeed[ct] and rowNeed[ct][bi]) or 0
+            local dl = rowDeadline[ct] and rowDeadline[ct][bi]
+            local now = GetTime()
+            local mr = dl and (dl - now) or nil
+            if need > 0 then
+                b:SetState("need")                              -- red: someone needs it
+                b:SetTimer("|cffffffff" .. need .. "|r")
+            elseif mr and mr <= WARN_TIME then
+                b:SetBackdropColor(1, 1, 0.5, 0.5)              -- yellow: covered but expiring
+                b.icon:SetAlpha(1)
+                local m = math.floor(mr / 60)
+                b:SetTimer(string.format("%d:%02d", m, math.floor(mr - m * 60)))
+            else
+                b:SetState("good")                              -- green: all covered
+                if mr and mr > 0 then
+                    local m = math.floor(mr / 60)
+                    b:SetTimer(string.format("%d:%02d", m, math.floor(mr - m * 60)))
+                else
+                    b:SetTimer("")
+                end
+            end
+        end,
+        onClick = function(b, mb) ClassButtonOnClick(b, mb) end,
+        onWheel = function(b, delta) CycleRowBuff(ct, (delta and delta > 0) and 1 or -1) end,
+        onEnter = function(b) ShowPopout(b) end,
+        onLeave = function() end,    -- pop-out self-hides when the cursor leaves both
+    }
+end
 
-    -- Top-row utility buttons (e.g. Priest PW: Shield / Fear Ward).
-    local topY = -18
-    local utilH = LayoutUtilityRow(topY)
-    local y = topY - utilH
+-- One utility button def (Priest PW: Shield / Fear Ward): the same strip
+-- anatomy, cast on click.
+local function UtilityButtonDef(u, uidx)
+    local short = u.name
+    local _, _, after = string.find(u.name, ": (.+)")
+    if after then short = after end
+    return {
+        key = "util_" .. uidx,
+        visible = function() return KNOWN[u.name] and RallyPowerCP_Settings.utilRow ~= false end,
+        refresh = function(b)
+            b:SetLabel("|cffffd100" .. short .. "|r")
+            b:SetSub(u.tip and ("|cff999999" .. u.tip .. "|r") or "")
+            b:SetIcon(GetSpellIconByName(u.name) or ("Interface\\Icons\\" .. (u.icon or "INV_Misc_QuestionMark")))
+            b:SetTimer(""); b:SetState("off")
+        end,
+        onClick = function(b) b.utilIndex = uidx; UtilityOnClick() end,
+        tooltip = function(b, tt)
+            tt:AddLine(u.name, 1, 1, 1)
+            tt:AddLine("Click: cast on " .. (u.tip or "target"), 0.8, 0.8, 0.8)
+        end,
+    }
+end
 
-    -- One row per class present in the group, in CLASS_ORDER.
-    local shown = 0
-    for ci = 1, table.getn(presentClasses) do
-        local ct = presentClasses[ci]
-        local row = classRows[ct]
-        if not row then row = CreateClassRow(ct); classRows[ct] = row end
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, y)
-        row:Show()
-        y = y - (ROW_HEIGHT + ROW_GAP)
-        shown = shown + 1
+-- Build the shared class-buff strip (Priest / Mage / Druid). One button per
+-- class in CLASS_ORDER plus the module's utility buttons; presence gating and
+-- the drag/scale/position furniture all come from the strip engine, so these
+-- classes read identically to Shaman / Hunter / Warlock / Rogue.
+function RallyPowerCP.BuildClassBuffs()
+    if classStrip then return classStrip end
+    local title = PLAYER_CLASS and TitleCase(PLAYER_CLASS) or "Buffs"
+    classStrip = RallyPowerCP.NewStrip("classbuffs", title)
+    for ci = 1, table.getn(CLASS_ORDER) do
+        local ct = CLASS_ORDER[ci]
+        local b = classStrip:AddButton(ClassButtonDef(ct))
+        b.classToken = ct
     end
-
-    -- Size the bar to fit the utility row and the class rows.
-    local utilWidth = 0
-    if ACTIVE_UTILITY and utilH > 0 then
-        local nUtil = 0
+    if ACTIVE_UTILITY then
         for i = 1, table.getn(ACTIVE_UTILITY) do
-            if KNOWN[ACTIVE_UTILITY[i].name] then nUtil = nUtil + 1 end
+            classStrip:AddButton(UtilityButtonDef(ACTIVE_UTILITY[i], i))
         end
-        utilWidth = PAD + nUtil * (UTIL_SIZE + UTIL_GAP) - UTIL_GAP + PAD
     end
-    local rowWidth = (shown > 0) and (PAD + ROW_W + PAD) or 0
-    bar:SetWidth(math.max(math.max(BAR_W, utilWidth), rowWidth))
-    bar:SetHeight(18 + utilH + shown * (ROW_HEIGHT + ROW_GAP) + 6)
-    if shown == 0 and utilH == 0 then bar:Hide() end
+    classStrip:Finish()
+    RefreshClassStrip = function()
+        if classStrip then classStrip:Refresh() end
+    end
+    return classStrip
 end
 
 --=============================================================================
 -- CHEAP PER-SECOND TICK: countdown text + expiry warning. Pure arithmetic on
 -- stored deadlines — zero UnitBuff/API calls — so it can run every second.
 --=============================================================================
--- (forward-declared above) Cheap per-second tick: countdown text + warning.
+-- (forward-declared above) Cheap per-second tick: the expiry-warning ding, plus
+-- a strip repaint. The per-class button visuals live in ClassButtonDef.refresh
+-- (driven by the strip's own 0.25s ticker); this only handles the global ding
+-- and keeps the strip current between roster scans.
 function UpdateDisplays()
-    if not bar or not ACTIVE_BUFFS then return end
+    if not ACTIVE_BUFFS then return end
     local now = GetTime()
 
-    -- (1) Expiry-warning pass over EVERY buff (global earliest), so a buff not
-    -- currently shown on the rows still dings and self-corrects on the tick.
+    -- Expiry-warning pass over EVERY buff (global earliest), so a buff not
+    -- currently shown still dings and self-corrects on the tick.
     for i = 1, table.getn(ACTIVE_BUFFS) do
         local dl = minDeadline[i]
         if dl then
@@ -1515,39 +1195,7 @@ function UpdateDisplays()
         end
     end
 
-    -- (2) Update each class row with ITS OWN selected buff's status for that class.
-    for ci = 1, table.getn(presentClasses) do
-        local ct = presentClasses[ci]
-        local row = classRows[ct]
-        if row and row:IsShown() then
-            local bi = RowBuffIndex(ct)
-            local b = bi and ACTIVE_BUFFS[bi]
-            if b and b.icons then
-                row.icon:SetTexture("Interface\\Icons\\" .. (b.icons[1] or "INV_Misc_QuestionMark"))
-            end
-            local need = (bi and rowNeed[ct] and rowNeed[ct][bi]) or 0
-            local dl = bi and rowDeadline[ct] and rowDeadline[ct][bi]
-            local mr = dl and (dl - now) or nil
-            if need > 0 then
-                row:SetBackdropColor(C_NEEDALL.r, C_NEEDALL.g, C_NEEDALL.b, C_NEEDALL.t)
-                row.count:SetText(need)
-            elseif mr and mr <= WARN_TIME then
-                row:SetBackdropColor(1, 1, 0.5, 0.5)            -- yellow: covered but expiring
-                row.count:SetText("")
-            else
-                row:SetBackdropColor(C_GOOD.r, C_GOOD.g, C_GOOD.b, C_GOOD.t)
-                row.count:SetText("")
-            end
-            if mr and mr > 0 then
-                local m = math.floor(mr / 60)
-                local s = math.floor(mr - m * 60)
-                row.timer:SetText(string.format("%d:%02d", m, s))
-            else
-                row.timer:SetText("")
-            end
-            if row.dim and (now - lastCast) >= THROTTLE then row.dim:Hide() end
-        end
-    end
+    if RefreshClassStrip then RefreshClassStrip() end
 end
 
 --=============================================================================
@@ -1612,11 +1260,12 @@ local function ScanRoster()
         end
     end
 
-    -- Rebuild the rows only when the set of present classes actually changes.
+    -- Re-flow the strip (show/hide + collapse) only when the set of present
+    -- classes actually changes.
     local sig = table.concat(presentClasses, ",")
     if sig ~= lastPresentSig then
         lastPresentSig = sig
-        LayoutButtons()
+        if classStrip then classStrip:Reflow() end
     end
 
     UpdateDisplays()
@@ -1631,9 +1280,8 @@ local function Activate()
 
     if PLAYER_CLASS == "PALADIN" then
         -- Paladins use the original PallyPower bar/grid (now with the hover
-        -- player pop-out from RallyPowerCP_Popout.lua). No separate bar.
+        -- player pop-out from RallyPowerCP_Popout.lua). No separate strip.
         ACTIVE_BUFFS = nil
-        if bar then bar:Hide() end
         return
     end
 
@@ -1641,30 +1289,26 @@ local function Activate()
     ACTIVE_BUFFS   = RallyPowerCP.active and RallyPowerCP.active.buffs
     ACTIVE_UTILITY = RallyPowerCP.active and RallyPowerCP.active.utility
 
-    -- Modules that render their own strip instead of the buff grid (e.g. Shaman
-    -- totems) do their setup here.
+    -- Every non-paladin module builds its own strip UI here: Shaman totems,
+    -- Hunter stings, Warlock/Rogue duties, the Warrior shout, and the
+    -- Priest/Mage/Druid class-buff strip (RallyPowerCP.BuildClassBuffs).
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()
     end
 
-    -- Empty/undefined class table -> nothing to show (e.g. Rogue, or any class
-    -- with no registered module yet).
+    -- Strip-only modules (no tracked group buffs) are fully set up now.
     if not ACTIVE_BUFFS or table.getn(ACTIVE_BUFFS) == 0 then
         ACTIVE_BUFFS = nil
-        if bar then bar:Hide() end
         return
     end
 
+    -- Class-buff modules additionally drive the Core coverage engine that feeds
+    -- the strip's per-class need counts, timers and pop-out.
     BuildIconLookups()
     RebuildKnownSpells()
-    shownIndex = nil          -- start on the first usable buff for this class
-    -- Guard the bar build: if anything errors on a custom client, report it in
-    -- chat instead of letting the bar silently fail to appear.
     local ok, err = pcall(function()
-        CreateBar()
         BuildClassPresence()
-        LayoutButtons()
-        if RallyPowerCP_Settings.hidden then bar:Hide() else bar:Show() end
+        if classStrip then classStrip:Reflow() end
         ScanRoster()
     end)
     if not ok then
@@ -1703,7 +1347,7 @@ f:SetScript("OnEvent", function()
     elseif event == "SPELLS_CHANGED" then
         if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
             RebuildKnownSpells()
-            LayoutButtons()
+            if classStrip then classStrip:Reflow() end
             auraDirty = true
         end
     elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
@@ -1745,25 +1389,12 @@ function RallyPowerCP_ToggleBar()
     if PLAYER_CLASS == "PALADIN" then
         return false   -- let the Paladin engine handle it
     end
-    -- Strip-based modules (e.g. Shaman) manage their own show/hide.
+    -- Every non-paladin class now renders a strip and manages its own show/hide.
     if RallyPowerCP.active and RallyPowerCP.active.Toggle then
         RallyPowerCP.active:Toggle()
         return true
     end
-    if not ACTIVE_BUFFS then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r No tracked group buffs for your class yet.")
-        return true
-    end
-    if bar and bar:IsShown() then
-        bar:Hide(); RallyPowerCP_Settings.hidden = true
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Bar hidden (/rpc to show).")
-    else
-        if not bar then CreateBar(); LayoutButtons() end
-        bar:Show()
-        RallyPowerCP_Settings.hidden = false
-        ScanRoster()
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Bar shown.")
-    end
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r No tracked buffs for your class yet.")
     return true
 end
 
@@ -1788,16 +1419,19 @@ function RallyPowerCP_SetTestMode(on)
     end
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()
-    elseif PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
-        RebuildKnownSpells(); LayoutButtons(); auraDirty = true
+    end
+    if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
+        RebuildKnownSpells()
+        if classStrip then classStrip:Reflow() end
+        auraDirty = true
     end
 end
 
--- Options hook: a gridbuff_*/utilRow flag changed - re-derive and re-lay out.
+-- Options hook: a gridbuff_*/utilRow flag changed - re-derive and re-flow.
 function RallyPowerCP_GridRefresh()
     if not ACTIVE_BUFFS then return end
     RebuildKnownSpells()
-    LayoutButtons()
+    if classStrip then classStrip:Reflow() end
     auraDirty = true
 end
 
@@ -1812,6 +1446,8 @@ end
 
 -- ANDed with the per-frame hidden flags: hiding here never overwrites what the
 -- user toggled by hand, and the Paladin legacy frames are deliberately exempt.
+-- Every non-paladin class UI (including the class-buff strip) is a registered
+-- strip, so one loop covers them all.
 function RallyPowerCP_ApplyVisibility()
     local ok = RallyPowerCP_VisibilityAllowed()
     if RallyPowerCP.strips then
@@ -1820,32 +1456,25 @@ function RallyPowerCP_ApplyVisibility()
             elseif not RallyPowerCP_Settings["stripHidden_" .. k] then S.frame:Show() end
         end
     end
-    if bar and ACTIVE_BUFFS then
-        if not ok then bar:Hide()
-        elseif not RallyPowerCP_Settings.hidden then bar:Show() end
-    end
 end
 
--- Options hook: live UI-scale application (strips + class bar + pop-out; the
+-- Options hook: live UI-scale application (every strip + the pop-out; the
 -- Paladin engine keeps its own scale settings under /pp Options).
 function RallyPowerCP_ApplyUIScale()
     local s = RallyPowerCP_Settings.uiScale or 1
     if RallyPowerCP.strips then
         for _, S in pairs(RallyPowerCP.strips) do S.frame:SetScale(s) end
     end
-    if bar then bar:SetScale(s) end
     if popout then popout:SetScale(s) end
 end
 
--- Bar back to its default anchor (shared by /rpc reset and Reset Frames).
+-- Class-buff strip back to its default anchor (shared by /rpc reset and Reset
+-- Frames). Other strips are handled by the options Reset Frames sweep.
 function RallyPowerCP_ResetBarPosition()
-    RallyPowerCP_Settings.barPoint = nil
-    RallyPowerCP_Settings.barRelPoint = nil
-    RallyPowerCP_Settings.barX = nil
-    RallyPowerCP_Settings.barY = nil
-    if bar then
-        bar:ClearAllPoints()
-        bar:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
+    RallyPowerCP_Settings["stripPos_classbuffs"] = nil
+    if classStrip and classStrip.frame then
+        classStrip.frame:ClearAllPoints()
+        classStrip.frame:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
     end
 end
 

@@ -268,6 +268,9 @@ function RallyPowerCP.NewStrip(key, title)
             if def.onWheel then def.onWheel(b, arg1); S:Refresh() end
         end)
         b:SetScript("OnEnter", function()
+            -- A button may take over hover entirely (the class-buff buttons use
+            -- this for the paladin-style player pop-out instead of a tooltip).
+            if def.onEnter then def.onEnter(b); return end
             if RallyPowerCP_Settings.tooltips == false then return end
             if def.tooltip then
                 GameTooltip:SetOwner(b, "ANCHOR_LEFT")
@@ -275,7 +278,10 @@ function RallyPowerCP.NewStrip(key, title)
                 GameTooltip:Show()
             end
         end)
-        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        b:SetScript("OnLeave", function()
+            if def.onLeave then def.onLeave(b); return end
+            GameTooltip:Hide()
+        end)
 
         table.insert(self.buttons, b)
         return b
@@ -290,11 +296,14 @@ function RallyPowerCP.NewStrip(key, title)
 
     -- Re-anchor only the enabled buttons and collapse the frame height around
     -- them. A button is disabled when the options Buttons tab wrote an explicit
-    -- false to "btn_" .. lower(def.key); absent means enabled.
+    -- false to "btn_" .. lower(def.key); absent means enabled. A def.visible()
+    -- predicate gates it further (the class-buff strips use it for roster
+    -- presence: absent classes hide, test mode shows all).
     function S:Reflow()
         local shown = 0
         for _, b in ipairs(self.buttons) do
-            if RallyPowerCP_Settings["btn_" .. string.lower(b.def.key or "")] == false then
+            if RallyPowerCP_Settings["btn_" .. string.lower(b.def.key or "")] == false
+               or (b.def.visible and not b.def.visible()) then
                 b:Hide()
             else
                 b:ClearAllPoints()
