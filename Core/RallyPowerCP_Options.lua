@@ -33,7 +33,7 @@
 
 RallyPowerCP_Settings = RallyPowerCP_Settings or {}
 
-local FRAME_W, FRAME_H = 360, 430
+local FRAME_W, FRAME_H = 360, 480
 local PAD_X = 16                       -- left inset for controls
 local NOTE_W = FRAME_W - 44            -- wrap width for note text
 
@@ -447,6 +447,12 @@ local function SettingsTabEntries()
         { type = "slider", key = "uiScale", label = "UI scale",
           min = 0.5, max = 1.5, step = 0.05, default = 1.0,
           onChange = function() RallyPowerCP_ApplyUIScale() end },
+        { type = "slider", key = "stripAlpha", label = "Transparency",
+          min = 0, max = 1, step = 0.05, default = 0.5,
+          tip = "Backdrop opacity of the strip buttons." },
+        { type = "check", key = "stripHorizontal", label = "Horizontal layout", default = false,
+          tip = "Lay the strip buttons left-to-right instead of stacked.",
+          onChange = function() if RallyPowerCP.ReflowStrips then RallyPowerCP.ReflowStrips() end end },
         MinimapSkinEntry(),
         ShowMinimapButtonEntry(),
         { type = "check", key = "locked", label = "Lock frame positions", default = false },
@@ -493,10 +499,23 @@ local function ButtonsTabEntries()
         }
         return entries
     end
+    -- Shared behaviour (applies to every non-paladin class), mirroring the
+    -- Paladin Buttons tab where these live. HD Icons / Color Buff Bar are
+    -- Paladin-art-specific and intentionally omitted.
+    table.insert(entries, { type = "header", label = "Behaviour" })
+    table.insert(entries, { type = "check", key = "smartBuffs", label = "Smart buffs", default = true,
+        tip = "Skip players who already have the buff (off = allow re-casting)." })
+    table.insert(entries, { type = "check", key = "expirySound", label = "Sound when a buff runs out", default = true })
+    table.insert(entries, { type = "check", label = "UnitXP SP3 line-of-sight", default = false,
+        tip = "Use UnitXP.dll (if loaded) to skip out-of-line-of-sight targets.",
+        get = function() return PP_PerUser and PP_PerUser.useunitxp_sp3 end,
+        set = function(v) if PP_PerUser then PP_PerUser.useunitxp_sp3 = (v and true or false) end end })
+    table.insert(entries, { type = "slider", key = "scanFreq", label = "Scan frequency (s)",
+        min = 0.25, max = 3, step = 0.25, default = 1,
+        tip = "How often coverage is rescanned. Lower = snappier, more CPU." })
+
     local M = RallyPowerCP.active
     if not M then
-        table.insert(entries, { type = "note", label =
-            "No RallyPowerCP module is active for this class." })
         return entries
     end
     if M.buffs and table.getn(M.buffs) > 0 then

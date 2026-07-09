@@ -29,6 +29,22 @@ Author: **Subtilizer (Torchlite)**.
 Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
 classes look and behave the same way; the bespoke grid bar is gone.
 
+### Added (config options for the non-paladin classes)
+The options panel gained the applicable PallyPower-style settings for every
+non-paladin class, each wired to real behaviour:
+- **Settings** — **Transparency** slider (strip-button backdrop opacity) and
+  **Horizontal layout** (lay the strip left-to-right). Buff/grid scale is
+  already covered by the existing **UI scale** slider (our classes have one
+  frame, not the paladin's two).
+- **Buttons → Behaviour** — **Smart buffs** (skip already-buffed players;
+  off = allow re-casting), **Sound when a buff runs out** (gates the expiry
+  ding), **UnitXP SP3 line-of-sight** (reuses the engine's
+  `PallyPower_CheckTargetLoS` in our targeting; shared `PP_PerUser` setting),
+  and a **Scan frequency (s)** slider (drives the roster-rescan interval).
+- **Intentionally omitted:** HD Icons and Color Buff Bar — both are
+  Paladin/PallyPower-art-specific (our buttons use live spell icons and their
+  own status colours), so they'd be no-op toggles here.
+
 ### Changed
 - **Priest / Mage / Druid → the class-buff strip** (`RallyPowerCP.BuildClassBuffs`):
   one 100×34 strip button per raid class, showing that class's assigned buff

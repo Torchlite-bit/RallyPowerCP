@@ -188,7 +188,9 @@ local function Btn_SetSub(self, txt)   self.tn:SetText(txt or "") end
 local function Btn_SetTimer(self, txt) self.tm:SetText(txt or "") end
 local function Btn_SetState(self, st)
     local c = COLORS[st] or COLORS.off
-    self:SetBackdropColor(c[1], c[2], c[3], c[4])
+    local a = RallyPowerCP_Settings.stripAlpha
+    if a == nil then a = c[4] end                 -- Transparency slider (default 0.5)
+    self:SetBackdropColor(c[1], c[2], c[3], a)
     self.icon:SetAlpha(st == "good" and 1 or 0.55)
 end
 
@@ -300,6 +302,7 @@ function RallyPowerCP.NewStrip(key, title)
     -- predicate gates it further (the class-buff strips use it for roster
     -- presence: absent classes hide, test mode shows all).
     function S:Reflow()
+        local horiz = RallyPowerCP_Settings.stripHorizontal and true or false
         local shown = 0
         for _, b in ipairs(self.buttons) do
             if RallyPowerCP_Settings["btn_" .. string.lower(b.def.key or "")] == false
@@ -307,14 +310,27 @@ function RallyPowerCP.NewStrip(key, title)
                 b:Hide()
             else
                 b:ClearAllPoints()
-                b:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -18 - shown * (BTN_H + BTN_GAP))
+                if horiz then
+                    b:SetPoint("TOPLEFT", f, "TOPLEFT", shown * (STRIP_W + BTN_GAP), -18)
+                else
+                    b:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -18 - shown * (BTN_H + BTN_GAP))
+                end
                 b:Show()
                 shown = shown + 1
             end
         end
-        local h = 18 + shown * BTN_H + 2
-        if shown > 1 then h = h + (shown - 1) * BTN_GAP end
-        f:SetHeight(h)
+        if horiz then
+            local w = shown * STRIP_W
+            if shown > 1 then w = w + (shown - 1) * BTN_GAP end
+            if w < STRIP_W then w = STRIP_W end
+            f:SetWidth(w)
+            f:SetHeight(18 + BTN_H + 2)
+        else
+            f:SetWidth(STRIP_W)
+            local h = 18 + shown * BTN_H + 2
+            if shown > 1 then h = h + (shown - 1) * BTN_GAP end
+            f:SetHeight(h)
+        end
     end
 
     function S:Finish()
