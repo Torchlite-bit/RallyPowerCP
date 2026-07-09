@@ -401,11 +401,11 @@ local function ButtonsTabEntries()
                 label = nm, default = true,
                 onChange = function() RallyPowerCP_GridRefresh() end })
         end
-        if M.utility and table.getn(M.utility) > 0 then
-            table.insert(entries, { type = "check", key = "utilRow",
-                label = "Utility buttons (top row)", default = true,
-                onChange = function() RallyPowerCP_GridRefresh() end })
-        end
+    end
+    if M.utility and table.getn(M.utility) > 0 then
+        table.insert(entries, { type = "check", key = "utilRow",
+            label = "Utility buttons (top row)", default = true,
+            onChange = function() RallyPowerCP_GridRefresh() end })
     end
     if M.optionsInfo then
         for i = 1, table.getn(M.optionsInfo) do
