@@ -1919,14 +1919,22 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
 
-    -- Options frame: every class (the Buttons tab adapts; Paladins get a note).
+    -- Options frame: every class (the Settings + Buttons tabs adapt per class;
+    -- Paladins get the merged legacy PallyPower settings).
     if msg == "options" or msg == "opt" or msg == "config" then
         if RallyPowerCP_OptionsToggle then RallyPowerCP_OptionsToggle() end
         return
     end
 
+    -- Escape hatch: the classic PallyPower options frame, in case something
+    -- wasn't migrated into the panel.
+    if msg == "legacy" then
+        if PallyPower_Options then PallyPower_Options() end
+        return
+    end
+
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc options opens the RallyPowerCP settings; /rpc icon changes the minimap icon.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then
