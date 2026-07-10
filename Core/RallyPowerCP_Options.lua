@@ -310,6 +310,7 @@ local function BuildControls(parent, entries)
         local make = CREATORS[entry.type]
         if make then y = make(parent, y, entry) end
     end
+    parent.contentH = -y   -- ShowTab grows the frame for tall tabs
 end
 
 -- Re-read every bound value (cheap: settings only, no game API). Called after
@@ -585,6 +586,12 @@ local function ShowTab(i)
         elseif i == 2 then BuildControls(p, ButtonsTabEntries())
         else BuildControls(p, RAID_INFO) end
     end
+    -- grow the frame when a tab's content is taller than the default body
+    -- (56px top chrome + content + 18px bottom breathing room), so the last
+    -- control never sits on the border
+    local want = 56 + (p.contentH or 0) + 18
+    if want < FRAME_H then want = FRAME_H end
+    optFrame:SetHeight(want)
     StyleTabs()
     RefreshControls()
 end

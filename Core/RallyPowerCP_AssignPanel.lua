@@ -38,11 +38,11 @@ local A = RallyPowerCP.Assign   -- loads before this file (TOC order)
 -- theme (colors lifted from the concept page)
 --------------------------------------------------------------------------
 
-local FRAME_W, FRAME_H = 566, 612
-local NAME_W   = 112         -- caster-name column
-local ROW_H    = 36
-local CELL_H   = 32
-local MAX_ROWS = 10          -- pooled caster rows per grid tab
+local FRAME_W, FRAME_H = 640, 620
+local NAME_W   = 118         -- caster-name column
+local ROW_H    = 40
+local CELL_H   = 36          -- concept cells, scaled to fit ten columns
+local MAX_ROWS = 8           -- pooled caster rows per grid tab
 local DUTY_POOL = 16         -- pooled duty cards (2 columns x 8 rows)
 
 local GOLD        = { 0.78, 0.67, 0.43 }
@@ -172,7 +172,15 @@ local tabBtns  = {}
 local panels   = {}
 local currentTab
 local pills    = {}
-local testBless = {}         -- [fakePally][classID] = bid; session-only
+
+-- Preview-paladin blessings: [fakePally][classID] = bid. Saved with the
+-- settings so they survive /reload while test mode stays on (the Core clears
+-- the table when test mode turns off); the legacy tables and the PLPWR wire
+-- never see fake names.
+local function TestBless()
+    RallyPowerCP_Settings.testBless = RallyPowerCP_Settings.testBless or {}
+    return RallyPowerCP_Settings.testBless
+end
 
 local TAB_INFO = {
     { label = "Blessings",  live = true  },
@@ -316,7 +324,7 @@ end
 
 local function BlessBid(pally, class)
     local t
-    if IsFakeRow(pally) then t = testBless[pally]
+    if IsFakeRow(pally) then t = TestBless()[pally]
     else t = PallyPower_Assignments and PallyPower_Assignments[pally] end
     local bid = t and t[class]
     if bid == nil then bid = -1 end
@@ -333,16 +341,17 @@ end
 
 local function BlessCycle(pally, class, dir)
     if IsFakeRow(pally) then
-        -- session-only: the wire and the legacy tables never see fake names
-        testBless[pally] = testBless[pally] or {}
-        local cur = testBless[pally][class]
+        -- preview store only: the wire and the legacy tables never see fakes
+        local tb = TestBless()
+        tb[pally] = tb[pally] or {}
+        local cur = tb[pally][class]
         if cur == nil then cur = -1 end
         cur = cur + dir
         if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
         if IsShiftKeyDown() then
-            for c = 0, 9 do testBless[pally][c] = cur end
+            for c = 0, 9 do tb[pally][c] = cur end
         else
-            testBless[pally][class] = cur
+            tb[pally][class] = cur
         end
         RefreshCurrent()
         return
@@ -389,17 +398,17 @@ local function BuildBlessings(p)
     -- column headers: class icon + tiny label
     for c = 0, 9 do
         local t = p:CreateTexture(nil, "ARTWORK")
-        t:SetWidth(22); t:SetHeight(22)
-        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 40 + 8, -44)
+        t:SetWidth(26); t:SetHeight(26)
+        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 47 + 10, -42)
         local l = Fnt(p, 8, INK_DIM, "CENTER")
-        l:SetWidth(40); l:SetHeight(9)
-        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 40 - 1, -68)
+        l:SetWidth(47); l:SetHeight(9)
+        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 47 - 1, -70)
         l:SetText(CLASS_LABEL[c])
         blessHeader[c] = t
     end
     for r = 1, MAX_ROWS do
         local row = { cells = {} }
-        local y = -80 - (r - 1) * ROW_H
+        local y = -84 - (r - 1) * ROW_H
         row.name = Fnt(p, 11, INK)
         row.name:SetWidth(NAME_W - 10); row.name:SetHeight(12)
         row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 3)
@@ -407,11 +416,11 @@ local function BuildBlessings(p)
         row.sub:SetWidth(NAME_W - 10); row.sub:SetHeight(9)
         row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 17)
         for c = 0, 9 do
-            local b = MakeCell(p, 38, CELL_H)
-            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 40, y)
+            local b = MakeCell(p, 45, CELL_H)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 47, y)
             b.classID = c
             local icon = b:CreateTexture(nil, "ARTWORK")
-            icon:SetWidth(24); icon:SetHeight(24)
+            icon:SetWidth(30); icon:SetHeight(30)
             icon:SetPoint("CENTER", b, "CENTER", 0, 0)
             b.icon = icon
             local txt = Fnt(b, 12, GOLD_BRIGHT, "CENTER")
@@ -507,7 +516,7 @@ end
 --------------------------------------------------------------------------
 
 local totemRows = {}
-local PARTY_W, ELEM_W = 58, 84
+local PARTY_W, ELEM_W = 64, 98
 
 local function ShortTotem(name)
     if not name then return nil end
@@ -603,7 +612,7 @@ local function BuildTotems(p)
             local w = (i == 1) and PARTY_W or ELEM_W
             local b = MakeCell(p, w, CELL_H)
             b:SetPoint("TOPLEFT", p, "TOPLEFT", x, y)
-            local txt = Fnt(b, 9, INK, "CENTER")
+            local txt = Fnt(b, 10, INK, "CENTER")
             txt:SetWidth(w - 4); txt:SetHeight(CELL_H)
             txt:SetPoint("CENTER", b, "CENTER", 0, 0)
             b.text = txt
@@ -785,20 +794,20 @@ local function BuildDutyTab(p, tabIndex)
     for i = 1, DUTY_POOL do
         local col = math.mod(i - 1, 2)          -- 0 left, 1 right
         local rowN = math.floor((i - 1) / 2)
-        local card = MakeCell(p, 254, 44)
-        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 264, -46 - rowN * 47)
+        local card = MakeCell(p, 292, 46)
+        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 300, -46 - rowN * 48)
         local icon = card:CreateTexture(nil, "ARTWORK")
-        icon:SetWidth(28); icon:SetHeight(28)
+        icon:SetWidth(32); icon:SetHeight(32)
         icon:SetPoint("LEFT", card, "LEFT", 8, 0)
         card.icon = icon
         card.name = Fnt(card, 11, INK)
-        card.name:SetWidth(130); card.name:SetHeight(12)
-        card.name:SetPoint("TOPLEFT", card, "TOPLEFT", 44, -8)
+        card.name:SetWidth(160); card.name:SetHeight(12)
+        card.name:SetPoint("TOPLEFT", card, "TOPLEFT", 48, -9)
         card.sub = Fnt(card, 9, INK_FAINT)
-        card.sub:SetWidth(130); card.sub:SetHeight(10)
-        card.sub:SetPoint("TOPLEFT", card, "TOPLEFT", 44, -24)
+        card.sub:SetWidth(160); card.sub:SetHeight(10)
+        card.sub:SetPoint("TOPLEFT", card, "TOPLEFT", 48, -26)
         card.holder = Fnt(card, 11, INK, "RIGHT")
-        card.holder:SetWidth(66); card.holder:SetHeight(12)
+        card.holder:SetWidth(76); card.holder:SetHeight(12)
         card.holder:SetPoint("RIGHT", card, "RIGHT", -8, 0)
         card:SetScript("OnClick", DutyCardClick)
         card:SetScript("OnMouseWheel", DutyCardWheel)
@@ -908,12 +917,13 @@ local function StyleTabs()
     for i = 1, table.getn(tabBtns) do
         local b = tabBtns[i]
         if i == currentTab then
-            b:SetBackdropColor(0.14, 0.12, 0.086, 1)
+            -- active tab merges into the content box (same fill, gold edge)
+            b:SetBackdropColor(0.08, 0.072, 0.058, 1)
             b:SetBackdropBorderColor(GOLD_DIM[1], GOLD_DIM[2], GOLD_DIM[3], 1)
             b.label:SetTextColor(GOLD_BRIGHT[1], GOLD_BRIGHT[2], GOLD_BRIGHT[3])
         else
-            b:SetBackdropColor(0.086, 0.075, 0.06, 0.95)
-            b:SetBackdropBorderColor(0.23, 0.20, 0.15, 1)
+            b:SetBackdropColor(0.06, 0.052, 0.042, 0.95)
+            b:SetBackdropBorderColor(0.18, 0.16, 0.12, 1)
             b.label:SetTextColor(INK_DIM[1], INK_DIM[2], INK_DIM[3])
         end
     end
@@ -951,7 +961,7 @@ end
 -- broadcast; totem/duty rows clear for every caster you may edit).
 local function ClearCurrentTab()
     if currentTab == 1 then
-        testBless = {}
+        RallyPowerCP_Settings.testBless = nil
         if PallyPower_Clear then PallyPower_Clear() end
         Msg("Blessing assignments cleared (for everyone you may edit).")
     elseif currentTab == 2 then
@@ -1053,8 +1063,8 @@ local function CreatePanel()
     for i = 1, table.getn(TAB_INFO) do
         local idx = i
         local b = CreateFrame("Button", nil, f)
-        b:SetWidth(104); b:SetHeight(24)
-        b:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 106, -50)
+        b:SetWidth(114); b:SetHeight(26)
+        b:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 116, -50)
         b:SetBackdrop(CELL_BD)
         local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         fs:SetPoint("CENTER", b, "CENTER", 0, 0)
@@ -1066,8 +1076,9 @@ local function CreatePanel()
     end
 
     -- content box
+    -- tabs sit flush on the box top edge (concept: attached tabs)
     local box = CreateFrame("Frame", nil, f)
-    box:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -76)
+    box:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -75)
     box:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -14, 62)
     box:SetBackdrop(PANEL_BD)
     box:SetBackdropColor(0.08, 0.072, 0.058, 0.9)
@@ -1086,22 +1097,22 @@ local function CreatePanel()
         p:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
         p:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -10, 6)
         p:Hide()
-        local t = Fnt(p, 14, GOLD_BRIGHT)
+        local t = Fnt(p, 15, GOLD_BRIGHT)
         t:SetPoint("TOPLEFT", p, "TOPLEFT", 0, 0)
         t:SetText(CHROME[i][1])
         local d = Fnt(p, 10, INK_DIM)
-        d:SetWidth(370); d:SetHeight(11)
-        d:SetPoint("TOPLEFT", p, "TOPLEFT", 0, -20)
+        d:SetWidth(430); d:SetHeight(11)
+        d:SetPoint("TOPLEFT", p, "TOPLEFT", 0, -21)
         d:SetText(CHROME[i][2])
         p.note = Fnt(p, 11, GOLD, "RIGHT")
         p.note:SetWidth(130); p.note:SetHeight(12)
         p.note:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, -4)
         p.hint = Fnt(p, 9, INK_FAINT)
-        p.hint:SetWidth(518); p.hint:SetHeight(22)
+        p.hint:SetWidth(588); p.hint:SetHeight(22)
         p.hint:SetJustifyV("BOTTOM")
         p.hint:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 14)
         p.cover = Fnt(p, 10, INK_DIM)
-        p.cover:SetWidth(518); p.cover:SetHeight(11)
+        p.cover:SetWidth(588); p.cover:SetHeight(11)
         p.cover:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 1)
         panels[i] = p
     end
