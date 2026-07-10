@@ -137,12 +137,17 @@ end
 function A.CanEdit(editor, caster)
     if editor == caster then return true end
     if editor == UnitName("player") then
+        -- Test mode previews a full fake raid - every row is editable so the
+        -- whole panel can be exercised solo (nothing broadcasts pre-sync, and
+        -- PruneToRoster sweeps the fakes when test mode turns off).
+        if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return true end
         if GetNumRaidMembers() > 0 then
             return (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
         end
         if GetNumPartyMembers() > 0 then
             return IsPartyLeader() == 1
         end
+        return true   -- solo: you lead a party of one
     end
     return false
 end
