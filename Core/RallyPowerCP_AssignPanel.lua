@@ -38,8 +38,8 @@ local A = RallyPowerCP.Assign   -- loads before this file (TOC order)
 -- theme (colors lifted from the concept page)
 --------------------------------------------------------------------------
 
-local FRAME_W, FRAME_H = 700, 640
-local NAME_W   = 118         -- caster-name column
+local FRAME_W, FRAME_H = 760, 680
+local NAME_W   = 170         -- caster-name + skills column (blessings tab)
 local ROW_H    = 40
 local CELL_H   = 36          -- concept cells, scaled to fit ten columns
 local MAX_ROWS = 8           -- pooled caster rows per grid tab
@@ -73,15 +73,16 @@ local CLASS_LABEL = { [0] = "Warrior", "Rogue", "Priest", "Druid", "Paladin",
                       "Aura", "Seal" }
 local BLESS_COLS = 11        -- grid columns run 0..11
 local FAKE_MAX = { [10] = 6, [11] = 5 }   -- preview cycle: 7 auras, 6 seals
-local BLESS_ROWS = 7         -- blessing rows are taller (skills strip below the name)
-local BLESS_ROW_H = 50
+local BLESS_ROWS = 6         -- blessing rows are tall (two skills strips)
+local BLESS_ROW_H = 62
 
 -- display order: Aura and Seal lead the grid (slots 1-2), then the classes
 local COL_AT = { [0] = 10, [1] = 11 }
 for c = 0, 9 do COL_AT[c + 2] = c end
 
--- vanilla max ranks per blessing id (preview paladins only)
+-- vanilla max ranks (preview paladins only)
 local BLESS_MAXRANK = { [0] = 6, 7, 1, 3, 1, 1 }
+local AURA_MAXRANK  = { [0] = 7, 5, 1, 3, 3, 3, 1 }
 
 local PANEL_BD = {
     bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -393,6 +394,19 @@ local function BlessNameFor(class, bid)
     return t and t[bid]
 end
 
+-- Full spellbook name for a cell. The legacy ID tables hold SHORT names
+-- ("Wisdom", "Retribution", "the Crusader") - rebuilt here with the same
+-- patterns the locale scans with ("Blessing of (.*)", "(.*) Aura",
+-- "Seal of (.*)"), so FindSpell can hit the real spellbook entry and the
+-- tooltip can show the actual spell text.
+local function BlessSpellName(class, bid)
+    local short = BlessNameFor(class, bid)
+    if not short then return nil end
+    if class == 10 then return short .. " Aura" end
+    if class == 11 then return "Seal of " .. short end
+    return "Blessing of " .. short
+end
+
 -- letter fallback when the icon tables aren't populated (odd class states)
 local function BlessAbbrev(class, bid)
     local n = BlessNameFor(class, bid)
@@ -417,6 +431,22 @@ local function SkillsFor(pally)
     local sk = AllPallys and AllPallys[pally]
     if not sk then return nil end
     return sk, sk.symbols
+end
+
+-- Aura ranks/talents for the second skills row (talents improve auras, so
+-- the assigner can see who's best specced for the aura duty).
+local function AuraSkillsFor(pally)
+    if IsFakeRow(pally) then
+        local out = {}
+        for id = 0, 6 do
+            local tal = 0
+            if SPEC[pally] == "Protection" and id == 0 then tal = 5 end   -- Devotion
+            if SPEC[pally] == "Retribution" and id == 1 then tal = 3 end  -- Retribution
+            out[id] = { rank = AURA_MAXRANK[id], talent = tal }
+        end
+        return out
+    end
+    return AllPallysAuras and AllPallysAuras[pally]
 end
 
 local function BlessCycle(pally, class, dir)
@@ -466,7 +496,7 @@ local function BlessCellTip()
     local spellName = (bid >= 0) and BlessNameFor(class, bid) or nil
     -- real spell tooltip first (description readable by the assigner),
     -- assignment context appended under it
-    if spellName and SpellTip(this, spellName) then
+    if spellName and SpellTip(this, BlessSpellName(class, bid)) then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(pally .. "  -  " .. (CLASS_LABEL[class] or "?"), 1, 1, 1)
     else
@@ -499,16 +529,23 @@ local function BuildBlessings(p)
         l:SetText(CLASS_LABEL[c])
         blessHeader[c] = t
     end
+    -- separator between the name/skills column and the assignment grid
+    local sep = p:CreateTexture(nil, "ARTWORK")
+    sep:SetTexture(0.78, 0.67, 0.43)
+    sep:SetAlpha(0.25)
+    sep:SetWidth(1); sep:SetHeight(44 + BLESS_ROWS * BLESS_ROW_H)
+    sep:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W - 12, -40)
     for r = 1, BLESS_ROWS do
-        local row = { cells = {}, skillIcon = {}, skillText = {} }
+        local row = { cells = {}, skillIcon = {}, skillText = {},
+                      auraIcon = {}, auraText = {} }
         local y = -84 - (r - 1) * BLESS_ROW_H
         row.name = Fnt(p, 11, INK)
-        row.name:SetWidth(NAME_W - 10); row.name:SetHeight(12)
+        row.name:SetWidth(NAME_W - 22); row.name:SetHeight(12)
         row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 2)
         row.sub = Fnt(p, 8, INK_FAINT)
-        row.sub:SetWidth(NAME_W - 10); row.sub:SetHeight(9)
+        row.sub:SetWidth(NAME_W - 22); row.sub:SetHeight(9)
         row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 15)
-        -- skills strip: the paladin's six blessings, rank+talent on each icon
+        -- skills strip 1: the paladin's six blessings, rank+talent on each icon
         for id = 0, 5 do
             local si = p:CreateTexture(nil, "ARTWORK")
             si:SetWidth(15); si:SetHeight(15)
@@ -519,6 +556,18 @@ local function BuildBlessings(p)
             st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 3, -2)
             row.skillIcon[id] = si
             row.skillText[id] = st
+        end
+        -- skills strip 2: their seven auras (talents improve auras)
+        for id = 0, 6 do
+            local si = p:CreateTexture(nil, "ARTWORK")
+            si:SetWidth(15); si:SetHeight(15)
+            si:SetPoint("TOPLEFT", p, "TOPLEFT", 6 + id * 19, y - 44)
+            si:Hide()
+            local st = Fnt(p, 7, GOLD_BRIGHT, "RIGHT")
+            st:SetWidth(22); st:SetHeight(8)
+            st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 3, -2)
+            row.auraIcon[id] = si
+            row.auraText[id] = st
         end
         for pos = 0, BLESS_COLS do
             local c = COL_AT[pos]
@@ -568,7 +617,7 @@ local function RefreshBlessings(p)
                 sub = sub .. "  |cffffe080" .. symbols .. " sym|r"
             end
             row.sub:SetText(sub)
-            -- skills strip: available blessings, "rank+talent" on each icon
+            -- skills strip 1: available blessings, "rank+talent" on each icon
             for id = 0, 5 do
                 local entry = sk and sk[id]
                 if type(entry) == "table" and entry.rank then
@@ -580,6 +629,21 @@ local function RefreshBlessings(p)
                 else
                     row.skillIcon[id]:Hide()
                     row.skillText[id]:Hide()
+                end
+            end
+            -- skills strip 2: their auras with rank+talent
+            local ak = AuraSkillsFor(pally)
+            for id = 0, 6 do
+                local entry = ak and ak[id]
+                if type(entry) == "table" and entry.rank then
+                    row.auraIcon[id]:SetTexture(AuraIcons and AuraIcons[id])
+                    row.auraIcon[id]:Show()
+                    local tal = tonumber(entry.talent) or 0
+                    row.auraText[id]:SetText(entry.rank .. (tal > 0 and ("+" .. tal) or ""))
+                    row.auraText[id]:Show()
+                else
+                    row.auraIcon[id]:Hide()
+                    row.auraText[id]:Hide()
                 end
             end
             for c = 0, BLESS_COLS do
@@ -613,6 +677,9 @@ local function RefreshBlessings(p)
             row.name:SetText(""); row.sub:SetText("")
             for id = 0, 5 do
                 row.skillIcon[id]:Hide(); row.skillText[id]:Hide()
+            end
+            for id = 0, 6 do
+                row.auraIcon[id]:Hide(); row.auraText[id]:Hide()
             end
             for c = 0, BLESS_COLS do row.cells[c]:Hide() end
         end
@@ -648,7 +715,7 @@ end
 --------------------------------------------------------------------------
 
 local totemRows = {}
-local PARTY_W, ELEM_W = 64, 112
+local PARTY_W, ELEM_W = 64, 116
 
 local function ShortTotem(name)
     if not name then return nil end
@@ -938,20 +1005,20 @@ local function BuildDutyTab(p, tabIndex)
     for i = 1, DUTY_POOL do
         local col = math.mod(i - 1, 2)          -- 0 left, 1 right
         local rowN = math.floor((i - 1) / 2)
-        local card = MakeCell(p, 320, 46)
-        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 330, -46 - rowN * 48)
+        local card = MakeCell(p, 346, 46)
+        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 366, -46 - rowN * 48)
         local icon = card:CreateTexture(nil, "ARTWORK")
         icon:SetWidth(32); icon:SetHeight(32)
         icon:SetPoint("LEFT", card, "LEFT", 8, 0)
         card.icon = icon
         card.name = Fnt(card, 11, INK)
-        card.name:SetWidth(180); card.name:SetHeight(12)
+        card.name:SetWidth(200); card.name:SetHeight(12)
         card.name:SetPoint("TOPLEFT", card, "TOPLEFT", 48, -9)
         card.sub = Fnt(card, 9, INK_FAINT)
-        card.sub:SetWidth(180); card.sub:SetHeight(10)
+        card.sub:SetWidth(200); card.sub:SetHeight(10)
         card.sub:SetPoint("TOPLEFT", card, "TOPLEFT", 48, -26)
         card.holder = Fnt(card, 11, INK, "RIGHT")
-        card.holder:SetWidth(84); card.holder:SetHeight(12)
+        card.holder:SetWidth(90); card.holder:SetHeight(12)
         card.holder:SetPoint("RIGHT", card, "RIGHT", -8, 0)
         card:SetScript("OnClick", DutyCardClick)
         card:SetScript("OnMouseWheel", DutyCardWheel)
@@ -1245,18 +1312,18 @@ local function CreatePanel()
         t:SetPoint("TOPLEFT", p, "TOPLEFT", 0, 0)
         t:SetText(CHROME[i][1])
         local d = Fnt(p, 10, INK_DIM)
-        d:SetWidth(470); d:SetHeight(11)
+        d:SetWidth(520); d:SetHeight(11)
         d:SetPoint("TOPLEFT", p, "TOPLEFT", 0, -21)
         d:SetText(CHROME[i][2])
         p.note = Fnt(p, 11, GOLD, "RIGHT")
         p.note:SetWidth(130); p.note:SetHeight(12)
         p.note:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, -4)
         p.hint = Fnt(p, 9, INK_FAINT)
-        p.hint:SetWidth(648); p.hint:SetHeight(22)
+        p.hint:SetWidth(708); p.hint:SetHeight(22)
         p.hint:SetJustifyV("BOTTOM")
         p.hint:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 14)
         p.cover = Fnt(p, 10, INK_DIM)
-        p.cover:SetWidth(648); p.cover:SetHeight(11)
+        p.cover:SetWidth(708); p.cover:SetHeight(11)
         p.cover:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 1)
         panels[i] = p
     end
