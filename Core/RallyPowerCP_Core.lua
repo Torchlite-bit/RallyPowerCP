@@ -1430,6 +1430,11 @@ function RallyPowerCP_SetTestMode(on)
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
     else
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Test mode off - back to live casting and your real spellbook.")
+        -- Leaving test mode drops the preview raid's totem/duty rows from the
+        -- assignment store (your own block survives PruneToRoster).
+        if RallyPowerCP.Assign then
+            RallyPowerCP.Assign.PruneToRoster()
+        end
     end
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()

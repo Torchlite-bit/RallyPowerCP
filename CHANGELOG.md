@@ -47,6 +47,38 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Changed (assignment panel rebuilt to the concept spec)
+The panel now follows `docs/RallyPowerCP_assignment_concept.html` instead of
+approximating it: a 566×612 gold-framed "Who Covers What" dialog with status
+pills (Lead/Solo, clickable **Free Assign** toggle, PLPWR sync, TEST RAID),
+concept-styled tabs (green dot = live, amber = local-until-sync), per-tab
+header/description, class-coloured caster rows with spec subtitles, chip-style
+cells (blessing icons, element-coloured totem chips, "+" empty cells), a
+**coverage line** (red "No blessing: Priest, Shaman" / green all-covered), and
+duty tabs rendered as two-column **cards** with icons and class-coloured
+holder names plus an "N/M assigned" counter.
+- **Test mode seats a full 40-man preview raid** of lore characters (Varian,
+  Uther, Arthas, Thrall, Jaina, Sylvanas, …) covering every class **and spec**,
+  so every tab is exercisable solo. Preview blessing edits stay in a
+  session-only table (the legacy tables and the PLPWR wire never see fake
+  names); preview totem/duty rows are swept by `PruneToRoster` when test mode
+  turns off.
+- **Classic bottom-button row** (same features as the PallyPower frame):
+  **Refresh** (legacy rescan + REQ broadcast), **Clear** (current tab;
+  blessings go through the byte-compatible legacy `CLEAR`), **Options** (opens
+  the RallyPowerCP tabbed options), **Reset Position**, and **Presets**
+  (paladins; the same presets dropdown as the classic frame).
+- **Right-clicking the paladin buff bar now opens this panel** (left-click
+  keeps the classic assignment frame; graft replaces
+  `PallyPowerBuffBar_MouseUp` — `PallyPower.lua` untouched), and the classic
+  frame's **Options button now opens the RallyPowerCP options panel**
+  (`/rpc legacy` still reaches the old options frame).
+- **Permission fixes**: `Assign.CanEdit` now treats solo players as their own
+  leader and allows every edit in test mode, so totem/duty assignment works
+  outside a group (previously a solo shaman couldn't cycle other rows at all);
+  the panel repaint is wrapped in `pcall` and reports errors to chat instead
+  of leaving a half-drawn grid. The panel position is saved per character.
+
 ### Added (Assignment & Sync — step 3: the assignment panel)
 One frame for the whole raid's assignments (`Core/RallyPowerCP_AssignPanel.lua`),
 opened by **right-clicking a strip's title area** or **`/rpc assign`** (works for

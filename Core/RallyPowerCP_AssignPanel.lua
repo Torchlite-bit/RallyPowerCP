@@ -1,197 +1,352 @@
 --=============================================================================
--- RallyPowerCP_AssignPanel.lua  -  the assignment panel (milestone step 3)
+-- RallyPowerCP_AssignPanel.lua  -  "Who covers what" (milestone step 3)
 --
--- Five tabs over the two assignment stores:
+-- The raid-leader coordination grid, styled after
+-- docs\RallyPowerCP_assignment_concept.html: dark gold-framed panel, five
+-- tabs, class-coloured caster rows, chip cells, a coverage line, and the
+-- classic PallyPower bottom-button row (Refresh / Clear / Options / Reset
+-- Position / Presets).
 --
---   Blessings  LIVE against the legacy PallyPower engine: rows are the
---              paladins known from PLPWR SELF broadcasts (AllPallys), cells
---              cycle through PallyPower_PerformCycle/Backwards - the SAME
---              functions the /pp grid uses - so every edit writes the legacy
---              tables and sends the byte-identical ASSIGN message. A paladin
---              can use this panel INSTEAD of the /pp grid, and raid paladins
---              running stock PallyPower/PallyPowerTW receive the assignments
---              exactly as if they came from it. (/pp remains available.)
---   Totems     shaman x element grid + covered party, over RallyPowerCP_Assign.
---   Buffs / Debuffs / Utility
---              duty lists from the module-declared catalog, over
---              RallyPowerCP_Assign: click cycles who's responsible.
+--   Blessings   LIVE against the legacy PallyPower engine: rows are the
+--               paladins known from PLPWR SELF broadcasts (AllPallys), cells
+--               cycle through PallyPower_PerformCycle/Backwards - the SAME
+--               functions the /pp grid uses - so every edit writes the legacy
+--               tables and sends the byte-identical ASSIGN message. Paladins
+--               on stock PallyPower/PallyPowerTW interoperate unchanged.
+--   Totems      shaman x element grid + covered party, over RallyPowerCP_Assign.
+--   Raid Buffs / Debuffs / Utility
+--               duty cards from the module-declared catalog: click cycles
+--               who's responsible. Local until the sync milestone.
 --
--- The non-blessing tabs are LOCAL until the sync milestone: your own row is
--- authoritative (the strips already follow it); rows you set for others are a
--- leader's local plan that will start broadcasting when RPCX sync lands.
+-- TEST MODE seats a full fake 40-man raid of lore characters (every class,
+-- with specs) so each tab is exercisable solo. Fake blessing edits stay in a
+-- session-only table (the legacy tables and the PLPWR wire are never touched
+-- for fake names); fake totem/duty rows live in the normal store and are
+-- swept by PruneToRoster when test mode turns off.
 --
--- Entry points: right-click a strip's title area, or /rpc assign.
+-- Entry points: right-click a strip's title area, right-click the paladin
+-- buff bar (grafted below - PallyPower.lua stays untouched), or /rpc assign.
 -- 1.12 rules: pooled rows (frames can't be deleted), implicit this/arg1,
 -- Lua 5.0 (table.getn, no #/gmatch/select/%).
 --=============================================================================
 
 RallyPowerCP_Settings = RallyPowerCP_Settings or {}
 
-local FRAME_W, FRAME_H = 470, 440
-local NAME_W   = 92          -- row-label column width
-local CELL     = 24          -- blessing cell pitch (22px button + 2 gap)
-local ROW_H    = 24
-local MAX_ROWS = 10          -- pooled rows per tab (plenty for one raid)
+local A = RallyPowerCP.Assign   -- loads before this file (TOC order)
 
-local frame                  -- the panel (created lazily)
-local tabBtns  = {}
-local panels   = {}
-local currentTab
+--------------------------------------------------------------------------
+-- theme (colors lifted from the concept page)
+--------------------------------------------------------------------------
 
-local TAB_INFO = {
-    { label = "Blessings" },
-    { label = "Totems"    },
-    { label = "Buffs"     },
-    { label = "Debuffs"   },
-    { label = "Utility"   },
+local FRAME_W, FRAME_H = 566, 612
+local NAME_W   = 112         -- caster-name column
+local ROW_H    = 36
+local CELL_H   = 32
+local MAX_ROWS = 10          -- pooled caster rows per grid tab
+local DUTY_POOL = 16         -- pooled duty cards (2 columns x 8 rows)
+
+local GOLD        = { 0.78, 0.67, 0.43 }
+local GOLD_BRIGHT = { 0.96, 0.88, 0.66 }
+local GOLD_DIM    = { 0.48, 0.40, 0.26 }
+local INK         = { 0.91, 0.87, 0.78 }
+local INK_DIM     = { 0.60, 0.56, 0.47 }
+local INK_FAINT   = { 0.44, 0.40, 0.33 }
+local OK_GREEN    = { 0.36, 0.88, 0.48 }
+local GAP_RED     = { 1.00, 0.42, 0.42 }
+
+local CLASS_RGB = {
+    WARRIOR = { 0.78, 0.61, 0.43 }, PALADIN = { 0.96, 0.55, 0.73 },
+    HUNTER  = { 0.67, 0.83, 0.45 }, ROGUE   = { 1.00, 0.96, 0.41 },
+    PRIEST  = { 0.92, 0.92, 0.92 }, SHAMAN  = { 0.23, 0.63, 1.00 },
+    MAGE    = { 0.41, 0.80, 0.94 }, WARLOCK = { 0.58, 0.51, 0.79 },
+    DRUID   = { 1.00, 0.49, 0.04 },
 }
-local DUTY_TAB = { [3] = "raidbuff", [4] = "debuff", [5] = "utility" }
+local ECOL = {
+    Earth = { 0.55, 0.35, 0.17 }, Fire = { 0.83, 0.41, 0.12 },
+    Water = { 0.18, 0.50, 0.69 }, Air  = { 0.12, 0.62, 0.53 },
+}
 
--- Same skin family as the strips/options (Smooth + tooltip border).
-local TAB_SKIN = {
+-- legacy blessing-grid class ids 0-9 (PallyPower's own column order)
+local CLASS_LABEL = { [0] = "Warrior", "Rogue", "Priest", "Druid", "Paladin",
+                      "Hunter", "Mage", "Warlock", "Shaman", "Pet" }
+
+local PANEL_BD = {
+    bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 14,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+}
+local CELL_BD = {
     bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
 }
 
+-- Icon paths are DISPLAY-ONLY fallbacks for duties of other classes (your own
+-- class resolves from the spellbook first). Verify on Turtle; fix here.
+local DUTY_ICONS = {
+    FORTITUDE   = "Interface\\Icons\\Spell_Holy_WordFortitude",
+    SPIRIT      = "Interface\\Icons\\Spell_Holy_DivineSpirit",
+    SHADOWPROT  = "Interface\\Icons\\Spell_Shadow_AntiShadow",
+    INTELLECT   = "Interface\\Icons\\Spell_Holy_MagicalSentry",
+    MARK        = "Interface\\Icons\\Spell_Nature_Regeneration",
+    THORNS      = "Interface\\Icons\\Spell_Nature_Thorns",
+    SUNDER      = "Interface\\Icons\\Ability_Warrior_Sunder",
+    THUNDERCLAP = "Interface\\Icons\\Spell_Nature_ThunderClap",
+    DEMOSHOUT   = "Interface\\Icons\\Ability_Warrior_WarCry",
+    EXPOSE      = "Interface\\Icons\\Ability_Warrior_Riposte",
+    SCORCH      = "Interface\\Icons\\Spell_Fire_SoulBurn",
+    CURSE_ELEMENTS     = "Interface\\Icons\\Spell_Shadow_ChillTouch",
+    CURSE_SHADOW       = "Interface\\Icons\\Spell_Shadow_CurseOfAchimonde",
+    CURSE_WEAKNESS     = "Interface\\Icons\\Spell_Shadow_CurseOfMannoroth",
+    CURSE_RECKLESSNESS = "Interface\\Icons\\Spell_Shadow_UnholyStrength",
+    CURSE_TONGUES      = "Interface\\Icons\\Spell_Shadow_CurseOfTounges",
+    CURSE_AGONY        = "Interface\\Icons\\Spell_Shadow_CurseOfSargeras",
+    CURSE_DOOM         = "Interface\\Icons\\Spell_Shadow_AuraOfDarkness",
+    STING_SERPENT = "Interface\\Icons\\Ability_Hunter_Quickshot",
+    STING_VIPER   = "Interface\\Icons\\Ability_Hunter_AimedShot",
+    STING_SCORPID = "Interface\\Icons\\Ability_Hunter_CriticalShot",
+    SOULSTONE   = "Interface\\Icons\\Spell_Shadow_SoulGem",
+    FEARWARD    = "Interface\\Icons\\Spell_Holy_Excorcism",
+    PWSHIELD    = "Interface\\Icons\\Spell_Holy_PowerWordShield",
+    INNERVATE   = "Interface\\Icons\\Spell_Nature_Lightning",
+}
+
+--------------------------------------------------------------------------
+-- test-mode preview raid: 40 lore characters, every class and spec.
+-- Session-only names; nothing about them ever reaches the PLPWR wire.
+--------------------------------------------------------------------------
+
+local ROSTER40 = {
+    { "Varian",     "WARRIOR", "Protection" },
+    { "Grommash",   "WARRIOR", "Fury" },
+    { "Saurfang",   "WARRIOR", "Arms" },
+    { "Muradin",    "WARRIOR", "Fury" },
+    { "Broxigar",   "WARRIOR", "Arms" },
+    { "Garrosh",    "WARRIOR", "Fury" },
+    { "Valeera",    "ROGUE",   "Combat" },
+    { "Garona",     "ROGUE",   "Subtlety" },
+    { "Mathias",    "ROGUE",   "Assassination" },
+    { "Vanessa",    "ROGUE",   "Combat" },
+    { "Rexxar",     "HUNTER",  "Beast Mastery" },
+    { "Alleria",    "HUNTER",  "Marksmanship" },
+    { "Sylvanas",   "HUNTER",  "Marksmanship" },
+    { "Halduron",   "HUNTER",  "Survival" },
+    { "Jaina",      "MAGE",    "Frost" },
+    { "Khadgar",    "MAGE",    "Arcane" },
+    { "Antonidas",  "MAGE",    "Frost" },
+    { "Rhonin",     "MAGE",    "Fire" },
+    { "Aegwynn",    "MAGE",    "Arcane" },
+    { "Guldan",     "WARLOCK", "Destruction" },
+    { "Wilfred",    "WARLOCK", "Affliction" },
+    { "Ritssyn",    "WARLOCK", "Demonology" },
+    { "Kanrethad",  "WARLOCK", "Destruction" },
+    { "Anduin",     "PRIEST",  "Holy" },
+    { "Velen",      "PRIEST",  "Discipline" },
+    { "Tyrande",    "PRIEST",  "Holy" },
+    { "Moira",      "PRIEST",  "Shadow" },
+    { "Benedictus", "PRIEST",  "Holy" },
+    { "Whitemane",  "PRIEST",  "Discipline" },
+    { "Malfurion",  "DRUID",   "Restoration" },
+    { "Cenarius",   "DRUID",   "Balance" },
+    { "Hamuul",     "DRUID",   "Restoration" },
+    { "Fandral",    "DRUID",   "Feral" },
+    { "Thrall",     "SHAMAN",  "Enhancement" },
+    { "Drekthar",   "SHAMAN",  "Restoration" },
+    { "Nobundo",    "SHAMAN",  "Elemental" },
+    { "Rehgar",     "SHAMAN",  "Enhancement" },
+    { "Uther",      "PALADIN", "Holy" },
+    { "Arthas",     "PALADIN", "Retribution" },
+    { "Tirion",     "PALADIN", "Protection" },
+}
+local FAKE, SPEC = {}, {}
+for _, r in ipairs(ROSTER40) do FAKE[r[1]] = r[2]; SPEC[r[1]] = r[3] end
+
+--------------------------------------------------------------------------
+-- shared state + small helpers
+--------------------------------------------------------------------------
+
+local frame                  -- the panel (created lazily)
+local tabBtns  = {}
+local panels   = {}
+local currentTab
+local pills    = {}
+local testBless = {}         -- [fakePally][classID] = bid; session-only
+
+local TAB_INFO = {
+    { label = "Blessings",  live = true  },
+    { label = "Totems",     live = false },
+    { label = "Raid Buffs", live = false },
+    { label = "Debuffs",    live = false },
+    { label = "Utility",    live = false },
+}
+local DUTY_TAB = { [3] = "raidbuff", [4] = "debuff", [5] = "utility" }
+
 local function Me() return UnitName("player") end
 
--- Leader-like: may edit OTHER people's rows (solo counts - there's only you).
+local function Msg(t)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. t)
+end
+
+local function TitleCase(s)
+    if not s then return "?" end
+    return string.upper(string.sub(s, 1, 1)) .. string.lower(string.sub(s, 2))
+end
+
+-- May I edit OTHER people's rows? (test mode = always: it's a preview)
 local function LeaderLike()
+    if RallyPowerCP.IsTestMode() then return true end
     if GetNumRaidMembers() > 0 then
         return (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
     end
     if GetNumPartyMembers() > 0 then
         return IsPartyLeader() == 1
     end
-    return true
+    return true   -- solo: you lead a party of one
 end
 
--- Group members of one class token, self included. In test mode you are
--- always a candidate, so every tab is exercisable solo.
+-- Group members of one class token: you first, then the real roster, then
+-- (test mode) the preview raid's members of that class.
 local function MembersOfClass(token)
-    local out = {}
+    local out, seen = {}, {}
+    local function add(name)
+        if name and not seen[name] then seen[name] = true; table.insert(out, name) end
+    end
+    local _, mycls = UnitClass("player")
+    if mycls == token then add(Me()) end
     local n = GetNumRaidMembers()
     if n > 0 then
         for i = 1, n do
             local u = "raid" .. i
             local _, cls = UnitClass(u)
-            if cls == token and UnitName(u) then table.insert(out, UnitName(u)) end
+            if cls == token then add(UnitName(u)) end
         end
     else
-        local _, mycls = UnitClass("player")
-        if mycls == token then table.insert(out, Me()) end
         for i = 1, GetNumPartyMembers() do
             local u = "party" .. i
             local _, cls = UnitClass(u)
-            if cls == token and UnitName(u) then table.insert(out, UnitName(u)) end
+            if cls == token then add(UnitName(u)) end
         end
     end
-    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then
-        local seen = false
-        for i = 1, table.getn(out) do if out[i] == Me() then seen = true end end
-        if not seen then table.insert(out, 1, Me()) end
+    if RallyPowerCP.IsTestMode() then
+        for _, r in ipairs(ROSTER40) do
+            if r[2] == token then add(r[1]) end
+        end
     end
     return out
 end
 
-local function TitleCase(s)
-    return string.upper(string.sub(s, 1, 1)) .. string.lower(string.sub(s, 2))
+-- Row subtitle: "Holy Paladin *" for preview raiders, "Paladin - you" for
+-- yourself, plain class for everyone else.
+local function SubFor(name, token)
+    if RallyPowerCP.IsTestMode() and FAKE[name] and name ~= Me() then
+        return (SPEC[name] or "") .. " " .. TitleCase(FAKE[name]) .. " |cffff8800*|r"
+    end
+    if name == Me() then return TitleCase(token) .. " - you" end
+    return TitleCase(token)
 end
 
-local function Msg(t)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. t)
+local function ElementList()
+    if A and table.getn(A.elements) > 0 then return A.elements end
+    return { "Earth", "Fire", "Water", "Air" }
 end
 
---------------------------------------------------------------------------
--- shared widget helpers (cells are skinned Buttons; rows are pooled)
---------------------------------------------------------------------------
-
-local function MakeCell(parent, w)
-    local b = CreateFrame("Button", nil, parent)
-    b:SetWidth(w); b:SetHeight(20)
-    b:SetBackdrop(TAB_SKIN)
-    b:SetBackdropColor(0.25, 0.25, 0.25, 0.5)
-    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b:EnableMouseWheel(true)
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(b); hl:SetTexture(1, 1, 1, 0.18)
-    local fs = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("CENTER", b, "CENTER", 0, 0)
-    b.text = fs
-    return b
-end
-
-local function MakeIconCell(parent)
-    local b = CreateFrame("Button", nil, parent)
-    b:SetWidth(22); b:SetHeight(22)
-    b:SetBackdrop(TAB_SKIN)
-    b:SetBackdropColor(0.25, 0.25, 0.25, 0.5)
-    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b:EnableMouseWheel(true)
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(b); hl:SetTexture(1, 1, 1, 0.18)
-    local icon = b:CreateTexture(nil, "ARTWORK")
-    icon:SetWidth(18); icon:SetHeight(18)
-    icon:SetPoint("CENTER", b, "CENTER", 0, 0)
-    b.icon = icon
-    return b
-end
-
-local function RowLabel(parent)
-    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    fs:SetWidth(NAME_W - 4); fs:SetHeight(16)
-    fs:SetJustifyH("LEFT")
+-- 9px/10px themed FontString factory
+local function Fnt(parent, size, c, justify)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    fs:SetFont("Fonts\\FRIZQT__.TTF", size)
+    fs:SetTextColor(c[1], c[2], c[3])
+    fs:SetJustifyH(justify or "LEFT")
     return fs
 end
 
--- one wrapped grey note per panel (local-until-sync, empty states, hints)
-local function MakeNote(parent)
-    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetWidth(FRAME_W - 40); fs:SetHeight(30)
-    fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
-    return fs
+-- skinned clickable cell (grid cells, chips, cards all start here)
+local function MakeCell(parent, w, h)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetWidth(w); b:SetHeight(h)
+    b:SetBackdrop(CELL_BD)
+    b:SetBackdropColor(0.10, 0.088, 0.07, 0.92)
+    b:SetBackdropBorderColor(0.05, 0.05, 0.05, 1)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:EnableMouseWheel(true)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(b); hl:SetTexture(1, 1, 1, 0.13)
+    return b
 end
 
-local RefreshCurrent   -- forward declaration
+local RefreshCurrent   -- forward declaration (handlers below close over it)
 
 --------------------------------------------------------------------------
--- BLESSINGS TAB (live: the legacy engine's own data and cycle functions)
+-- BLESSINGS TAB - live rows through the legacy engine; preview rows local
 --------------------------------------------------------------------------
 
-local blessRows = {}       -- pooled: { label, cells = {1..10} }
-local blessHeader = {}     -- 10 class-icon textures
-local blessNote
+local blessRows   = {}
+local blessHeader = {}
 
+-- A row is a "preview" row when the name is a test-raid paladin that the
+-- legacy engine does NOT know (a real guildie named Uther stays real).
+local function IsFakeRow(name)
+    if not RallyPowerCP.IsTestMode() then return false end
+    if AllPallys and AllPallys[name] then return false end
+    return FAKE[name] == "PALADIN"
+end
+
+-- Paladin rows: you first, the real AllPallys sorted, then the preview raid.
 local function PallyList()
-    local out = {}
+    local out, seen = {}, {}
     if AllPallys then
-        for name in pairs(AllPallys) do table.insert(out, name) end
+        for name in pairs(AllPallys) do
+            if not seen[name] then seen[name] = true; table.insert(out, name) end
+        end
     end
     table.sort(out)
+    for i, n in ipairs(out) do
+        if n == Me() then table.remove(out, i); table.insert(out, 1, n); break end
+    end
+    if RallyPowerCP.IsTestMode() then
+        for _, r in ipairs(ROSTER40) do
+            if r[2] == "PALADIN" and not seen[r[1]] then
+                seen[r[1]] = true; table.insert(out, r[1])
+            end
+        end
+    end
     return out
 end
 
-local function BlessCellTip()
-    if RallyPowerCP_Settings.tooltips == false then return end
-    local pally, class = this.pally, this.classID
-    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-    local clsName = (PallyPower_ClassID and PallyPower_ClassID[class]) or ("Class " .. class)
-    GameTooltip:SetText(pally .. "  -  " .. clsName, 1, 1, 1)
-    local bid = PallyPower_Assignments and PallyPower_Assignments[pally]
-                and PallyPower_Assignments[pally][class] or -1
-    if bid and bid ~= -1 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
-        GameTooltip:AddLine(PallyPower_BlessingID[bid], 0.5, 1, 0.5)
-    else
-        GameTooltip:AddLine("No blessing assigned", 0.7, 0.7, 0.7)
-    end
-    GameTooltip:AddLine("Click: next - Right-click: previous - Wheel: cycle", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Shift: set ALL classes at once", 0.6, 0.6, 0.6)
-    GameTooltip:Show()
+local function BlessBid(pally, class)
+    local t
+    if IsFakeRow(pally) then t = testBless[pally]
+    else t = PallyPower_Assignments and PallyPower_Assignments[pally] end
+    local bid = t and t[class]
+    if bid == nil then bid = -1 end
+    return bid
+end
+
+-- letter fallback when BlessingIcon isn't populated (e.g. odd class states)
+local function BlessAbbrev(bid)
+    local n = PallyPower_BlessingID and PallyPower_BlessingID[bid]
+    if not n then return "?" end
+    local _, _, w = string.find(n, "of%s+(%a+)")
+    return string.sub(w or n, 1, 2)
 end
 
 local function BlessCycle(pally, class, dir)
+    if IsFakeRow(pally) then
+        -- session-only: the wire and the legacy tables never see fake names
+        testBless[pally] = testBless[pally] or {}
+        local cur = testBless[pally][class]
+        if cur == nil then cur = -1 end
+        cur = cur + dir
+        if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
+        if IsShiftKeyDown() then
+            for c = 0, 9 do testBless[pally][c] = cur end
+        else
+            testBless[pally][class] = cur
+        end
+        RefreshCurrent()
+        return
+    end
     if not (PallyPower_CanControl and PallyPower_CanControl(pally)) then
         Msg("You can't assign for " .. pally .. " (need lead/assist, or their Free Assign).")
         return
@@ -203,7 +358,7 @@ local function BlessCycle(pally, class, dir)
     else
         PallyPower_PerformCycle(pally, class, false)
     end
-    if RefreshCurrent then RefreshCurrent() end
+    RefreshCurrent()
 end
 
 local function BlessCellClick()
@@ -214,96 +369,154 @@ local function BlessCellWheel()
     BlessCycle(this.pally, this.classID, (arg1 and arg1 > 0) and -1 or 1)
 end
 
-local function BuildBlessings(panel)
-    -- header: one class icon per column (textures filled at refresh; the
-    -- legacy tables are populated at runtime)
+local function BlessCellTip()
+    if RallyPowerCP_Settings.tooltips == false then return end
+    local pally, class = this.pally, this.classID
+    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+    GameTooltip:SetText(pally .. "  -  " .. (CLASS_LABEL[class] or "?"), 1, 1, 1)
+    local bid = BlessBid(pally, class)
+    if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
+        GameTooltip:AddLine(PallyPower_BlessingID[bid], 0.5, 1, 0.5)
+    else
+        GameTooltip:AddLine("No blessing assigned", 0.7, 0.7, 0.7)
+    end
+    GameTooltip:AddLine("Click: next  -  Right-click: previous  -  Wheel: cycle", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Shift: set ALL classes at once", 0.6, 0.6, 0.6)
+    GameTooltip:Show()
+end
+
+local function BuildBlessings(p)
+    -- column headers: class icon + tiny label
     for c = 0, 9 do
-        local t = panel:CreateTexture(nil, "ARTWORK")
-        t:SetWidth(20); t:SetHeight(20)
-        t:SetPoint("TOPLEFT", panel, "TOPLEFT", NAME_W + c * CELL, -4)
+        local t = p:CreateTexture(nil, "ARTWORK")
+        t:SetWidth(22); t:SetHeight(22)
+        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 40 + 8, -44)
+        local l = Fnt(p, 8, INK_DIM, "CENTER")
+        l:SetWidth(40); l:SetHeight(9)
+        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 40 - 1, -68)
+        l:SetText(CLASS_LABEL[c])
         blessHeader[c] = t
     end
     for r = 1, MAX_ROWS do
         local row = { cells = {} }
-        local y = -28 - (r - 1) * ROW_H
-        row.label = RowLabel(panel)
-        row.label:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, y - 3)
+        local y = -80 - (r - 1) * ROW_H
+        row.name = Fnt(p, 11, INK)
+        row.name:SetWidth(NAME_W - 10); row.name:SetHeight(12)
+        row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 3)
+        row.sub = Fnt(p, 8, INK_FAINT)
+        row.sub:SetWidth(NAME_W - 10); row.sub:SetHeight(9)
+        row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 17)
         for c = 0, 9 do
-            local b = MakeIconCell(panel)
-            b:SetPoint("TOPLEFT", panel, "TOPLEFT", NAME_W + c * CELL, y)
+            local b = MakeCell(p, 38, CELL_H)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 40, y)
             b.classID = c
+            local icon = b:CreateTexture(nil, "ARTWORK")
+            icon:SetWidth(24); icon:SetHeight(24)
+            icon:SetPoint("CENTER", b, "CENTER", 0, 0)
+            b.icon = icon
+            local txt = Fnt(b, 12, GOLD_BRIGHT, "CENTER")
+            txt:SetPoint("CENTER", b, "CENTER", 0, 0)
+            b.text = txt
             b:SetScript("OnClick", BlessCellClick)
             b:SetScript("OnMouseWheel", BlessCellWheel)
             b:SetScript("OnEnter", BlessCellTip)
             b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            b:Hide()
             row.cells[c] = b
         end
         blessRows[r] = row
     end
-    blessNote = MakeNote(panel)
-    blessNote:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 6)
 end
 
-local function RefreshBlessings()
+local function RefreshBlessings(p)
     for c = 0, 9 do
         if PallyPower_ClassTexture and PallyPower_ClassTexture[c] then
             blessHeader[c]:SetTexture(PallyPower_ClassTexture[c])
         end
     end
     local pallys = PallyList()
-    local n = table.getn(pallys)
+    local pc = CLASS_RGB.PALADIN
     for r = 1, MAX_ROWS do
         local row = blessRows[r]
         local pally = pallys[r]
         if pally then
-            local control = PallyPower_CanControl and PallyPower_CanControl(pally)
-            row.label:SetText("|cffffd100" .. pally .. "|r")
+            local fake = IsFakeRow(pally)
+            local control = fake or (PallyPower_CanControl and PallyPower_CanControl(pally))
+            row.name:SetText(pally)
+            row.name:SetTextColor(pc[1], pc[2], pc[3])
+            row.sub:SetText(SubFor(pally, "PALADIN"))
             for c = 0, 9 do
                 local b = row.cells[c]
                 b.pally = pally
-                local bid = PallyPower_Assignments and PallyPower_Assignments[pally]
-                            and PallyPower_Assignments[pally][c] or -1
-                if bid and bid ~= -1 and BlessingIcon and BlessingIcon[bid] then
-                    b.icon:SetTexture(BlessingIcon[bid])
-                    b.icon:SetAlpha(1)
-                    b:SetBackdropColor(0, 0.7, 0, 0.5)
+                local bid = BlessBid(pally, c)
+                if bid >= 0 then
+                    if BlessingIcon and BlessingIcon[bid] then
+                        b.icon:SetTexture(BlessingIcon[bid])
+                        b.icon:Show()
+                        b.text:SetText("")
+                    else
+                        b.icon:Hide()
+                        b.text:SetText(BlessAbbrev(bid))
+                    end
+                    b.icon:SetAlpha(control and 1 or 0.4)
+                    b:SetBackdropColor(0.13, 0.115, 0.085, 0.95)
                 else
-                    b.icon:SetTexture("Interface\\Buttons\\UI-EmptySlot")
-                    b.icon:SetAlpha(0.25)
-                    b:SetBackdropColor(0.25, 0.25, 0.25, 0.5)
+                    b.icon:Hide()
+                    b.text:SetText("+")
+                    b.text:SetTextColor(INK_FAINT[1], INK_FAINT[2], INK_FAINT[3])
+                    b:SetBackdropColor(0.10, 0.088, 0.07, 0.6)
                 end
-                if not control then b.icon:SetAlpha(0.4) end
+                if bid >= 0 then
+                    b.text:SetTextColor(GOLD_BRIGHT[1], GOLD_BRIGHT[2], GOLD_BRIGHT[3])
+                end
                 b:Show()
             end
         else
-            row.label:SetText("")
+            row.name:SetText(""); row.sub:SetText("")
             for c = 0, 9 do row.cells[c]:Hide() end
         end
     end
-    if n == 0 then
-        blessNote:SetText("No paladins known yet. Paladins appear here when they broadcast "
-            .. "on PLPWR (join a group with one, or log in as one). Edits sync to stock "
-            .. "PallyPower users unchanged.")
-    else
-        blessNote:SetText("Click a cell to cycle that paladin's blessing for the class. "
-            .. "Byte-compatible with stock PallyPower - /pp still works too.")
+    -- coverage: any class (pets excluded) nobody blesses
+    if table.getn(pallys) == 0 then
+        p.cover:SetText("")
+        p.hint:SetText("No paladins known yet - they appear when they broadcast on PLPWR "
+            .. "(group with one, or /rpc test for the preview raid).")
+        return
     end
+    local gaps = {}
+    for c = 0, 8 do
+        local got = false
+        for _, pl in ipairs(pallys) do
+            if BlessBid(pl, c) >= 0 then got = true end
+        end
+        if not got then table.insert(gaps, CLASS_LABEL[c]) end
+    end
+    if table.getn(gaps) == 0 then
+        p.cover:SetTextColor(OK_GREEN[1], OK_GREEN[2], OK_GREEN[3])
+        p.cover:SetText("Coverage: every class has a blessing.")
+    else
+        p.cover:SetTextColor(GAP_RED[1], GAP_RED[2], GAP_RED[3])
+        p.cover:SetText("No blessing: " .. table.concat(gaps, ", "))
+    end
+    p.hint:SetText("Click a cell to cycle that paladin's blessing for the class "
+        .. "(right-click backwards, shift = all classes). Byte-compatible with stock PallyPower.")
 end
 
 --------------------------------------------------------------------------
--- TOTEMS TAB (shaman x element + covered party, over the model)
+-- TOTEMS TAB - party column + shaman x element chips, over the model
 --------------------------------------------------------------------------
 
 local totemRows = {}
-local totemNote
-local A = nil            -- RallyPowerCP.Assign, bound at panel creation
+local PARTY_W, ELEM_W = 58, 84
 
 local function ShortTotem(name)
-    if not name then return "|cff888888-|r" end
-    return string.gsub(name, " Totem$", "")
+    if not name then return nil end
+    name = string.gsub(name, " Totem$", "")
+    name = string.gsub(name, "^Strength of ", "Str. of ")
+    name = string.gsub(name, " Resistance$", " Res.")
+    return name
 end
 
--- cycle nil -> option1 .. optionN -> nil for one shaman/element
 local function CycleTotem(shaman, element, dir)
     local list = A.totems[element] or {}
     local n = table.getn(list)
@@ -315,7 +528,7 @@ local function CycleTotem(shaman, element, dir)
     if idx > n then idx = 0 elseif idx < 0 then idx = n end
     local ok = A.SetTotem(shaman, element, (idx > 0) and list[idx].name or nil)
     if not ok then Msg("You can't assign for " .. shaman .. " (need lead/assist).") end
-    if RefreshCurrent then RefreshCurrent() end
+    RefreshCurrent()
 end
 
 local function CycleParty(shaman, dir)
@@ -324,7 +537,7 @@ local function CycleParty(shaman, dir)
     if nxt > 8 then nxt = 0 elseif nxt < 0 then nxt = 8 end
     local ok = A.SetTotemParty(shaman, (nxt > 0) and nxt or nil)
     if not ok then Msg("You can't assign for " .. shaman .. " (need lead/assist).") end
-    if RefreshCurrent then RefreshCurrent() end
+    RefreshCurrent()
 end
 
 local function TotemCellClick()
@@ -341,81 +554,142 @@ local function TotemCellWheel()
     else CycleParty(this.shaman, dir) end
 end
 
-local TOTEM_CELL_W = 66
-local PARTY_CELL_W = 42
+local function TotemCellTip()
+    if RallyPowerCP_Settings.tooltips == false then return end
+    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+    if this.element then
+        GameTooltip:SetText(this.shaman .. "  -  " .. this.element, 1, 1, 1)
+        local cur = A.GetTotem(this.shaman, this.element)
+        if cur then GameTooltip:AddLine(cur, 0.5, 1, 0.5)
+        else GameTooltip:AddLine("No totem assigned", 0.7, 0.7, 0.7) end
+        GameTooltip:AddLine("Click: next  -  Right-click: previous  -  Wheel: cycle", 0.6, 0.6, 0.6)
+    else
+        GameTooltip:SetText(this.shaman .. "  -  covered party", 1, 1, 1)
+        local party = A.GetTotemParty(this.shaman)
+        GameTooltip:AddLine(party and ("Group " .. party) or "Their own subgroup", 0.5, 1, 0.5)
+        GameTooltip:AddLine("Click to cycle groups 1-8.", 0.6, 0.6, 0.6)
+    end
+    GameTooltip:Show()
+end
 
-local function BuildTotems(panel)
-    -- column headers
-    local heads = { "Earth", "Fire", "Water", "Air", "Party" }
-    for i = 1, 5 do
-        local fs = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        local w = (i == 5) and PARTY_CELL_W or TOTEM_CELL_W
-        local x = NAME_W + (i - 1) * (TOTEM_CELL_W + 2)
-        fs:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -6)
+local function BuildTotems(p)
+    local heads = { "Party" }
+    local els = ElementList()
+    for i = 1, table.getn(els) do table.insert(heads, els[i]) end
+    for i = 1, table.getn(heads) do
+        local x = (i == 1) and NAME_W or (NAME_W + PARTY_W + 4 + (i - 2) * (ELEM_W + 2))
+        local w = (i == 1) and PARTY_W or ELEM_W
+        local col = (i == 1) and INK_DIM or (ECOL[heads[i]] or INK_DIM)
+        local shade = { col[1] * 1.5, col[2] * 1.5, col[3] * 1.5 }
+        if shade[1] > 1 then shade[1] = 1 end
+        if shade[2] > 1 then shade[2] = 1 end
+        if shade[3] > 1 then shade[3] = 1 end
+        local fs = Fnt(p, 10, shade, "CENTER")
+        fs:SetWidth(w); fs:SetHeight(11)
+        fs:SetPoint("TOPLEFT", p, "TOPLEFT", x, -48)
         fs:SetText(heads[i])
     end
     for r = 1, MAX_ROWS do
         local row = { cells = {} }
-        local y = -24 - (r - 1) * ROW_H
-        row.label = RowLabel(panel)
-        row.label:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, y - 3)
-        for i = 1, 5 do
-            local w = (i == 5) and PARTY_CELL_W or TOTEM_CELL_W
-            local b = MakeCell(panel, w)
-            b:SetPoint("TOPLEFT", panel, "TOPLEFT", NAME_W + (i - 1) * (TOTEM_CELL_W + 2), y)
+        local y = -64 - (r - 1) * ROW_H
+        row.name = Fnt(p, 11, INK)
+        row.name:SetWidth(NAME_W - 10); row.name:SetHeight(12)
+        row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 3)
+        row.sub = Fnt(p, 8, INK_FAINT)
+        row.sub:SetWidth(NAME_W - 10); row.sub:SetHeight(9)
+        row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 17)
+        for i = 1, 1 + table.getn(els) do
+            local x = (i == 1) and NAME_W or (NAME_W + PARTY_W + 4 + (i - 2) * (ELEM_W + 2))
+            local w = (i == 1) and PARTY_W or ELEM_W
+            local b = MakeCell(p, w, CELL_H)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", x, y)
+            local txt = Fnt(b, 9, INK, "CENTER")
+            txt:SetWidth(w - 4); txt:SetHeight(CELL_H)
+            txt:SetPoint("CENTER", b, "CENTER", 0, 0)
+            b.text = txt
             b:SetScript("OnClick", TotemCellClick)
             b:SetScript("OnMouseWheel", TotemCellWheel)
+            b:SetScript("OnEnter", TotemCellTip)
+            b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            b:Hide()
             row.cells[i] = b
         end
         totemRows[r] = row
     end
-    totemNote = MakeNote(panel)
-    totemNote:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 6)
 end
 
-local ELEMENT_ORDER = { "Earth", "Fire", "Water", "Air" }
-
-local function RefreshTotems()
+local function RefreshTotems(p)
+    local els = ElementList()
     local shamans = MembersOfClass("SHAMAN")
-    local n = table.getn(shamans)
+    local sc = CLASS_RGB.SHAMAN
     for r = 1, MAX_ROWS do
         local row = totemRows[r]
         local shaman = shamans[r]
         if shaman then
-            row.label:SetText("|cffffd100" .. shaman .. "|r")
-            for i = 1, 4 do
-                local b = row.cells[i]
-                b.shaman = shaman; b.element = ELEMENT_ORDER[i]
-                local cur = A.GetTotem(shaman, ELEMENT_ORDER[i])
-                b.text:SetText(ShortTotem(cur))
-                b:SetBackdropColor(cur and 0 or 0.25, cur and 0.7 or 0.25, cur and 0 or 0.25, 0.5)
-                b:Show()
-            end
-            local pb = row.cells[5]
+            row.name:SetText(shaman)
+            row.name:SetTextColor(sc[1], sc[2], sc[3])
+            row.sub:SetText(SubFor(shaman, "SHAMAN"))
+            local pb = row.cells[1]
             pb.shaman = shaman; pb.element = nil
             local party = A.GetTotemParty(shaman)
             pb.text:SetText(party and ("Grp " .. party) or "own")
-            pb:SetBackdropColor(0.25, 0.25, 0.25, 0.5)
+            pb.text:SetTextColor(party and INK[1] or INK_FAINT[1],
+                                 party and INK[2] or INK_FAINT[2],
+                                 party and INK[3] or INK_FAINT[3])
+            pb:SetBackdropColor(0.10, 0.088, 0.07, 0.92)
             pb:Show()
+            for i = 1, table.getn(els) do
+                local b = row.cells[i + 1]
+                local el = els[i]
+                b.shaman = shaman; b.element = el
+                local cur = A.GetTotem(shaman, el)
+                if cur then
+                    local ec = ECOL[el] or { 0.2, 0.2, 0.2 }
+                    b.text:SetText(ShortTotem(cur))
+                    b.text:SetTextColor(1, 1, 1)
+                    b:SetBackdropColor(ec[1], ec[2], ec[3], 0.55)
+                else
+                    b.text:SetText("+")
+                    b.text:SetTextColor(INK_FAINT[1], INK_FAINT[2], INK_FAINT[3])
+                    b:SetBackdropColor(0.10, 0.088, 0.07, 0.6)
+                end
+                b:Show()
+            end
         else
-            row.label:SetText("")
-            for i = 1, 5 do row.cells[i]:Hide() end
+            row.name:SetText(""); row.sub:SetText("")
+            for i = 1, table.getn(row.cells) do row.cells[i]:Hide() end
         end
     end
-    if n == 0 then
-        totemNote:SetText("No shamans in your group. (Test mode adds yourself for previewing.)")
-    else
-        totemNote:SetText("Click an element to cycle that shaman's totem; Party = which group "
-            .. "they cover. Local until the sync milestone: only your own row drives your strip.")
+    if table.getn(shamans) == 0 then
+        p.cover:SetText("")
+        p.hint:SetText("No shamans in your group. /rpc test seats the preview raid so you "
+            .. "can try the panel solo.")
+        return
     end
+    local gaps = {}
+    for i = 1, table.getn(els) do
+        local got = false
+        for _, s in ipairs(shamans) do
+            if A.GetTotem(s, els[i]) then got = true end
+        end
+        if not got then table.insert(gaps, els[i]) end
+    end
+    if table.getn(gaps) == 0 then
+        p.cover:SetTextColor(OK_GREEN[1], OK_GREEN[2], OK_GREEN[3])
+        p.cover:SetText("Coverage: every element is assigned.")
+    else
+        p.cover:SetTextColor(GAP_RED[1], GAP_RED[2], GAP_RED[3])
+        p.cover:SetText("No totem: " .. table.concat(gaps, ", "))
+    end
+    p.hint:SetText("Click an element to cycle that shaman's totem; Party = which group they "
+        .. "cover. Local until the sync milestone (your own row drives your strip).")
 end
 
 --------------------------------------------------------------------------
--- DUTY TABS (Buffs / Debuffs / Utility over the catalog + model)
+-- DUTY TABS - Raid Buffs / Debuffs / Utility as two-column cards
 --------------------------------------------------------------------------
 
-local dutyRows = { [3] = {}, [4] = {}, [5] = {} }
-local dutyNote = {}
+local dutyCards = { [3] = {}, [4] = {}, [5] = {} }
 
 local function DutyList(tabkey)
     local out = {}
@@ -426,18 +700,26 @@ local function DutyList(tabkey)
     return out
 end
 
+local function DutyIcon(def)
+    if def.spell then
+        local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(def.spell)
+        if sp and sp.texture then return sp.texture end
+    end
+    return DUTY_ICONS[def.key]
+end
+
 -- Holders text: "-", "Name", "Name +2" (tooltip lists everyone)
 local function HolderText(key)
     local holders = A.GetDutyCasters(key)
     local n = table.getn(holders)
-    if n == 0 then return "|cff888888-|r", holders end
+    if n == 0 then return nil, holders end
     local t = holders[1].caster
-    if n > 1 then t = t .. " |cffaaaaaa+" .. (n - 1) .. "|r" end
+    if n > 1 then t = t .. " +" .. (n - 1) end
     return t, holders
 end
 
--- Leaders cycle none -> each candidate -> none (clearing other holders they
--- may edit); everyone else toggles their own claim.
+-- Lead/assist (or test mode) cycles none -> each candidate -> none; everyone
+-- else toggles their own claim.
 local function CycleDutyHolder(key, dir)
     local def = A.duties[key]
     if not def then return end
@@ -456,7 +738,7 @@ local function CycleDutyHolder(key, dir)
                 Msg("Only lead/assist can assign " .. (def.spell or key) .. " to others.")
             end
         end
-        if RefreshCurrent then RefreshCurrent() end
+        RefreshCurrent()
         return
     end
 
@@ -470,18 +752,18 @@ local function CycleDutyHolder(key, dir)
         A.ClearDuty(holders[i].caster, key)
     end
     if idx > 0 then A.SetDuty(cands[idx], key, true) end
-    if RefreshCurrent then RefreshCurrent() end
+    RefreshCurrent()
 end
 
-local function DutyCellClick()
+local function DutyCardClick()
     CycleDutyHolder(this.dutyKey, (arg1 == "RightButton") and -1 or 1)
 end
 
-local function DutyCellWheel()
+local function DutyCardWheel()
     CycleDutyHolder(this.dutyKey, (arg1 and arg1 > 0) and -1 or 1)
 end
 
-local function DutyCellTip()
+local function DutyCardTip()
     if RallyPowerCP_Settings.tooltips == false then return end
     local def = A.duties[this.dutyKey]
     if not def then return end
@@ -495,80 +777,163 @@ local function DutyCellTip()
         GameTooltip:AddLine(t, 0.5, 1, 0.5)
     end
     if table.getn(holders) == 0 then GameTooltip:AddLine("Unassigned", 0.7, 0.7, 0.7) end
-    GameTooltip:AddLine("Click: cycle who's responsible", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Click: cycle who's responsible (right-click backwards)", 0.6, 0.6, 0.6)
     GameTooltip:Show()
 end
 
-local function BuildDutyTab(panel, tabIndex)
-    for r = 1, MAX_ROWS + 2 do
-        local row = {}
-        local y = -6 - (r - 1) * ROW_H
-        row.label = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        row.label:SetWidth(210); row.label:SetHeight(16)
-        row.label:SetJustifyH("LEFT")
-        row.label:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, y - 3)
-        row.cell = MakeCell(panel, 150)
-        row.cell:SetPoint("TOPLEFT", panel, "TOPLEFT", 250, y)
-        row.cell:SetScript("OnClick", DutyCellClick)
-        row.cell:SetScript("OnMouseWheel", DutyCellWheel)
-        row.cell:SetScript("OnEnter", DutyCellTip)
-        row.cell:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        dutyRows[tabIndex][r] = row
+local function BuildDutyTab(p, tabIndex)
+    for i = 1, DUTY_POOL do
+        local col = math.mod(i - 1, 2)          -- 0 left, 1 right
+        local rowN = math.floor((i - 1) / 2)
+        local card = MakeCell(p, 254, 44)
+        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 264, -46 - rowN * 47)
+        local icon = card:CreateTexture(nil, "ARTWORK")
+        icon:SetWidth(28); icon:SetHeight(28)
+        icon:SetPoint("LEFT", card, "LEFT", 8, 0)
+        card.icon = icon
+        card.name = Fnt(card, 11, INK)
+        card.name:SetWidth(130); card.name:SetHeight(12)
+        card.name:SetPoint("TOPLEFT", card, "TOPLEFT", 44, -8)
+        card.sub = Fnt(card, 9, INK_FAINT)
+        card.sub:SetWidth(130); card.sub:SetHeight(10)
+        card.sub:SetPoint("TOPLEFT", card, "TOPLEFT", 44, -24)
+        card.holder = Fnt(card, 11, INK, "RIGHT")
+        card.holder:SetWidth(66); card.holder:SetHeight(12)
+        card.holder:SetPoint("RIGHT", card, "RIGHT", -8, 0)
+        card:SetScript("OnClick", DutyCardClick)
+        card:SetScript("OnMouseWheel", DutyCardWheel)
+        card:SetScript("OnEnter", DutyCardTip)
+        card:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        card:Hide()
+        dutyCards[tabIndex][i] = card
     end
-    dutyNote[tabIndex] = MakeNote(panel)
-    dutyNote[tabIndex]:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 8, 6)
 end
 
-local function RefreshDutyTab(tabIndex)
+local function RefreshDutyTab(p, tabIndex)
     local defs = DutyList(DUTY_TAB[tabIndex])
-    local rows = dutyRows[tabIndex]
-    for r = 1, table.getn(rows) do
-        local row = rows[r]
-        local def = defs[r]
+    local cards = dutyCards[tabIndex]
+    local assigned = 0
+    for i = 1, DUTY_POOL do
+        local card = cards[i]
+        local def = defs[i]
         if def then
-            row.label:SetText("|cffffd100" .. (def.spell or def.key) .. "|r  |cff999999("
-                .. TitleCase(def.class or "?") .. ")|r")
-            row.cell.dutyKey = def.key
+            card.dutyKey = def.key
+            local tex = DutyIcon(def)
+            if tex then card.icon:SetTexture(tex); card.icon:Show()
+            else card.icon:Hide() end
+            card.name:SetText(def.spell or def.key)
+            card.sub:SetText(TitleCase(def.class)
+                .. (def.multi and " - any number" or " - one owner"))
             local txt = HolderText(def.key)
-            row.cell.text:SetText(txt)
-            local holders = A.GetDutyCasters(def.key)
-            if table.getn(holders) > 0 then
-                row.cell:SetBackdropColor(0, 0.7, 0, 0.5)
+            if txt then
+                assigned = assigned + 1
+                local cc = CLASS_RGB[def.class] or INK
+                card.holder:SetText(txt)
+                card.holder:SetTextColor(cc[1], cc[2], cc[3])
+                card:SetBackdropColor(0.13, 0.115, 0.085, 0.95)
             else
-                row.cell:SetBackdropColor(0.25, 0.25, 0.25, 0.5)
+                card.holder:SetText("-")
+                card.holder:SetTextColor(INK_FAINT[1], INK_FAINT[2], INK_FAINT[3])
+                card:SetBackdropColor(0.10, 0.088, 0.07, 0.7)
             end
-            row.cell:Show()
+            card:Show()
         else
-            row.label:SetText("")
-            row.cell:Hide()
+            card:Hide()
         end
     end
-    dutyNote[tabIndex]:SetText("Click an assignment to cycle who's responsible (lead/assist "
-        .. "cycles anyone; others claim/unclaim themselves). Local until the sync milestone.")
+    local total = table.getn(defs)
+    p.note:SetText(assigned .. "/" .. total .. " assigned")
+    if total > assigned then
+        p.note:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    else
+        p.note:SetTextColor(OK_GREEN[1], OK_GREEN[2], OK_GREEN[3])
+    end
+    p.cover:SetText("")
+    p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
+        .. "others claim or unclaim themselves). Local until the sync milestone.")
 end
 
 --------------------------------------------------------------------------
--- frame + tabs
+-- status pills (top right, concept header): TEST / leader / free assign / sync
+--------------------------------------------------------------------------
+
+local function MakePill(parent, w)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetWidth(w); b:SetHeight(17)
+    b:SetBackdrop(CELL_BD)
+    b:SetBackdropColor(0.09, 0.08, 0.06, 0.9)
+    b:SetBackdropBorderColor(0.23, 0.20, 0.15, 1)
+    local fs = Fnt(b, 9, INK_DIM, "CENTER")
+    fs:SetPoint("CENTER", b, "CENTER", 0, 0)
+    b.text = fs
+    return b
+end
+
+local function UpdatePills()
+    if not pills.leader then return end
+    if RallyPowerCP.IsTestMode() then
+        pills.test:Show()
+    else
+        pills.test:Hide()
+    end
+    local lead
+    if GetNumRaidMembers() > 0 then
+        lead = (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
+        pills.leader.text:SetText(lead and "|cff5be07a\226\151\143|r Lead/Assist"
+                                       or "|cff777777\226\151\143|r Member")
+    elseif GetNumPartyMembers() > 0 then
+        lead = (IsPartyLeader() == 1)
+        pills.leader.text:SetText(lead and "|cff5be07a\226\151\143|r Party Lead"
+                                       or "|cff777777\226\151\143|r Member")
+    else
+        pills.leader.text:SetText("|cff5be07a\226\151\143|r Solo")
+    end
+    if PP_PerUser then
+        pills.free:Show()
+        if PP_PerUser.freeassign then
+            pills.free.text:SetText("|cff5be07a\226\151\143|r Free Assign: on")
+        else
+            pills.free.text:SetText("|cff777777\226\151\143|r Free Assign: off")
+        end
+    else
+        pills.free:Hide()
+    end
+end
+
+--------------------------------------------------------------------------
+-- frame, tabs, bottom buttons
 --------------------------------------------------------------------------
 
 local function StyleTabs()
     for i = 1, table.getn(tabBtns) do
         local b = tabBtns[i]
         if i == currentTab then
-            b:SetBackdropColor(0, 0.7, 0, 0.5)
-            b.label:SetTextColor(1, 0.82, 0)
+            b:SetBackdropColor(0.14, 0.12, 0.086, 1)
+            b:SetBackdropBorderColor(GOLD_DIM[1], GOLD_DIM[2], GOLD_DIM[3], 1)
+            b.label:SetTextColor(GOLD_BRIGHT[1], GOLD_BRIGHT[2], GOLD_BRIGHT[3])
         else
-            b:SetBackdropColor(0.25, 0.25, 0.25, 0.5)
-            b.label:SetTextColor(0.7, 0.7, 0.7)
+            b:SetBackdropColor(0.086, 0.075, 0.06, 0.95)
+            b:SetBackdropBorderColor(0.23, 0.20, 0.15, 1)
+            b.label:SetTextColor(INK_DIM[1], INK_DIM[2], INK_DIM[3])
         end
     end
 end
 
+local function RefreshInner()
+    UpdatePills()
+    local p = panels[currentTab]
+    if currentTab == 1 then RefreshBlessings(p)
+    elseif currentTab == 2 then RefreshTotems(p)
+    elseif DUTY_TAB[currentTab] then RefreshDutyTab(p, currentTab) end
+end
+
 RefreshCurrent = function()
     if not frame or not frame:IsShown() then return end
-    if currentTab == 1 then RefreshBlessings()
-    elseif currentTab == 2 then RefreshTotems()
-    elseif DUTY_TAB[currentTab] then RefreshDutyTab(currentTab) end
+    local ok, err = pcall(RefreshInner)
+    if not ok then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+            .. tostring(err) .. " |cffaaaaaa(assignment panel)|r")
+    end
 end
 
 local function ShowTab(i)
@@ -582,59 +947,162 @@ local function ShowTab(i)
     RefreshCurrent()
 end
 
-local function CreatePanel()
-    A = RallyPowerCP.Assign
+-- Clear = the CURRENT tab only (blessings go through the legacy CLEAR
+-- broadcast; totem/duty rows clear for every caster you may edit).
+local function ClearCurrentTab()
+    if currentTab == 1 then
+        testBless = {}
+        if PallyPower_Clear then PallyPower_Clear() end
+        Msg("Blessing assignments cleared (for everyone you may edit).")
+    elseif currentTab == 2 then
+        local els = ElementList()
+        for _, s in ipairs(MembersOfClass("SHAMAN")) do
+            if A.CanEdit(Me(), s) then
+                for i = 1, table.getn(els) do A.SetTotem(s, els[i], nil) end
+                A.SetTotemParty(s, nil)
+            end
+        end
+        Msg("Totem assignments cleared.")
+    elseif DUTY_TAB[currentTab] then
+        for _, def in ipairs(DutyList(DUTY_TAB[currentTab])) do
+            local holders = A.GetDutyCasters(def.key)
+            for i = 1, table.getn(holders) do
+                if A.CanEdit(Me(), holders[i].caster) then
+                    A.ClearDuty(holders[i].caster, def.key)
+                end
+            end
+        end
+        Msg("Assignments on this tab cleared.")
+    end
+    RefreshCurrent()
+end
 
+local function CreatePanel()
     local f = CreateFrame("Frame", "RallyPowerCP_AssignFrame", UIParent)
     frame = f
     f:SetWidth(FRAME_W); f:SetHeight(FRAME_H)
-    f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
-    f:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 5, right = 5, top = 5, bottom = 5 },
-    })
-    f:SetBackdropColor(0, 0, 0, 0.85)
-    f:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+    local pos = RallyPowerCP_Settings.assignPos
+    if pos then f:SetPoint(pos.p, UIParent, pos.p, pos.x, pos.y)
+    else f:SetPoint("CENTER", UIParent, "CENTER", 0, 30) end
+    f:SetBackdrop(PANEL_BD)
+    f:SetBackdropColor(0.055, 0.05, 0.04, 0.96)
+    f:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 1)
     f:SetFrameStrata("DIALOG")
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", function() f:StartMoving() end)
-    f:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+    f:SetScript("OnDragStop", function()
+        f:StopMovingOrSizing()
+        local p, _, _, x, y = f:GetPoint()
+        RallyPowerCP_Settings.assignPos = { p = p, x = x, y = y }
+    end)
     f:Hide()
     tinsert(UISpecialFrames, "RallyPowerCP_AssignFrame")   -- ESC closes
 
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOP", f, "TOP", 0, -10)
-    title:SetText("|cffffd100RallyPowerCP|r Assignments")
+    -- header: eyebrow + title (concept), close button, status pills
+    local eyebrow = Fnt(f, 9, GOLD_DIM)
+    eyebrow:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -12)
+    eyebrow:SetText("RALLYPOWERCP  \194\183  ASSIGNMENTS")
+    local h1 = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    h1:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -24)
+    h1:SetTextColor(GOLD_BRIGHT[1], GOLD_BRIGHT[2], GOLD_BRIGHT[3])
+    h1:SetText("Who Covers What")
 
-    CreateFrame("Button", nil, f, "UIPanelCloseButton"):SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+    CreateFrame("Button", nil, f, "UIPanelCloseButton"):SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+
+    -- pills right-to-left: sync, free assign, leader, test
+    pills.sync = MakePill(f, 72)
+    pills.sync:SetPoint("TOPRIGHT", f, "TOPRIGHT", -34, -26)
+    pills.sync.text:SetText("|cff5b8fff\226\151\143|r PLPWR")
+    pills.sync:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(this, "ANCHOR_LEFT")
+        GameTooltip:SetText("Sync", 1, 1, 1)
+        GameTooltip:AddLine("Blessings sync live over PLPWR (stock-PallyPower compatible).", 0.6, 1, 0.6, 1)
+        GameTooltip:AddLine("Totems and duties are local until the RPCX sync milestone.", 0.8, 0.8, 0.6, 1)
+        GameTooltip:Show()
+    end)
+    pills.sync:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    pills.free = MakePill(f, 108)
+    pills.free:SetPoint("RIGHT", pills.sync, "LEFT", -4, 0)
+    pills.free:SetScript("OnClick", function()
+        if not PP_PerUser then return end
+        PP_PerUser.freeassign = not PP_PerUser.freeassign
+        if PallyPower_SendSelf then pcall(PallyPower_SendSelf) end
+        UpdatePills()
+    end)
+    pills.free:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(this, "ANCHOR_LEFT")
+        GameTooltip:SetText("Free Assignment", 1, 1, 1)
+        GameTooltip:AddLine("When ON, anyone may edit YOUR row (not just lead/assist).", 0.8, 0.8, 0.8, 1)
+        GameTooltip:AddLine("Click to toggle.", 0.6, 0.6, 0.6)
+        GameTooltip:Show()
+    end)
+    pills.free:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    pills.leader = MakePill(f, 88)
+    pills.leader:SetPoint("RIGHT", pills.free, "LEFT", -4, 0)
+
+    pills.test = MakePill(f, 78)
+    pills.test:SetPoint("RIGHT", pills.leader, "LEFT", -4, 0)
+    pills.test.text:SetText("|cffff8800\226\151\143|r TEST RAID")
+    pills.test:Hide()
 
     -- tab row
-    local tx = 10
     for i = 1, table.getn(TAB_INFO) do
         local idx = i
         local b = CreateFrame("Button", nil, f)
-        b:SetWidth(86); b:SetHeight(22)
-        b:SetPoint("TOPLEFT", f, "TOPLEFT", tx, -30)
-        b:SetBackdrop(TAB_SKIN)
+        b:SetWidth(104); b:SetHeight(24)
+        b:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 106, -50)
+        b:SetBackdrop(CELL_BD)
         local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         fs:SetPoint("CENTER", b, "CENTER", 0, 0)
-        fs:SetText(TAB_INFO[i].label)
+        local dot = TAB_INFO[i].live and "|cff5be07a\226\151\143|r " or "|cffd8b98a\226\151\143|r "
+        fs:SetText(dot .. TAB_INFO[i].label)
         b.label = fs
         b:SetScript("OnClick", function() ShowTab(idx) end)
         tabBtns[i] = b
-        tx = tx + 90
     end
 
-    -- content panels
+    -- content box
+    local box = CreateFrame("Frame", nil, f)
+    box:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -76)
+    box:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -14, 62)
+    box:SetBackdrop(PANEL_BD)
+    box:SetBackdropColor(0.08, 0.072, 0.058, 0.9)
+    box:SetBackdropBorderColor(0.23, 0.20, 0.15, 1)
+
+    -- content panels + per-tab chrome (title, desc, note, hint, coverage)
+    local CHROME = {
+        { "Blessings", "Each paladin's blessing per class - the live PallyPower grid." },
+        { "Totems", "Which totem each shaman drops per element, and which group they cover." },
+        { "Raid buff coverage", "Which caster keeps each raid-wide buff up." },
+        { "Target debuff duty", "Who maintains each debuff on the kill target." },
+        { "Utility & cooldowns", "Soulstones, tank shields, fear ward, innervate." },
+    }
     for i = 1, table.getn(TAB_INFO) do
-        local p = CreateFrame("Frame", nil, f)
-        p:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -56)
-        p:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
+        local p = CreateFrame("Frame", nil, box)
+        p:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
+        p:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -10, 6)
         p:Hide()
+        local t = Fnt(p, 14, GOLD_BRIGHT)
+        t:SetPoint("TOPLEFT", p, "TOPLEFT", 0, 0)
+        t:SetText(CHROME[i][1])
+        local d = Fnt(p, 10, INK_DIM)
+        d:SetWidth(370); d:SetHeight(11)
+        d:SetPoint("TOPLEFT", p, "TOPLEFT", 0, -20)
+        d:SetText(CHROME[i][2])
+        p.note = Fnt(p, 11, GOLD, "RIGHT")
+        p.note:SetWidth(130); p.note:SetHeight(12)
+        p.note:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, -4)
+        p.hint = Fnt(p, 9, INK_FAINT)
+        p.hint:SetWidth(518); p.hint:SetHeight(22)
+        p.hint:SetJustifyV("BOTTOM")
+        p.hint:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 14)
+        p.cover = Fnt(p, 10, INK_DIM)
+        p.cover:SetWidth(518); p.cover:SetHeight(11)
+        p.cover:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 1)
         panels[i] = p
     end
     BuildBlessings(panels[1])
@@ -642,6 +1110,43 @@ local function CreatePanel()
     BuildDutyTab(panels[3], 3)
     BuildDutyTab(panels[4], 4)
     BuildDutyTab(panels[5], 5)
+
+    -- bottom buttons: the classic PallyPower frame's row, on our panel
+    local function BottomButton(name, label, onclick)
+        local b = CreateFrame("Button", name, f, "GameMenuButtonTemplate")
+        b:SetWidth(100); b:SetHeight(21)
+        b:SetText(label)
+        b:SetScript("OnClick", onclick)
+        return b
+    end
+    local bRefresh = BottomButton("RallyPowerCP_AssignBtnRefresh", "Refresh", function()
+        if PallyPower_Refresh then pcall(PallyPower_Refresh) end
+        RefreshCurrent()
+    end)
+    bRefresh:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
+    local bClear = BottomButton("RallyPowerCP_AssignBtnClear", "Clear", ClearCurrentTab)
+    bClear:SetPoint("RIGHT", bRefresh, "LEFT", -4, 0)
+    local bOptions = BottomButton("RallyPowerCP_AssignBtnOptions", "Options", function()
+        if RallyPowerCP_OptionsToggle then RallyPowerCP_OptionsToggle() end
+    end)
+    bOptions:SetPoint("RIGHT", bClear, "LEFT", -4, 0)
+    local bReset = BottomButton("RallyPowerCP_AssignBtnReset", "Reset Position", function()
+        RallyPowerCP_Settings.assignPos = nil
+        f:ClearAllPoints()
+        f:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
+    end)
+    bReset:SetPoint("RIGHT", bOptions, "LEFT", -4, 0)
+    -- blessing presets are a paladin feature (same dropdown as the classic frame)
+    local _, mycls = UnitClass("player")
+    if mycls == "PALADIN" and PallyPowerMinimapPresetsDropDown then
+        local bPresets = BottomButton("RallyPowerCP_AssignBtnPresets", "Presets", function()
+            PallyPowerMinimapPresetsDropDown.point = "TOPRIGHT"
+            PallyPowerMinimapPresetsDropDown.relativePoint = "BOTTOMLEFT"
+            ToggleDropDownMenu(1, nil, PallyPowerMinimapPresetsDropDown,
+                "RallyPowerCP_AssignBtnPresets", 0, 0)
+        end)
+        bPresets:SetPoint("RIGHT", bReset, "LEFT", -4, 0)
+    end
 
     f:SetScript("OnShow", function()
         ShowTab(RallyPowerCP_Settings.assignLastTab or 1)
@@ -661,8 +1166,41 @@ local function CreatePanel()
     A.Subscribe(function() RefreshCurrent() end)
 end
 
--- Entry point: right-click a strip's title, or /rpc assign.
+-- Entry points: strip title right-click, paladin buff bar right-click,
+-- /rpc assign.
 function RallyPowerCP_AssignPanelToggle()
     if not frame then CreatePanel() end
     if frame:IsShown() then frame:Hide() else frame:Show() end
+end
+
+--------------------------------------------------------------------------
+-- legacy grafts (PallyPower.lua/.xml stay untouched - we replace globals
+-- and re-script XML buttons at load, exactly like the pop-out does)
+--------------------------------------------------------------------------
+
+-- Right-clicking the paladin buff bar opens OUR panel; a left-click keeps
+-- the classic assignment frame (still reachable, aura/seal columns included).
+if PallyPowerBuffBar_MouseUp then
+    local origMouseUp = PallyPowerBuffBar_MouseUp
+    PallyPowerBuffBar_MouseUp = function()
+        local wasShown = PallyPowerFrame and PallyPowerFrame:IsVisible()
+        origMouseUp()
+        if arg1 == "RightButton" and PallyPowerFrame
+           and PallyPowerFrame:IsVisible() and not wasShown then
+            PallyPowerFrame:Hide()
+            RallyPowerCP_AssignPanelToggle()
+        end
+    end
+end
+
+-- The classic frame's Options button opens OUR tabbed options panel (the
+-- classic options frame stays reachable via /rpc legacy).
+if PallyPowerFrameOptions then
+    PallyPowerFrameOptions:SetScript("OnClick", function()
+        if RallyPowerCP_OptionsToggle then
+            RallyPowerCP_OptionsToggle()
+        elseif PallyPower_Options then
+            PallyPower_Options()
+        end
+    end)
 end
