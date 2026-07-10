@@ -32,5 +32,6 @@ Classes\Class_Rogue.lua
 
 Core\RallyPowerCP_Options.lua
 Core\RallyPowerCP_AssignPanel.lua
+Core\RallyPowerCP_Sync.lua
 
 Core\RallyPowerCP_Popout.lua

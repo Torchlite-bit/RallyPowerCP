@@ -367,6 +367,27 @@ function A.SetNormalBlessing(pally, classID, tname, bid)
 end
 
 --------------------------------------------------------------------------
+-- sync bridge (step 2): the RPCX layer decodes a remote caster block and
+-- installs it here. Whole-block REPLACE (the sender is authoritative for
+-- that caster), then the same Notify the panel already listens to. Kept in
+-- this file so Notify stays private; the sync module owns the wire.
+--------------------------------------------------------------------------
+
+function A.ApplyRemoteBlock(caster, block)
+    if not caster or not block then return end
+    block.class = block.class or ClassOf(caster)
+    RallyPowerCP_Assign.casters[caster] = block
+    Notify("sync", caster)
+end
+
+function A.RemoveRemoteBlock(caster)
+    if not caster then return end
+    RallyPowerCP_Assign.casters[caster] = nil
+    RallyPowerCP.AssignStatus[caster] = nil
+    Notify("sync", caster)
+end
+
+--------------------------------------------------------------------------
 -- runtime status mirror (assigned vs actually-up; GetTime-based, never
 -- saved). info tables carry { expires = <GetTime deadline>, name=/target= }.
 --------------------------------------------------------------------------

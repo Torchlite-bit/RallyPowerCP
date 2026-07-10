@@ -1636,8 +1636,15 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
 
+    -- Force a full assignment re-sync (request others' + push mine). Every
+    -- class; blessings still sync separately over PLPWR.
+    if msg == "sync" then
+        if RallyPowerCP_SyncNow then RallyPowerCP_SyncNow() end
+        return
+    end
+
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc assign opens the assignment panel; /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc assign opens the assignment panel; /rpc sync re-syncs assignments; /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then

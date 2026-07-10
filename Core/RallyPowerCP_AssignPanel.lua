@@ -13,10 +13,12 @@
 --               functions the /pp grid uses - so every edit writes the legacy
 --               tables and sends the byte-identical ASSIGN message. Paladins
 --               on stock PallyPower/PallyPowerTW interoperate unchanged.
---   Totems      shaman x element grid + covered party, over RallyPowerCP_Assign.
---   Raid Buffs / Debuffs / Utility
+--   Totems      shaman x element grid + auto group, over RallyPowerCP_Assign.
+--   Raid Buffs   caster x class buff grid (Priest/Mage/Druid), over the model.
+--   Debuffs / Utility
 --               duty cards from the module-declared catalog: click cycles
---               who's responsible. Local until the sync milestone.
+--               who's responsible. All non-blessing tabs sync over RPCX
+--               (Core\RallyPowerCP_Sync.lua) to other RallyPowerCP users.
 --
 -- TEST MODE seats a full fake 40-man raid of lore characters (every class,
 -- with specs) so each tab is exercisable solo. Fake blessing edits stay in a
@@ -1009,8 +1011,8 @@ local function RefreshTotems(p)
         p.cover:SetText("No totem: " .. table.concat(gaps, ", "))
     end
     p.hint:SetText("Click an element to cycle that shaman's totem. Group = their current "
-        .. "subgroup (automatic - totems only reach their own group). Local until the sync "
-        .. "milestone (your own row drives your strip).")
+        .. "subgroup (automatic - totems only reach their own group). Synced to the raid; "
+        .. "each shaman's row drives their strip.")
 end
 
 --------------------------------------------------------------------------
@@ -1212,7 +1214,7 @@ local function RefreshBuffGrid(p)
         p.cover:SetText("No buffer: " .. table.concat(gaps, ", "))
     end
     p.hint:SetText("Click a cell to cycle which buff that caster gives the class - their own "
-        .. "strip follows their row, so buffers can split the raid by class. Local until sync.")
+        .. "strip follows their row, so buffers can split the raid by class. Synced to the raid.")
 end
 
 --------------------------------------------------------------------------
@@ -1385,7 +1387,7 @@ local function RefreshDutyTab(p, tabIndex)
     end
     p.cover:SetText("")
     p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
-        .. "others claim or unclaim themselves). Local until the sync milestone.")
+        .. "others claim or unclaim themselves). Synced to the raid.")
 end
 
 --------------------------------------------------------------------------
@@ -1560,12 +1562,13 @@ local function CreatePanel()
     -- pills right-to-left: sync, free assign, leader, test
     pills.sync = MakePill(f, 72)
     pills.sync:SetPoint("TOPRIGHT", f, "TOPRIGHT", -34, -26)
-    pills.sync.text:SetText("|cff5b8fff\226\151\143|r PLPWR")
+    pills.sync.text:SetText("|cff5b8fff\226\151\143|r SYNC")
     pills.sync:SetScript("OnEnter", function()
         GameTooltip:SetOwner(this, "ANCHOR_LEFT")
         GameTooltip:SetText("Sync", 1, 1, 1)
-        GameTooltip:AddLine("Blessings sync live over PLPWR (stock-PallyPower compatible).", 0.6, 1, 0.6, 1)
-        GameTooltip:AddLine("Totems and duties are local until the RPCX sync milestone.", 0.8, 0.8, 0.6, 1)
+        GameTooltip:AddLine("Blessings sync over PLPWR (stock-PallyPower compatible).", 0.6, 1, 0.6, 1)
+        GameTooltip:AddLine("Totems, duties and raid buffs sync over RPCX to other", 0.6, 1, 0.6, 1)
+        GameTooltip:AddLine("RallyPowerCP users. /rpc sync forces a refresh.", 0.6, 1, 0.6, 1)
         GameTooltip:Show()
     end)
     pills.sync:SetScript("OnLeave", function() GameTooltip:Hide() end)
