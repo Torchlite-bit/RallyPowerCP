@@ -38,7 +38,7 @@ local A = RallyPowerCP.Assign   -- loads before this file (TOC order)
 -- theme (colors lifted from the concept page)
 --------------------------------------------------------------------------
 
-local FRAME_W, FRAME_H = 700, 620
+local FRAME_W, FRAME_H = 700, 640
 local NAME_W   = 118         -- caster-name column
 local ROW_H    = 40
 local CELL_H   = 36          -- concept cells, scaled to fit ten columns
@@ -73,6 +73,15 @@ local CLASS_LABEL = { [0] = "Warrior", "Rogue", "Priest", "Druid", "Paladin",
                       "Aura", "Seal" }
 local BLESS_COLS = 11        -- grid columns run 0..11
 local FAKE_MAX = { [10] = 6, [11] = 5 }   -- preview cycle: 7 auras, 6 seals
+local BLESS_ROWS = 7         -- blessing rows are taller (skills strip below the name)
+local BLESS_ROW_H = 50
+
+-- display order: Aura and Seal lead the grid (slots 1-2), then the classes
+local COL_AT = { [0] = 10, [1] = 11 }
+for c = 0, 9 do COL_AT[c + 2] = c end
+
+-- vanilla max ranks per blessing id (preview paladins only)
+local BLESS_MAXRANK = { [0] = 6, 7, 1, 3, 1, 1 }
 
 local PANEL_BD = {
     bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -296,8 +305,21 @@ local function SpellTip(owner, spellName)
     local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(spellName)
     if not sp or not sp.index then return false end
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-    GameTooltip:SetSpell(sp.index, BOOKTYPE_SPELL)
+    GameTooltip:SetSpell(sp.index, "spell")   -- literal: BOOKTYPE_SPELL may not exist
     return true
+end
+
+-- OnEnter errors die silently in 1.12 (the tooltip just never appears), so
+-- every tooltip handler goes through this: failures print like the panel's
+-- refresh errors instead of vanishing.
+local function SafeTip(fn)
+    return function()
+        local ok, err = pcall(fn)
+        if not ok then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+                .. tostring(err) .. " |cffaaaaaa(tooltip)|r")
+        end
+    end
 end
 
 local RefreshCurrent   -- forward declaration (handlers below close over it)
@@ -379,6 +401,24 @@ local function BlessAbbrev(class, bid)
     return string.sub(w or n, 1, 2)
 end
 
+-- Per-paladin blessing skills (icon strip under the name, like the classic
+-- frame's left column): [bid 0-5] = { rank, talent } plus the Symbol of Kings
+-- count. Real paladins come from AllPallys (SELF/SYMCOUNT broadcasts);
+-- preview paladins get max ranks with +5 talent on their spec's blessing.
+local function SkillsFor(pally)
+    if IsFakeRow(pally) then
+        local talentBid = (SPEC[pally] == "Holy") and 0 or 1  -- Wisdom / Might
+        local out = {}
+        for id = 0, 5 do
+            out[id] = { rank = BLESS_MAXRANK[id], talent = (id == talentBid) and 5 or 0 }
+        end
+        return out, 20
+    end
+    local sk = AllPallys and AllPallys[pally]
+    if not sk then return nil end
+    return sk, sk.symbols
+end
+
 local function BlessCycle(pally, class, dir)
     if IsFakeRow(pally) then
         -- preview store only: the wire and the legacy tables never see fakes
@@ -447,30 +487,43 @@ local function BlessCellTip()
 end
 
 local function BuildBlessings(p)
-    -- column headers: class icon + tiny label (Aura/Seal columns included,
-    -- like the classic PallyPower frame)
-    for c = 0, BLESS_COLS do
+    -- column headers: Aura and Seal lead, then class icons (COL_AT order)
+    for pos = 0, BLESS_COLS do
+        local c = COL_AT[pos]
         local t = p:CreateTexture(nil, "ARTWORK")
         t:SetWidth(24); t:SetHeight(24)
-        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44 + 9, -42)
+        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + pos * 44 + 9, -42)
         local l = Fnt(p, 8, c >= 10 and GOLD or INK_DIM, "CENTER")
         l:SetWidth(44); l:SetHeight(9)
-        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44 - 1, -68)
+        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + pos * 44 - 1, -68)
         l:SetText(CLASS_LABEL[c])
         blessHeader[c] = t
     end
-    for r = 1, MAX_ROWS do
-        local row = { cells = {} }
-        local y = -84 - (r - 1) * ROW_H
+    for r = 1, BLESS_ROWS do
+        local row = { cells = {}, skillIcon = {}, skillText = {} }
+        local y = -84 - (r - 1) * BLESS_ROW_H
         row.name = Fnt(p, 11, INK)
         row.name:SetWidth(NAME_W - 10); row.name:SetHeight(12)
-        row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 3)
+        row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 2)
         row.sub = Fnt(p, 8, INK_FAINT)
         row.sub:SetWidth(NAME_W - 10); row.sub:SetHeight(9)
-        row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 17)
-        for c = 0, BLESS_COLS do
+        row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 15)
+        -- skills strip: the paladin's six blessings, rank+talent on each icon
+        for id = 0, 5 do
+            local si = p:CreateTexture(nil, "ARTWORK")
+            si:SetWidth(15); si:SetHeight(15)
+            si:SetPoint("TOPLEFT", p, "TOPLEFT", 6 + id * 19, y - 27)
+            si:Hide()
+            local st = Fnt(p, 7, GOLD_BRIGHT, "RIGHT")
+            st:SetWidth(22); st:SetHeight(8)
+            st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 3, -2)
+            row.skillIcon[id] = si
+            row.skillText[id] = st
+        end
+        for pos = 0, BLESS_COLS do
+            local c = COL_AT[pos]
             local b = MakeCell(p, 42, CELL_H)
-            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44, y)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + pos * 44, y)
             b.classID = c
             local icon = b:CreateTexture(nil, "ARTWORK")
             icon:SetWidth(28); icon:SetHeight(28)
@@ -481,7 +534,7 @@ local function BuildBlessings(p)
             b.text = txt
             b:SetScript("OnClick", BlessCellClick)
             b:SetScript("OnMouseWheel", BlessCellWheel)
-            b:SetScript("OnEnter", BlessCellTip)
+            b:SetScript("OnEnter", SafeTip(BlessCellTip))
             b:SetScript("OnLeave", function() GameTooltip:Hide() end)
             b:Hide()
             row.cells[c] = b
@@ -500,7 +553,7 @@ local function RefreshBlessings(p)
     if SealIcons and SealIcons[0] then blessHeader[11]:SetTexture(SealIcons[0]) end
     local pallys = PallyList()
     local pc = CLASS_RGB.PALADIN
-    for r = 1, MAX_ROWS do
+    for r = 1, BLESS_ROWS do
         local row = blessRows[r]
         local pally = pallys[r]
         if pally then
@@ -508,7 +561,27 @@ local function RefreshBlessings(p)
             local control = fake or (PallyPower_CanControl and PallyPower_CanControl(pally))
             row.name:SetText(pally)
             row.name:SetTextColor(pc[1], pc[2], pc[3])
-            row.sub:SetText(SubFor(pally, "PALADIN"))
+            -- sub line carries the Symbol of Kings count (SYMCOUNT broadcasts)
+            local sk, symbols = SkillsFor(pally)
+            local sub = SubFor(pally, "PALADIN")
+            if symbols then
+                sub = sub .. "  |cffffe080" .. symbols .. " sym|r"
+            end
+            row.sub:SetText(sub)
+            -- skills strip: available blessings, "rank+talent" on each icon
+            for id = 0, 5 do
+                local entry = sk and sk[id]
+                if type(entry) == "table" and entry.rank then
+                    row.skillIcon[id]:SetTexture(BlessingIcon and BlessingIcon[id])
+                    row.skillIcon[id]:Show()
+                    local tal = tonumber(entry.talent) or 0
+                    row.skillText[id]:SetText(entry.rank .. (tal > 0 and ("+" .. tal) or ""))
+                    row.skillText[id]:Show()
+                else
+                    row.skillIcon[id]:Hide()
+                    row.skillText[id]:Hide()
+                end
+            end
             for c = 0, BLESS_COLS do
                 local b = row.cells[c]
                 b.pally = pally
@@ -538,6 +611,9 @@ local function RefreshBlessings(p)
             end
         else
             row.name:SetText(""); row.sub:SetText("")
+            for id = 0, 5 do
+                row.skillIcon[id]:Hide(); row.skillText[id]:Hide()
+            end
             for c = 0, BLESS_COLS do row.cells[c]:Hide() end
         end
     end
@@ -681,7 +757,7 @@ local function BuildTotems(p)
             b.text = txt
             b:SetScript("OnClick", TotemCellClick)
             b:SetScript("OnMouseWheel", TotemCellWheel)
-            b:SetScript("OnEnter", TotemCellTip)
+            b:SetScript("OnEnter", SafeTip(TotemCellTip))
             b:SetScript("OnLeave", function() GameTooltip:Hide() end)
             b:Hide()
             row.cells[i] = b
@@ -879,7 +955,7 @@ local function BuildDutyTab(p, tabIndex)
         card.holder:SetPoint("RIGHT", card, "RIGHT", -8, 0)
         card:SetScript("OnClick", DutyCardClick)
         card:SetScript("OnMouseWheel", DutyCardWheel)
-        card:SetScript("OnEnter", DutyCardTip)
+        card:SetScript("OnEnter", SafeTip(DutyCardTip))
         card:SetScript("OnLeave", function() GameTooltip:Hide() end)
         card:Hide()
         dutyCards[tabIndex][i] = card
