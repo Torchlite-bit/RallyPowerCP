@@ -134,20 +134,47 @@ end
 -- PallyPower's ASSIGN handling.
 --------------------------------------------------------------------------
 
+-- Am I (the player) raid lead / assist / party leader? TRUTHY-safe: the
+-- 1.12 Is*Leader() API returns 1-or-nil on some clients and true-or-false on
+-- others, so we never compare == 1 (PallyPower treats them as booleans too,
+-- e.g. PallyPower_CanControl). Solo counts as leading a party of one, and
+-- test mode always leads (the preview raid must be fully editable).
+function A.IAmLead()
+    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return true end
+    if GetNumRaidMembers() > 0 then
+        return (IsRaidLeader() or IsRaidOfficer()) and true or false
+    end
+    if GetNumPartyMembers() > 0 then
+        return IsPartyLeader() and true or false
+    end
+    return true   -- solo
+end
+
+-- Free Assignment: a raid-wide flag the LEADER controls (synced over RPCX).
+-- When on, any member may edit any row - so the leader can let people spread
+-- the assignments out themselves. Mirrors PallyPower's free-assign intent.
+function A.GetFreeAssign()
+    return RallyPowerCP_Assign.freeAssign and true or false
+end
+
+-- Only a leader may flip it locally; the sync layer relays a remote leader's
+-- flip through A.ApplyFreeAssign (no gate - the sender was already checked).
+function A.SetFreeAssign(on)
+    if not A.IAmLead() then return false end
+    RallyPowerCP_Assign.freeAssign = on and true or false
+    Notify("free", nil)
+    return true
+end
+
+function A.ApplyFreeAssign(on)
+    RallyPowerCP_Assign.freeAssign = on and true or false
+    Notify("free", nil)
+end
+
 function A.CanEdit(editor, caster)
     if editor == caster then return true end
     if editor == UnitName("player") then
-        -- Test mode previews a full fake raid - every row is editable so the
-        -- whole panel can be exercised solo (nothing broadcasts pre-sync, and
-        -- PruneToRoster sweeps the fakes when test mode turns off).
-        if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return true end
-        if GetNumRaidMembers() > 0 then
-            return (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
-        end
-        if GetNumPartyMembers() > 0 then
-            return IsPartyLeader() == 1
-        end
-        return true   -- solo: you lead a party of one
+        return A.IAmLead() or A.GetFreeAssign()
     end
     return false
 end
@@ -312,9 +339,15 @@ function A.PruneToRoster()
             if pn then present[pn] = true end
         end
     end
+    -- while test mode is on, the preview raid's rows survive a roster change
+    -- so the panel stays usable in a party (they never touch the wire either)
+    local testing = RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode()
+    local preview = RallyPowerCP.PreviewNames
     local kill = {}
     for name in pairs(RallyPowerCP_Assign.casters) do
-        if not present[name] then table.insert(kill, name) end
+        if not present[name] and not (testing and preview and preview[name]) then
+            table.insert(kill, name)
+        end
     end
     for _, name in ipairs(kill) do
         RallyPowerCP_Assign.casters[name] = nil

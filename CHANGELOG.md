@@ -29,6 +29,28 @@ Author: **Subtilizer (Torchlite)**.
 Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
 classes look and behave the same way; the bespoke grid bar is gone.
 
+### Fixed (sync testing round 1)
+- **Leaders can now edit other players' rows again.** The local edit gate
+  (`Assign.CanEdit`, the panel's `LeaderLike`, the pills) compared
+  `IsPartyLeader() == 1`, but on this client the leader API returns
+  `true`/`false` — so `== 1` was always false and a leader could only edit
+  their own row. All leader checks now use PallyPower's truthy semantics via
+  one `Assign.IAmLead()` helper, which also fixes the **party leader** case
+  in the sync layer (`PallyPower_CheckRaidLeader(me)` never matched the
+  player's own party leadership, so a party leader never broadcast others'
+  blocks).
+- **Free Assignment is now a real synced feature.** It's a raid-wide flag
+  the **leader** controls; toggling it broadcasts over RPCX so every client
+  reflects it, and while it's on **any member may edit any row**. Non-leaders
+  clicking the pill get a "leader only" message instead of being locked out.
+  (Blessing free-assign stays PallyPower's own per-paladin flag, as before.)
+- **Refresh** now also re-requests RPCX sync (`/rpc sync`), not just the
+  PallyPower blessing report — one button reconciles the whole plan on demand.
+- **Test mode now works inside a party**: the preview raid's rows survive a
+  roster change while test mode is on and **never touch the wire** (a new
+  `RallyPowerCP.PreviewNames` set gates both the sync broadcast and the
+  roster prune), so you can exercise every tab solo even while grouped.
+
 ### Added (Assignment & Sync — step 2: the RPCX sync protocol)
 The final milestone piece: the totem, duty, and raid-buff-grid assignments the
 panel shows now **broadcast to the raid** and **receive** others', so a raid
