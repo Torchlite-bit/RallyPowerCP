@@ -47,6 +47,21 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Added (Blessings tab: Aura + Seal columns, real spell tooltips)
+- **Aura and Seal columns** on the Blessings tab, exactly like the classic
+  PallyPower frame: two extra cells per paladin (gold-labelled, headed by the
+  Devotion Aura / Righteousness icons) cycling through the legacy engine's own
+  `PallyPower_PerformCycle(name, 10/11)` aura/seal paths — edits write
+  `PallyPower_AuraAssignments`/`PallyPower_SealAssignments` and send the
+  byte-identical `AASSIGN`/`SASSIGN` messages, so stock PallyPower users
+  receive them unchanged. Preview paladins cycle all 7 auras / 6 seals
+  locally. The frame widened to 700px for the twelve columns.
+- **Real spell tooltips**: hovering a blessing/aura/seal cell, a totem chip or
+  a duty card now shows the actual spell tooltip (name, rank, description)
+  when the spell is in your spellbook, with the assignment context appended
+  below — so the assigner can read what each spell does. Spells outside your
+  spellbook keep the plain summary tooltip.
+
 ### Fixed (post-test polish round 2)
 - **Preview-paladin blessings now survive `/reload`**: the fake paladins'
   assignments moved from a session-only table into the saved settings
