@@ -376,14 +376,15 @@ end
 --
 -- The engine only shows a class button for a class that has an assignment AND
 -- present members, so solo/out of a raid the bar is empty. In test mode we
--- wrap PallyPower_UpdateUI (global, late-bound - the engine is not touched) and
--- repaint the ten class buttons it left hidden, so a paladin can preview the
--- full blessing layout the same way /rpc test shows every other class its full
--- set. We leave each button's classID/buffID as the empty tables the engine's
--- own cleanup set, so a click early-returns (no cast) - the buttons are a
--- decorative preview only.
+-- wrap PallyPower_UpdateUI (global, late-bound - the engine is not touched)
+-- and repaint the ten class buttons it left hidden, showing each class's REAL
+-- assignment from PallyPower_Assignments (green when assigned, red when not).
+-- Each button gets its numeric classID back (the engine's cleanup leaves an
+-- empty table there, which broke the template's mouse-wheel cycling), so
+-- wheeling cycles the real assignment; buffID stays empty so clicks never
+-- cast (test mode simulates only).
 --=============================================================================
-local BLESS_DEMO = 1     -- Might icon as the placeholder blessing art
+local BLESS_DEMO = 1     -- Might icon as the placeholder art for empty cells
 
 local orig_PallyPower_UpdateUI = PallyPower_UpdateUI
 function PallyPower_UpdateUI()
@@ -397,18 +398,29 @@ function PallyPower_UpdateUI()
     if PP_PerUser and PP_PerUser.horizontal then return end
 
     local alpha = (PP_PerUser and PP_PerUser.transparency) or 0.5
+    local me = UnitName("player")
+    local mine = PallyPower_Assignments and PallyPower_Assignments[me]
     local shown = 0
     for class = 0, 9 do
         local n = class + 1
         local btn = getglobal("PallyPowerBuffBarBuff" .. n)
         if btn then
+            btn.classID = class            -- restore wheel cycling
             local ci = getglobal("PallyPowerBuffBarBuff" .. n .. "ClassIcon")
             local bi = getglobal("PallyPowerBuffBarBuff" .. n .. "BuffIcon")
             if ci and PallyPower_ClassTexture and PallyPower_ClassTexture[class] then
                 ci:SetTexture(PallyPower_ClassTexture[class])
             end
-            if bi and BlessingIcon and BlessingIcon[BLESS_DEMO] then
-                bi:SetTexture(BlessingIcon[BLESS_DEMO])
+            local bid = mine and mine[class]
+            if bid == nil then bid = -1 end
+            if bi then
+                if bid >= 0 and BlessingIcon and BlessingIcon[bid] then
+                    bi:SetTexture(BlessingIcon[bid])
+                    bi:SetAlpha(1)
+                elseif BlessingIcon and BlessingIcon[BLESS_DEMO] then
+                    bi:SetTexture(BlessingIcon[BLESS_DEMO])
+                    bi:SetAlpha(0.25)
+                end
             end
             local txt = getglobal("PallyPowerBuffBarBuff" .. n .. "Text")
             local t1  = getglobal("PallyPowerBuffBarBuff" .. n .. "Time")
@@ -416,7 +428,11 @@ function PallyPower_UpdateUI()
             if txt then txt:SetText("") end
             if t1 then t1:SetText("") end
             if t2 then t2:SetText("") end
-            btn:SetBackdropColor(0, 1, 0, alpha)     -- green "covered" look
+            if bid >= 0 then
+                btn:SetBackdropColor(0, 1, 0, alpha)     -- assigned
+            else
+                btn:SetBackdropColor(1, 0, 0, alpha)     -- unassigned
+            end
             btn:Show()
             shown = shown + 1
         end
@@ -431,4 +447,26 @@ function PallyPower_UpdateUI()
     PallyPowerBuffBar:SetHeight(32 + 36 * shown + 36 * specials)
     PallyPowerBuffBar:SetWidth(110)
     PallyPowerBuffBar:Show()
+end
+
+-- Test-mode wheel cycling on the bar: the stock handler cycles with
+-- skipempty=true, which only lands on blessings somebody NEEDS - solo in
+-- test mode that's nothing, so the wheel appeared dead. Route test-mode
+-- wheeling through the skipempty=false path (the same one the assignment
+-- panel's grid uses); live mode is untouched.
+local orig_BarWheel = PallyPowerBuffBarButton_OnMouseWheel
+function PallyPowerBuffBarButton_OnMouseWheel(btn, delta)
+    if RallyPowerCP and RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode()
+       and btn and type(btn.classID) == "number" then
+        local me = UnitName("player")
+        if not (PallyPower_CanControl and PallyPower_CanControl(me)) then return end
+        if delta == -1 then
+            PallyPower_PerformCycle(me, btn.classID, false)
+        else
+            PallyPower_PerformCycleBackwards(me, btn.classID, false)
+        end
+        if PallyPower_UpdateUI then PallyPower_UpdateUI() end
+        return
+    end
+    if orig_BarWheel then orig_BarWheel(btn, delta) end
 end

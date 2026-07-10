@@ -132,6 +132,35 @@ local DUTY_ICONS = {
     INNERVATE   = "Interface\\Icons\\Spell_Nature_Lightning",
 }
 
+-- Totem chip icons, keyed by full spell name. Display-only fallbacks for
+-- shamans other than yourself (your own spellbook resolves first, exactly);
+-- verify on Turtle and fix here if any icon looks wrong.
+local TOTEM_ICONS = {
+    ["Strength of Earth Totem"] = "Interface\\Icons\\Spell_Nature_EarthBindTotem",
+    ["Stoneskin Totem"]         = "Interface\\Icons\\Spell_Nature_StoneSkinTotem",
+    ["Tremor Totem"]            = "Interface\\Icons\\Spell_Nature_TremorTotem",
+    ["Earthbind Totem"]         = "Interface\\Icons\\Spell_Nature_StrengthOfEarthTotem02",
+    ["Stoneclaw Totem"]         = "Interface\\Icons\\Spell_Nature_StoneClawTotem",
+    ["Searing Totem"]           = "Interface\\Icons\\Spell_Fire_SearingTotem",
+    ["Magma Totem"]             = "Interface\\Icons\\Spell_Fire_SelfDestruct",
+    ["Fire Nova Totem"]         = "Interface\\Icons\\Spell_Fire_SealOfFire",
+    ["Flametongue Totem"]       = "Interface\\Icons\\Spell_Nature_GuardianWard",
+    ["Frost Resistance Totem"]  = "Interface\\Icons\\Spell_FrostResistanceTotem_01",
+    ["Mana Spring Totem"]       = "Interface\\Icons\\Spell_Nature_ManaRegenTotem",
+    ["Healing Stream Totem"]    = "Interface\\Icons\\INV_Spear_04",
+    ["Mana Tide Totem"]         = "Interface\\Icons\\Spell_Frost_SummonWaterElemental",
+    ["Poison Cleansing Totem"]  = "Interface\\Icons\\Spell_Nature_PoisonCleansingTotem",
+    ["Disease Cleansing Totem"] = "Interface\\Icons\\Spell_Nature_DiseaseCleansingTotem",
+    ["Fire Resistance Totem"]   = "Interface\\Icons\\Spell_FireResistanceTotem_01",
+    ["Windfury Totem"]          = "Interface\\Icons\\Spell_Nature_Windfury",
+    ["Grace of Air Totem"]      = "Interface\\Icons\\Spell_Nature_InvisibilityTotem",
+    ["Nature Resistance Totem"] = "Interface\\Icons\\Spell_Nature_NatureResistanceTotem",
+    ["Windwall Totem"]          = "Interface\\Icons\\Spell_Nature_EarthBind",
+    ["Grounding Totem"]         = "Interface\\Icons\\Spell_Nature_GroundingTotem",
+    ["Sentry Totem"]            = "Interface\\Icons\\Spell_Nature_RemoveCurse",
+    ["Tranquil Air Totem"]      = "Interface\\Icons\\Spell_Nature_Brilliance",
+}
+
 --------------------------------------------------------------------------
 -- test-mode preview raid: 40 lore characters, every class and spec.
 -- Session-only names; nothing about them ever reaches the PLPWR wire.
@@ -179,8 +208,11 @@ local ROSTER40 = {
     { "Arthas",     "PALADIN", "Retribution" },
     { "Tirion",     "PALADIN", "Protection" },
 }
-local FAKE, SPEC = {}, {}
-for _, r in ipairs(ROSTER40) do FAKE[r[1]] = r[2]; SPEC[r[1]] = r[3] end
+local FAKE, SPEC, FAKE_GROUP = {}, {}, {}
+for i, r in ipairs(ROSTER40) do
+    FAKE[r[1]] = r[2]; SPEC[r[1]] = r[3]
+    FAKE_GROUP[r[1]] = math.floor((i - 1) / 5) + 1   -- groups 1-8, five a group
+end
 
 --------------------------------------------------------------------------
 -- shared state + small helpers
@@ -208,7 +240,8 @@ local TAB_INFO = {
     { label = "Debuffs",    live = false },
     { label = "Utility",    live = false },
 }
-local DUTY_TAB = { [3] = "raidbuff", [4] = "debuff", [5] = "utility" }
+-- tabs 4/5 are duty-card lists; tab 3 is the caster x class buff grid
+local DUTY_TAB = { [4] = "debuff", [5] = "utility" }
 
 local function Me() return UnitName("player") end
 
@@ -459,11 +492,21 @@ local function BlessCycle(pally, class, dir)
         -- preview store only: the wire and the legacy tables never see fakes
         local tb = TestBless()
         tb[pally] = tb[pally] or {}
-        local top = FAKE_MAX[class] or 5
         local cur = tb[pally][class]
         if cur == nil then cur = -1 end
-        cur = cur + dir
-        if cur > top then cur = -1 elseif cur < -1 then cur = top end
+        if class == 10 then
+            -- cycle only the rankable auras (resistances skipped)
+            local n = table.getn(AURA_SHOW)
+            local idx = 0
+            for i = 1, n do if AURA_SHOW[i] == cur then idx = i end end
+            idx = idx + dir
+            if idx > n then idx = 0 elseif idx < 0 then idx = n end
+            cur = (idx > 0) and AURA_SHOW[idx] or -1
+        else
+            local top = FAKE_MAX[class] or 5
+            cur = cur + dir
+            if cur > top then cur = -1 elseif cur < -1 then cur = top end
+        end
         if IsShiftKeyDown() and class <= 9 then
             for c = 0, 9 do tb[pally][c] = cur end   -- aura/seal excluded, as legacy
         else
@@ -474,6 +517,34 @@ local function BlessCycle(pally, class, dir)
     end
     if not (PallyPower_CanControl and PallyPower_CanControl(pally)) then
         Msg("You can't assign for " .. pally .. " (need lead/assist, or their Free Assign).")
+        return
+    end
+    if class == 10 then
+        -- Aura cycling skips the resistance auras (identical on every
+        -- paladin). Same table write + byte-identical AASSIGN message the
+        -- legacy right-click clear path sends; the legacy aura cycle itself
+        -- can't filter (PallyPower.lua stays untouched).
+        PallyPower_AuraAssignments = PallyPower_AuraAssignments or {}
+        local known = AllPallysAuras and AllPallysAuras[pally]
+        local list = {}
+        for i = 1, table.getn(AURA_SHOW) do
+            local id = AURA_SHOW[i]
+            if (not known) or known[id] then table.insert(list, id) end
+        end
+        local n = table.getn(list)
+        local cur = PallyPower_AuraAssignments[pally]
+        if cur == nil then cur = -1 end
+        local idx = 0
+        for i = 1, n do if list[i] == cur then idx = i end end
+        idx = idx + dir
+        if idx > n then idx = 0 elseif idx < 0 then idx = n end
+        local aid = (idx > 0) and list[idx] or -1
+        PallyPower_AuraAssignments[pally] = aid
+        if PallyPower_SendMessage then
+            PallyPower_SendMessage("AASSIGN " .. pally .. " " .. aid)
+        end
+        if PallyPower_UpdateUI then pcall(PallyPower_UpdateUI) end
+        RefreshCurrent()
         return
     end
     -- the legacy cycle assumes the row table exists (ParseMessage creates it)
@@ -750,27 +821,43 @@ local function CycleTotem(shaman, element, dir)
     RefreshCurrent()
 end
 
-local function CycleParty(shaman, dir)
-    local cur = A.GetTotemParty(shaman) or 0        -- 0 = own subgroup
-    local nxt = cur + dir
-    if nxt > 8 then nxt = 0 elseif nxt < 0 then nxt = 8 end
-    local ok = A.SetTotemParty(shaman, (nxt > 0) and nxt or nil)
-    if not ok then Msg("You can't assign for " .. shaman .. " (need lead/assist).") end
-    RefreshCurrent()
+-- The group column is AUTOMATIC: totems only reach the shaman's own
+-- subgroup, so showing anything else would let assignments disagree with
+-- reality. Real members come from the raid roster; preview raiders have
+-- fixed groups (five a group).
+local function GroupOf(name)
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do
+            local rname, _, subgroup = GetRaidRosterInfo(i)
+            if rname == name then return subgroup end
+        end
+    end
+    if RallyPowerCP.IsTestMode() and FAKE_GROUP[name] then
+        return FAKE_GROUP[name]
+    end
+    return 1
+end
+
+-- Chip icon for a totem: your own spellbook first (exact), static fallback
+-- for other shamans' totems.
+local function TotemIconFor(totemName)
+    if not totemName then return nil end
+    local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(totemName)
+    if sp and sp.texture then return sp.texture end
+    return TOTEM_ICONS[totemName]
 end
 
 local function TotemCellClick()
     if this.element then
         CycleTotem(this.shaman, this.element, (arg1 == "RightButton") and -1 or 1)
-    else
-        CycleParty(this.shaman, (arg1 == "RightButton") and -1 or 1)
     end
 end
 
 local function TotemCellWheel()
-    local dir = (arg1 and arg1 > 0) and -1 or 1
-    if this.element then CycleTotem(this.shaman, this.element, dir)
-    else CycleParty(this.shaman, dir) end
+    if this.element then
+        CycleTotem(this.shaman, this.element, (arg1 and arg1 > 0) and -1 or 1)
+    end
 end
 
 local function TotemCellTip()
@@ -790,16 +877,16 @@ local function TotemCellTip()
         GameTooltip:AddLine("Click: next  -  Right-click: previous  -  Wheel: cycle", 0.6, 0.6, 0.6)
     else
         GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-        GameTooltip:SetText(this.shaman .. "  -  covered party", 1, 1, 1)
-        local party = A.GetTotemParty(this.shaman)
-        GameTooltip:AddLine(party and ("Group " .. party) or "Their own subgroup", 0.5, 1, 0.5)
-        GameTooltip:AddLine("Click to cycle groups 1-8.", 0.6, 0.6, 0.6)
+        GameTooltip:SetText(this.shaman .. "  -  group", 1, 1, 1)
+        GameTooltip:AddLine("Group " .. GroupOf(this.shaman), 0.5, 1, 0.5)
+        GameTooltip:AddLine("Set automatically from the raid roster - totems only reach "
+            .. "the shaman's own subgroup.", 0.6, 0.6, 0.6)
     end
     GameTooltip:Show()
 end
 
 local function BuildTotems(p)
-    local heads = { "Party" }
+    local heads = { "Group" }
     local els = ElementList()
     for i = 1, table.getn(els) do table.insert(heads, els[i]) end
     for i = 1, table.getn(heads) do
@@ -829,10 +916,23 @@ local function BuildTotems(p)
             local w = (i == 1) and PARTY_W or ELEM_W
             local b = MakeCell(p, w, CELL_H)
             b:SetPoint("TOPLEFT", p, "TOPLEFT", x, y)
-            local txt = Fnt(b, 10, INK, "CENTER")
-            txt:SetWidth(w - 4); txt:SetHeight(CELL_H)
-            txt:SetPoint("CENTER", b, "CENTER", 0, 0)
-            b.text = txt
+            if i == 1 then
+                -- group cell: centred read-only text
+                local txt = Fnt(b, 10, INK, "CENTER")
+                txt:SetWidth(w - 4); txt:SetHeight(CELL_H)
+                txt:SetPoint("CENTER", b, "CENTER", 0, 0)
+                b.text = txt
+            else
+                -- element chip: totem icon + name
+                local icon = b:CreateTexture(nil, "ARTWORK")
+                icon:SetWidth(26); icon:SetHeight(26)
+                icon:SetPoint("LEFT", b, "LEFT", 4, 0)
+                b.icon = icon
+                local txt = Fnt(b, 9, INK)
+                txt:SetWidth(w - 38); txt:SetHeight(CELL_H - 4)
+                txt:SetPoint("LEFT", b, "LEFT", 33, 0)
+                b.text = txt
+            end
             b:SetScript("OnClick", TotemCellClick)
             b:SetScript("OnMouseWheel", TotemCellWheel)
             b:SetScript("OnEnter", SafeTip(TotemCellTip))
@@ -857,11 +957,8 @@ local function RefreshTotems(p)
             row.sub:SetText(SubFor(shaman, "SHAMAN"))
             local pb = row.cells[1]
             pb.shaman = shaman; pb.element = nil
-            local party = A.GetTotemParty(shaman)
-            pb.text:SetText(party and ("Grp " .. party) or "own")
-            pb.text:SetTextColor(party and INK[1] or INK_FAINT[1],
-                                 party and INK[2] or INK_FAINT[2],
-                                 party and INK[3] or INK_FAINT[3])
+            pb.text:SetText("Grp " .. GroupOf(shaman))
+            pb.text:SetTextColor(INK[1], INK[2], INK[3])
             pb:SetBackdropColor(0.10, 0.088, 0.07, 0.92)
             pb:Show()
             for i = 1, table.getn(els) do
@@ -871,10 +968,14 @@ local function RefreshTotems(p)
                 local cur = A.GetTotem(shaman, el)
                 if cur then
                     local ec = ECOL[el] or { 0.2, 0.2, 0.2 }
+                    local tex = TotemIconFor(cur)
+                    if tex then b.icon:SetTexture(tex); b.icon:Show()
+                    else b.icon:Hide() end
                     b.text:SetText(ShortTotem(cur))
                     b.text:SetTextColor(1, 1, 1)
                     b:SetBackdropColor(ec[1], ec[2], ec[3], 0.55)
                 else
+                    b.icon:Hide()
                     b.text:SetText("+")
                     b.text:SetTextColor(INK_FAINT[1], INK_FAINT[2], INK_FAINT[3])
                     b:SetBackdropColor(0.10, 0.088, 0.07, 0.6)
@@ -907,15 +1008,218 @@ local function RefreshTotems(p)
         p.cover:SetTextColor(GAP_RED[1], GAP_RED[2], GAP_RED[3])
         p.cover:SetText("No totem: " .. table.concat(gaps, ", "))
     end
-    p.hint:SetText("Click an element to cycle that shaman's totem; Party = which group they "
-        .. "cover. Local until the sync milestone (your own row drives your strip).")
+    p.hint:SetText("Click an element to cycle that shaman's totem. Group = their current "
+        .. "subgroup (automatic - totems only reach their own group). Local until the sync "
+        .. "milestone (your own row drives your strip).")
 end
 
 --------------------------------------------------------------------------
--- DUTY TABS - Raid Buffs / Debuffs / Utility as two-column cards
+-- RAID BUFFS TAB - the blessings tab's shape applied to Priest/Mage/Druid:
+-- a caster x class grid over the model's class-buff domain. Each cell is
+-- which buff that caster gives that class; a caster's own class-buff strip
+-- follows their row (step-1b), so assigning here retargets their buttons
+-- and lets buffers split the raid by class.
 --------------------------------------------------------------------------
 
-local dutyCards = { [3] = {}, [4] = {}, [5] = {} }
+local buffRows = {}
+local buffHeader = {}
+local BUFF_ROWS = 9
+local BUFFER_CLASSES = { "PRIEST", "MAGE", "DRUID" }
+
+local function BuffCatalog(token)
+    local m = RallyPowerCP.classes and RallyPowerCP.classes[token]
+    return (m and m.buffs) or {}
+end
+
+-- rows: the buffers of the three classes (you first within your class);
+-- preview raiders capped at three per class so all three classes fit
+local function BufferList()
+    local out = {}
+    for _, tok in ipairs(BUFFER_CLASSES) do
+        local fakes = 0
+        local members = MembersOfClass(tok)
+        for i = 1, table.getn(members) do
+            local nm = members[i]
+            if RallyPowerCP.IsTestMode() and FAKE[nm] and nm ~= Me() then
+                fakes = fakes + 1
+                if fakes <= 3 then table.insert(out, { name = nm, token = tok }) end
+            else
+                table.insert(out, { name = nm, token = tok })
+            end
+        end
+    end
+    return out
+end
+
+local function BuffIconFor(token, buffName)
+    local cat = BuffCatalog(token)
+    for i = 1, table.getn(cat) do
+        local bd = cat[i]
+        if (bd.name == buffName or bd.group == buffName) and bd.icons and bd.icons[1] then
+            return "Interface\\Icons\\" .. bd.icons[1]
+        end
+    end
+    return nil
+end
+
+local function CycleClassBuff(caster, token, classID, dir)
+    local cat = BuffCatalog(token)
+    local n = table.getn(cat)
+    if n == 0 then return end
+    local cur = A.GetClassBuff(caster, classID)
+    local idx = 0
+    for i = 1, n do
+        if (cat[i].name or cat[i].group) == cur then idx = i end
+    end
+    idx = idx + dir
+    if idx > n then idx = 0 elseif idx < 0 then idx = n end
+    local val = nil
+    if idx > 0 then val = cat[idx].name or cat[idx].group end
+    if not A.SetClassBuff(caster, classID, val) then
+        Msg("You can't assign for " .. caster .. " (need lead/assist).")
+    end
+    RefreshCurrent()
+end
+
+local function BuffCellClick()
+    CycleClassBuff(this.caster, this.token, this.classID, (arg1 == "RightButton") and -1 or 1)
+end
+
+local function BuffCellWheel()
+    CycleClassBuff(this.caster, this.token, this.classID, (arg1 and arg1 > 0) and -1 or 1)
+end
+
+local function BuffCellTip()
+    if RallyPowerCP_Settings.tooltips == false then return end
+    local cur = A.GetClassBuff(this.caster, this.classID)
+    if cur and SpellTip(this, cur) then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(this.caster .. "  -  " .. (CLASS_LABEL[this.classID] or "?"), 1, 1, 1)
+    else
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        GameTooltip:SetText(this.caster .. "  -  " .. (CLASS_LABEL[this.classID] or "?"), 1, 1, 1)
+        if cur then GameTooltip:AddLine(cur, 0.5, 1, 0.5)
+        else GameTooltip:AddLine("No buff assigned", 0.7, 0.7, 0.7) end
+    end
+    GameTooltip:AddLine("Click: next  -  Right-click: previous  -  Wheel: cycle", 0.6, 0.6, 0.6)
+    GameTooltip:Show()
+end
+
+local function BuildBuffGrid(p)
+    for c = 0, 9 do
+        local t = p:CreateTexture(nil, "ARTWORK")
+        t:SetWidth(24); t:SetHeight(24)
+        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44 + 9, -42)
+        local l = Fnt(p, 8, INK_DIM, "CENTER")
+        l:SetWidth(44); l:SetHeight(9)
+        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44 - 1, -68)
+        l:SetText(CLASS_LABEL[c])
+        buffHeader[c] = t
+    end
+    for r = 1, BUFF_ROWS do
+        local row = { cells = {} }
+        local y = -84 - (r - 1) * ROW_H
+        row.name = Fnt(p, 11, INK)
+        row.name:SetWidth(NAME_W - 22); row.name:SetHeight(12)
+        row.name:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 3)
+        row.sub = Fnt(p, 8, INK_FAINT)
+        row.sub:SetWidth(NAME_W - 22); row.sub:SetHeight(9)
+        row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 17)
+        for c = 0, 9 do
+            local b = MakeCell(p, 42, CELL_H)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44, y)
+            b.classID = c
+            local icon = b:CreateTexture(nil, "ARTWORK")
+            icon:SetWidth(28); icon:SetHeight(28)
+            icon:SetPoint("CENTER", b, "CENTER", 0, 0)
+            b.icon = icon
+            local txt = Fnt(b, 12, GOLD_BRIGHT, "CENTER")
+            txt:SetPoint("CENTER", b, "CENTER", 0, 0)
+            b.text = txt
+            b:SetScript("OnClick", BuffCellClick)
+            b:SetScript("OnMouseWheel", BuffCellWheel)
+            b:SetScript("OnEnter", SafeTip(BuffCellTip))
+            b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            b:Hide()
+            row.cells[c] = b
+        end
+        buffRows[r] = row
+    end
+end
+
+local function RefreshBuffGrid(p)
+    for c = 0, 9 do
+        if PallyPower_ClassTexture and PallyPower_ClassTexture[c] then
+            buffHeader[c]:SetTexture(PallyPower_ClassTexture[c])
+        end
+    end
+    local rows = BufferList()
+    for r = 1, BUFF_ROWS do
+        local row = buffRows[r]
+        local entry = rows[r]
+        if entry then
+            local cc = CLASS_RGB[entry.token] or INK
+            row.name:SetText(entry.name)
+            row.name:SetTextColor(cc[1], cc[2], cc[3])
+            row.sub:SetText(SubFor(entry.name, entry.token))
+            for c = 0, 9 do
+                local b = row.cells[c]
+                b.caster = entry.name; b.token = entry.token
+                local cur = A.GetClassBuff(entry.name, c)
+                if cur then
+                    local tex = BuffIconFor(entry.token, cur)
+                    if tex then
+                        b.icon:SetTexture(tex); b.icon:Show(); b.icon:SetAlpha(1)
+                        b.text:SetText("")
+                    else
+                        b.icon:Hide()
+                        b.text:SetText(string.sub(cur, 1, 2))
+                        b.text:SetTextColor(GOLD_BRIGHT[1], GOLD_BRIGHT[2], GOLD_BRIGHT[3])
+                    end
+                    b:SetBackdropColor(0.13, 0.115, 0.085, 0.95)
+                else
+                    b.icon:Hide()
+                    b.text:SetText("+")
+                    b.text:SetTextColor(INK_FAINT[1], INK_FAINT[2], INK_FAINT[3])
+                    b:SetBackdropColor(0.10, 0.088, 0.07, 0.6)
+                end
+                b:Show()
+            end
+        else
+            row.name:SetText(""); row.sub:SetText("")
+            for c = 0, 9 do row.cells[c]:Hide() end
+        end
+    end
+    if table.getn(rows) == 0 then
+        p.cover:SetText("")
+        p.hint:SetText("No priests, mages or druids in your group. /rpc test seats the "
+            .. "preview raid so you can try the panel solo.")
+        return
+    end
+    local gaps = {}
+    for c = 0, 8 do
+        local got = false
+        for i = 1, table.getn(rows) do
+            if A.GetClassBuff(rows[i].name, c) then got = true end
+        end
+        if not got then table.insert(gaps, CLASS_LABEL[c]) end
+    end
+    if table.getn(gaps) == 0 then
+        p.cover:SetTextColor(OK_GREEN[1], OK_GREEN[2], OK_GREEN[3])
+        p.cover:SetText("Coverage: every class has a buffer.")
+    else
+        p.cover:SetTextColor(GAP_RED[1], GAP_RED[2], GAP_RED[3])
+        p.cover:SetText("No buffer: " .. table.concat(gaps, ", "))
+    end
+    p.hint:SetText("Click a cell to cycle which buff that caster gives the class - their own "
+        .. "strip follows their row, so buffers can split the raid by class. Local until sync.")
+end
+
+--------------------------------------------------------------------------
+-- DUTY TABS - Debuffs / Utility as two-column cards
+--------------------------------------------------------------------------
+
+local dutyCards = { [4] = {}, [5] = {} }
 
 local function DutyList(tabkey)
     local out = {}
@@ -1156,6 +1460,7 @@ local function RefreshInner()
     local p = panels[currentTab]
     if currentTab == 1 then RefreshBlessings(p)
     elseif currentTab == 2 then RefreshTotems(p)
+    elseif currentTab == 3 then RefreshBuffGrid(p)
     elseif DUTY_TAB[currentTab] then RefreshDutyTab(p, currentTab) end
 end
 
@@ -1195,6 +1500,13 @@ local function ClearCurrentTab()
             end
         end
         Msg("Totem assignments cleared.")
+    elseif currentTab == 3 then
+        for _, entry in ipairs(BufferList()) do
+            if A.CanEdit(Me(), entry.name) then
+                for c = 0, 9 do A.SetClassBuff(entry.name, c, nil) end
+            end
+        end
+        Msg("Raid buff assignments cleared.")
     elseif DUTY_TAB[currentTab] then
         for _, def in ipairs(DutyList(DUTY_TAB[currentTab])) do
             local holders = A.GetDutyCasters(def.key)
@@ -1213,8 +1525,9 @@ local function CreatePanel()
     local f = CreateFrame("Frame", "RallyPowerCP_AssignFrame", UIParent)
     frame = f
     f:SetWidth(FRAME_W); f:SetHeight(FRAME_H)
+    f:SetScale(RallyPowerCP_Settings.assignScale or 1)   -- before the SetPoint
     local pos = RallyPowerCP_Settings.assignPos
-    if pos then f:SetPoint(pos.p, UIParent, pos.p, pos.x, pos.y)
+    if pos then f:SetPoint(pos.p, UIParent, pos.rel or pos.p, pos.x, pos.y)
     else f:SetPoint("CENTER", UIParent, "CENTER", 0, 30) end
     f:SetBackdrop(PANEL_BD)
     f:SetBackdropColor(0.055, 0.05, 0.04, 0.96)
@@ -1226,8 +1539,9 @@ local function CreatePanel()
     f:SetScript("OnDragStart", function() f:StartMoving() end)
     f:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
-        local p, _, _, x, y = f:GetPoint()
-        RallyPowerCP_Settings.assignPos = { p = p, x = x, y = y }
+        -- keep the relative point: grip-scaling re-anchors TOPLEFT->BOTTOMLEFT
+        local p, _, rp, x, y = f:GetPoint()
+        RallyPowerCP_Settings.assignPos = { p = p, rel = rp, x = x, y = y }
     end)
     f:Hide()
     tinsert(UISpecialFrames, "RallyPowerCP_AssignFrame")   -- ESC closes
@@ -1310,7 +1624,7 @@ local function CreatePanel()
     local CHROME = {
         { "Blessings", "Each paladin's blessing per class, plus their aura and seal - the live PallyPower grid." },
         { "Totems", "Which totem each shaman drops per element, and which group they cover." },
-        { "Raid buff coverage", "Which caster keeps each raid-wide buff up." },
+        { "Raid buff coverage", "Which buff each priest, mage and druid gives every class - their strips follow their rows." },
         { "Target debuff duty", "Who maintains each debuff on the kill target." },
         { "Utility & cooldowns", "Soulstones, tank shields, fear ward, innervate." },
     }
@@ -1340,7 +1654,7 @@ local function CreatePanel()
     end
     BuildBlessings(panels[1])
     BuildTotems(panels[2])
-    BuildDutyTab(panels[3], 3)
+    BuildBuffGrid(panels[3])
     BuildDutyTab(panels[4], 4)
     BuildDutyTab(panels[5], 5)
 
@@ -1365,10 +1679,19 @@ local function CreatePanel()
     bOptions:SetPoint("RIGHT", bClear, "LEFT", -4, 0)
     local bReset = BottomButton("RallyPowerCP_AssignBtnReset", "Reset Position", function()
         RallyPowerCP_Settings.assignPos = nil
+        RallyPowerCP_Settings.assignScale = nil
+        f:SetScale(1)
         f:ClearAllPoints()
         f:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
     end)
     bReset:SetPoint("RIGHT", bOptions, "LEFT", -4, 0)
+
+    -- scale grip, bottom-right (the PallyPower resize corner); scaling
+    -- re-anchors the frame, so persist the new position with the scale
+    RallyPowerCP.AddScaleGrip(f, "assignScale", function()
+        RallyPowerCP_Settings.assignPos = { p = "TOPLEFT", rel = "BOTTOMLEFT",
+            x = f:GetLeft(), y = f:GetTop() }
+    end)
     -- blessing presets are a paladin feature (same dropdown as the classic frame)
     local _, mycls = UnitClass("player")
     if mycls == "PALADIN" and PallyPowerMinimapPresetsDropDown then

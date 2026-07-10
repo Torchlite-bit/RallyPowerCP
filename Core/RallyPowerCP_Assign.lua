@@ -212,6 +212,28 @@ function A.ClearDuty(caster, dutyKey)
     return A.SetDuty(caster, dutyKey, nil)
 end
 
+--------------------------------------------------------------------------
+-- class-buff domain (blessing-shaped): caster x legacy class id 0-9 ->
+-- buff spell name. The catalog is the caster class's own M.buffs list
+-- (RallyPowerCP.classes[token].buffs); the class-buff strips read their
+-- own row through this, exactly like blessings drive the paladin bar.
+--------------------------------------------------------------------------
+
+function A.SetClassBuff(caster, classID, buffName)
+    if not Editable(caster) then return false end
+    local c = Block(caster, true)
+    c.cbuff = c.cbuff or {}
+    c.cbuff[classID] = buffName
+    Touch(c, caster)
+    Notify("cbuff", caster)
+    return true
+end
+
+function A.GetClassBuff(caster, classID)
+    local c = Block(caster)
+    return c and c.cbuff and c.cbuff[classID]
+end
+
 function A.GetDuty(caster, dutyKey)
     local c = Block(caster)
     return c and c.duty and c.duty[dutyKey]

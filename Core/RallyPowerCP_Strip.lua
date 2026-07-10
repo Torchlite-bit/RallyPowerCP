@@ -186,12 +186,120 @@ local function Btn_SetIcon(self, tex)  self.icon:SetTexture(tex or "Interface\\I
 local function Btn_SetLabel(self, txt) self.eln:SetText(txt or "") end
 local function Btn_SetSub(self, txt)   self.tn:SetText(txt or "") end
 local function Btn_SetTimer(self, txt) self.tm:SetText(txt or "") end
+
+-- Optional second icon (paladin-bar look: class icon + buff icon side by
+-- side); created lazily so single-icon buttons pay nothing.
+local function Btn_SetIcon2(self, tex)
+    if not self.icon2 then
+        if not tex then return end
+        local i2 = self:CreateTexture(nil, "ARTWORK")
+        i2:SetWidth(26); i2:SetHeight(26)
+        i2:SetPoint("LEFT", self, "LEFT", 33, 0)
+        self.icon2 = i2
+    end
+    if tex then self.icon2:SetTexture(tex); self.icon2:Show()
+    else self.icon2:Hide() end
+end
+
 local function Btn_SetState(self, st)
     local c = COLORS[st] or COLORS.off
     local a = RallyPowerCP_Settings.stripAlpha
     if a == nil then a = c[4] end                 -- Transparency slider (default 0.5)
     self:SetBackdropColor(c[1], c[2], c[3], a)
     self.icon:SetAlpha(st == "good" and 1 or 0.55)
+    if self.icon2 then self.icon2:SetAlpha(st == "good" and 1 or 0.55) end
+end
+
+--------------------------------------------------------------------------
+-- Scale grip, borrowed from PallyPower's resize corner (same art, same
+-- cursor math as PallyPower_StartScaling/ScaleFrame) but self-contained:
+-- the legacy functions hard-code their own frame names and PP_PerUser
+-- keys, so they are not callable for our frames. Drag the grip and the
+-- frame rescales around its TOPLEFT (clamped 0.5-2.0); scale and the
+-- re-anchored position persist per frame.
+--------------------------------------------------------------------------
+
+local GRIP_TEX = "Interface\\AddOns\\RallyPowerCP\\PallyPower-ResizeGrip"
+local scaling = {}
+local scaleDriver = CreateFrame("Frame")
+scaleDriver:Hide()
+
+local function ApplyScale(frame, scale)
+    if scale < 0.5 then scale = 0.5 elseif scale > 2 then scale = 2 end
+    local old = frame:GetScale() or 1
+    local x = (frame:GetLeft() or 0) * old
+    local y = (frame:GetTop() or 0) * old
+    frame:SetScale(scale)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+    return scale
+end
+
+scaleDriver:SetScript("OnUpdate", function()
+    local f = scaling.frame
+    if not f then scaleDriver:Hide(); return end
+    scaling.t = (scaling.t or 0) + (arg1 or 0)
+    if scaling.t < 0.08 then return end
+    scaling.t = 0
+    local eff = f:GetEffectiveScale()
+    local left = (f:GetLeft() or 0) * eff
+    local top = (f:GetTop() or 0) * eff
+    local cx, cy = GetCursorPosition()
+    local newscale
+    -- drive off the longer axis, exactly like the legacy grip
+    if scaling.w > scaling.h then
+        if (cx - left) > 32 then newscale = (cx - left) / scaling.w end
+    else
+        if (top - cy) > 32 then newscale = (top - cy) / scaling.h end
+    end
+    if newscale then
+        newscale = ApplyScale(f, newscale)
+        RallyPowerCP_Settings[scaling.scaleKey] = newscale
+        if scaling.onChanged then scaling.onChanged(newscale) end
+    end
+end)
+
+-- onChanged(scale) runs after every applied step - use it to persist the
+-- re-anchored position (GetLeft/GetTop are SetPoint-compatible offsets at
+-- the frame's current scale).
+function RallyPowerCP.AddScaleGrip(frame, scaleKey, onChanged)
+    local grip = CreateFrame("Button", nil, frame)
+    grip:SetWidth(16); grip:SetHeight(16)
+    grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    grip:SetFrameLevel(frame:GetFrameLevel() + 10)
+    grip:SetNormalTexture(GRIP_TEX)
+    local hl = grip:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(grip)
+    hl:SetTexture(GRIP_TEX)
+    hl:SetBlendMode("ADD")
+    grip:SetScript("OnMouseDown", function()
+        if arg1 ~= "LeftButton" then return end
+        if RallyPowerCP_Settings.locked then return end
+        scaling.frame = frame
+        scaling.scaleKey = scaleKey
+        scaling.onChanged = onChanged
+        scaling.t = 0
+        local pscale = frame:GetParent():GetEffectiveScale()
+        scaling.w = frame:GetWidth() * pscale
+        scaling.h = frame:GetHeight() * pscale
+        scaleDriver:Show()
+    end)
+    grip:SetScript("OnMouseUp", function()
+        scaleDriver:Hide()
+        scaling.frame = nil
+    end)
+    grip:SetScript("OnEnter", function()
+        if RallyPowerCP_Settings.tooltips == false then return end
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        if RallyPowerCP_Settings.locked then
+            GameTooltip:SetText("Frames locked", 1, 0.5, 0.5)
+        else
+            GameTooltip:SetText("Drag to scale", 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    grip:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return grip
 end
 
 function RallyPowerCP.NewStrip(key, title)
@@ -203,7 +311,9 @@ function RallyPowerCP.NewStrip(key, title)
     S.frame = f
     RallyPowerCP.strips[key] = S
     f:SetWidth(STRIP_W)
-    f:SetScale(RallyPowerCP_Settings.uiScale or 1)
+    -- per-strip grip scale wins; the global slider resets it (see Core)
+    f:SetScale(RallyPowerCP_Settings["stripScale_" .. key]
+        or RallyPowerCP_Settings.uiScale or 1)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
@@ -213,8 +323,9 @@ function RallyPowerCP.NewStrip(key, title)
     end)
     f:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
-        local p, _, _, x, y = f:GetPoint()
-        RallyPowerCP_Settings[posKey] = { p = p, x = x, y = y }
+        -- keep the relative point: grip-scaling re-anchors TOPLEFT->BOTTOMLEFT
+        local p, _, rp, x, y = f:GetPoint()
+        RallyPowerCP_Settings[posKey] = { p = p, rel = rp, x = x, y = y }
     end)
     -- Right-click on the strip frame (the title area - the buttons swallow
     -- their own clicks) opens the assignment panel.
@@ -268,6 +379,7 @@ function RallyPowerCP.NewStrip(key, title)
 
         b.SetIcon = Btn_SetIcon; b.SetLabel = Btn_SetLabel
         b.SetSub = Btn_SetSub; b.SetTimer = Btn_SetTimer; b.SetState = Btn_SetState
+        b.SetIcon2 = Btn_SetIcon2
         b.def = def
 
         b:SetScript("OnClick", function()
@@ -343,8 +455,16 @@ function RallyPowerCP.NewStrip(key, title)
     function S:Finish()
         self:Reflow()
         local pos = RallyPowerCP_Settings[posKey]
-        if pos then f:SetPoint(pos.p, UIParent, pos.p, pos.x, pos.y)
+        if pos then f:SetPoint(pos.p, UIParent, pos.rel or pos.p, pos.x, pos.y)
         else f:SetPoint("CENTER", UIParent, "CENTER", 260, 0) end
+        -- scale grip (bottom-right, PallyPower art); scaling re-anchors the
+        -- frame, so persist the new position alongside the scale
+        if not S.grip then
+            S.grip = RallyPowerCP.AddScaleGrip(f, "stripScale_" .. key, function()
+                RallyPowerCP_Settings[posKey] = { p = "TOPLEFT", rel = "BOTTOMLEFT",
+                    x = f:GetLeft(), y = f:GetTop() }
+            end)
+        end
         local accum = 0
         f:SetScript("OnUpdate", function()
             accum = accum + (arg1 or 0)
