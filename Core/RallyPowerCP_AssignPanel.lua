@@ -84,6 +84,11 @@ for c = 0, 9 do COL_AT[c + 2] = c end
 local BLESS_MAXRANK = { [0] = 6, 7, 1, 3, 1, 1 }
 local AURA_MAXRANK  = { [0] = 7, 5, 1, 3, 3, 3, 1 }
 
+-- aura ids shown in the skills row: Devotion, Retribution, Concentration,
+-- Sanctity. The resistance auras are identical on every paladin (no ranks
+-- worth comparing, no talents), so they'd only add noise.
+local AURA_SHOW = { 0, 1, 2, 6 }
+
 local PANEL_BD = {
     bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -548,31 +553,35 @@ local function BuildBlessings(p)
         -- skills strip 1: the paladin's six blessings, rank+talent on each icon
         for id = 0, 5 do
             local si = p:CreateTexture(nil, "ARTWORK")
-            si:SetWidth(15); si:SetHeight(15)
-            si:SetPoint("TOPLEFT", p, "TOPLEFT", 6 + id * 19, y - 27)
+            si:SetWidth(16); si:SetHeight(16)
+            si:SetPoint("TOPLEFT", p, "TOPLEFT", 6 + id * 22, y - 26)
             si:Hide()
-            local st = Fnt(p, 7, GOLD_BRIGHT, "RIGHT")
-            st:SetWidth(22); st:SetHeight(8)
-            st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 3, -2)
+            local st = Fnt(p, 8, GOLD_BRIGHT, "RIGHT")
+            st:SetWidth(24); st:SetHeight(9)
+            st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 4, -2)
             row.skillIcon[id] = si
             row.skillText[id] = st
         end
-        -- skills strip 2: their seven auras (talents improve auras)
-        for id = 0, 6 do
+        -- skills strip 2: the rankable auras (resistance auras skipped -
+        -- identical on every paladin)
+        for i = 1, table.getn(AURA_SHOW) do
+            local id = AURA_SHOW[i]
             local si = p:CreateTexture(nil, "ARTWORK")
-            si:SetWidth(15); si:SetHeight(15)
-            si:SetPoint("TOPLEFT", p, "TOPLEFT", 6 + id * 19, y - 44)
+            si:SetWidth(16); si:SetHeight(16)
+            si:SetPoint("TOPLEFT", p, "TOPLEFT", 6 + (i - 1) * 22, y - 45)
             si:Hide()
-            local st = Fnt(p, 7, GOLD_BRIGHT, "RIGHT")
-            st:SetWidth(22); st:SetHeight(8)
-            st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 3, -2)
+            local st = Fnt(p, 8, GOLD_BRIGHT, "RIGHT")
+            st:SetWidth(24); st:SetHeight(9)
+            st:SetPoint("BOTTOMRIGHT", si, "BOTTOMRIGHT", 4, -2)
             row.auraIcon[id] = si
             row.auraText[id] = st
         end
         for pos = 0, BLESS_COLS do
             local c = COL_AT[pos]
             local b = MakeCell(p, 42, CELL_H)
-            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + pos * 44, y)
+            -- vertically centred against the 62px row (name + two skill strips)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + pos * 44,
+                y - (BLESS_ROW_H - CELL_H) / 2)
             b.classID = c
             local icon = b:CreateTexture(nil, "ARTWORK")
             icon:SetWidth(28); icon:SetHeight(28)
@@ -631,9 +640,10 @@ local function RefreshBlessings(p)
                     row.skillText[id]:Hide()
                 end
             end
-            -- skills strip 2: their auras with rank+talent
+            -- skills strip 2: their rankable auras with rank+talent
             local ak = AuraSkillsFor(pally)
-            for id = 0, 6 do
+            for i = 1, table.getn(AURA_SHOW) do
+                local id = AURA_SHOW[i]
                 local entry = ak and ak[id]
                 if type(entry) == "table" and entry.rank then
                     row.auraIcon[id]:SetTexture(AuraIcons and AuraIcons[id])
@@ -678,8 +688,9 @@ local function RefreshBlessings(p)
             for id = 0, 5 do
                 row.skillIcon[id]:Hide(); row.skillText[id]:Hide()
             end
-            for id = 0, 6 do
-                row.auraIcon[id]:Hide(); row.auraText[id]:Hide()
+            for i = 1, table.getn(AURA_SHOW) do
+                row.auraIcon[AURA_SHOW[i]]:Hide()
+                row.auraText[AURA_SHOW[i]]:Hide()
             end
             for c = 0, BLESS_COLS do row.cells[c]:Hide() end
         end

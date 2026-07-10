@@ -47,6 +47,15 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Changed (Blessings tab round 4: aura row trimmed, cells centred)
+- The aura skills row now shows only the **rankable auras** (Devotion,
+  Retribution, Concentration, Sanctity) — the three resistance auras are
+  identical on every paladin and were pure noise.
+- Skills icons grew to 16px on a wider 22px pitch and the rank text to 8px,
+  so the two strips read comfortably in the 170px column.
+- The assignment cells (aura/seal/blessing chips) are now **vertically
+  centred against the full 62px row** instead of hugging its top edge.
+
 ### Changed (Blessings tab round 3: spell tooltips actually resolve, aura skills row, wider left column)
 - **Spell tooltips fixed for real**: the legacy ID tables hold SHORT names
   ("Wisdom", "Retribution", "the Crusader") which never match a spellbook
