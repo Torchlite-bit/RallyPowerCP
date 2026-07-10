@@ -98,6 +98,11 @@ local inCombat = false           -- tracked via PLAYER_REGEN_DISABLED/ENABLED (1
 local CLASS_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
 local CLASS_SET = {}
 for _, c in pairs(CLASS_ORDER) do CLASS_SET[c] = true end
+-- legacy PallyPower class ids (the blessing grid's column order); shared
+-- with the assignment panel and the class-buff domain of the model
+local TOKEN2ID = { WARRIOR = 0, ROGUE = 1, PRIEST = 2, DRUID = 3, PALADIN = 4,
+                   HUNTER = 5, MAGE = 6, WARLOCK = 7, SHAMAN = 8 }
+RallyPowerCP.Token2ClassID = TOKEN2ID
 local classUnits    = {}         -- [classToken] = { unitIDs of that class }
 local presentClasses = {}        -- ordered list of class tokens with >=1 member
 local rowNeed       = {}         -- [classToken][buffIndex] = members of that class missing it
@@ -677,6 +682,20 @@ local rowBuff = {}               -- [classToken] = buff index shown/cast for tha
 -- Return the usable buff index for class ct, defaulting to the first usable.
 local function RowBuffIndex(ct)
     if not ACTIVE_BUFFS then return nil end
+    -- Effective selection (DESIGN_ASSIGNMENTS.md 9): my row in the shared
+    -- model first (the panel's Raid Buffs grid writes it), the local wheel
+    -- choice second, first usable buff last.
+    if RallyPowerCP.Assign then
+        local want = RallyPowerCP.Assign.GetClassBuff(UnitName("player"), TOKEN2ID[ct])
+        if want then
+            for i = 1, table.getn(ACTIVE_BUFFS) do
+                local bb = ACTIVE_BUFFS[i]
+                if (bb.name == want or bb.group == want) and BuffIsUsable(bb) then
+                    return i
+                end
+            end
+        end
+    end
     local bi = rowBuff[ct]
     if bi and ACTIVE_BUFFS[bi] and BuffIsUsable(ACTIVE_BUFFS[bi]) then return bi end
     for i = 1, table.getn(ACTIVE_BUFFS) do
@@ -699,6 +718,12 @@ local function CycleRowBuff(ct, dir)
         tries = tries + 1
     until BuffIsUsable(ACTIVE_BUFFS[i]) or tries >= nb
     rowBuff[ct] = i
+    -- wheeling self-assigns in the shared model (step-1b style), so the
+    -- panel's Raid Buffs grid and this strip are two views of one row
+    if RallyPowerCP.Assign and ACTIVE_BUFFS[i] then
+        RallyPowerCP.Assign.SetClassBuff(UnitName("player"), TOKEN2ID[ct],
+            ACTIVE_BUFFS[i].name or ACTIVE_BUFFS[i].group)
+    end
     if RefreshClassStrip then RefreshClassStrip() end
     if RefreshPopout and popout and popout:IsShown() and popoutClass == ct then RefreshPopout() end
 end
@@ -1075,23 +1100,34 @@ local function TitleCase(s)
     return string.upper(string.sub(s, 1, 1)) .. string.lower(string.sub(s, 2))
 end
 
--- One class-buff button def for the shared strip: icon = the class's selected
--- buff, gold class-name label, grey buff sub-label, need-count / timer, backdrop
--- coloured by coverage. Wheel cycles that class's buff; L = group cast, R = smart
--- single top-off; hover opens the player pop-out (like the paladin bar).
+-- Class icon for a row: the legacy engine's texture set (honours HD Icons),
+-- with the addon's own art as fallback.
+local function ClassIconPath(ct)
+    local id = TOKEN2ID[ct]
+    if PallyPower_ClassTexture and id and PallyPower_ClassTexture[id] then
+        return PallyPower_ClassTexture[id]
+    end
+    return "Interface\\AddOns\\RallyPowerCP\\Icons\\" .. TitleCase(ct)
+end
+
+-- One class-buff button def for the shared strip, in the paladin buff bar's
+-- exact anatomy: class icon + buff icon side by side (no text labels; the
+-- pop-out and tooltips carry the words), need-count / timer at the right,
+-- backdrop coloured by coverage. Wheel cycles that class's buff; L = group
+-- cast, R = smart single top-off; hover opens the player pop-out.
 local function ClassButtonDef(ct)
     return {
         key = "cls_" .. string.lower(ct),
         visible = function() return ClassPresent(ct) end,
         refresh = function(b)
-            b:SetLabel("|cffffd100" .. TitleCase(ct) .. "|r")
+            b:SetIcon(ClassIconPath(ct))
+            b:SetLabel(""); b:SetSub("")
             local bi = RowBuffIndex(ct)
             local bd = bi and ACTIVE_BUFFS[bi]
             if not bd then
-                b:SetIcon(nil); b:SetSub(""); b:SetTimer(""); b:SetState("off"); return
+                b:SetIcon2(nil); b:SetTimer(""); b:SetState("off"); return
             end
-            b:SetIcon(bd.icons and ("Interface\\Icons\\" .. (bd.icons[1] or "INV_Misc_QuestionMark")) or nil)
-            b:SetSub("|cff999999" .. (bd.name or bd.group or "") .. "|r")
+            b:SetIcon2(bd.icons and ("Interface\\Icons\\" .. (bd.icons[1] or "INV_Misc_QuestionMark")) or nil)
             local need = (rowNeed[ct] and rowNeed[ct][bi]) or 0
             local dl = rowDeadline[ct] and rowDeadline[ct][bi]
             local now = GetTime()
@@ -1102,6 +1138,7 @@ local function ClassButtonDef(ct)
             elseif mr and mr <= WARN_TIME then
                 b:SetBackdropColor(1, 1, 0.5, RallyPowerCP_Settings.stripAlpha or 0.5)   -- yellow: covered but expiring
                 b.icon:SetAlpha(1)
+                if b.icon2 then b.icon2:SetAlpha(1) end
                 local m = math.floor(mr / 60)
                 b:SetTimer(string.format("%d:%02d", m, math.floor(mr - m * 60)))
             else
@@ -1488,7 +1525,12 @@ end
 function RallyPowerCP_ApplyUIScale()
     local s = RallyPowerCP_Settings.uiScale or 1
     if RallyPowerCP.strips then
-        for _, S in pairs(RallyPowerCP.strips) do S.frame:SetScale(s) end
+        -- the global slider re-unifies every strip: per-strip grip scales
+        -- are cleared so the slider does what it says
+        for key, S in pairs(RallyPowerCP.strips) do
+            RallyPowerCP_Settings["stripScale_" .. key] = nil
+            S.frame:SetScale(s)
+        end
     end
     if popout then popout:SetScale(s) end
 end

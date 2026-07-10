@@ -47,6 +47,38 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Added (Raid Buffs grid, scale grips, live test bar, totem polish)
+- **Raid Buffs tab is now a caster × class grid** (the blessings tab's shape
+  applied to Priest/Mage/Druid): each cell cycles which buff that caster
+  gives that class, over a new **class-buff domain** in the assignment model
+  (`Assign.SetClassBuff`/`GetClassBuff`). **The class-buff strips follow
+  their own row** — assigning Thorns to a druid's Warrior column retargets
+  their Warrior button, and wheeling a strip button self-assigns in the
+  model (two views of one row), so buffers can split the raid by class.
+  The old single-owner raid-buff duty cards are replaced by the grid.
+- **Scale grips everywhere**: the PallyPower resize corner (same art, same
+  cursor math, self-contained code) now sits on every class strip and on
+  the assignment panel's bottom-right. Drag to scale 0.5–2.0; scale and the
+  re-anchored position persist per frame; the global UI-scale slider resets
+  per-strip overrides; Reset Position also resets the panel's scale.
+- **Paladin test-mode bar is live**: the ten class buttons now show your
+  REAL blessing assignments (green assigned / red not; the demo icon only
+  marks empty slots) and **mouse-wheel cycling works** — the engine's
+  cleanup left a table in `classID` (breaking the template handler) and the
+  stock wheel path skips blessings nobody needs, which solo in test mode
+  was everything. Assignments made in the panel repaint the bar instantly.
+- **Class-buff strips match the paladin bar exactly**: class icon + buff
+  icon side by side (new second-icon slot in the strip engine), no text
+  labels — the pop-out and tooltips carry the words.
+- **Totem chips show the totem's icon** (your spellbook first, static
+  fallback art for other shamans) and the **Group column is automatic** —
+  it shows the shaman's live raid subgroup instead of a manual assignment,
+  since totems only reach their own group. Preview raiders sit in fixed
+  groups (five a group).
+- **Aura cell cycling skips the resistance auras** on the Blessings tab
+  (identical on every paladin); the write + `AASSIGN` broadcast stay
+  byte-identical to the legacy right-click path.
+
 ### Changed (Blessings tab round 4: aura row trimmed, cells centred)
 - The aura skills row now shows only the **rankable auras** (Devotion,
   Retribution, Concentration, Sanctity) — the three resistance auras are
