@@ -47,6 +47,25 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Changed (Blessings tab round 3: spell tooltips actually resolve, aura skills row, wider left column)
+- **Spell tooltips fixed for real**: the legacy ID tables hold SHORT names
+  ("Wisdom", "Retribution", "the Crusader") which never match a spellbook
+  entry, so the spell lookup always fell back to the summary tooltip. Cell
+  tooltips now rebuild the full name with the locale's own patterns
+  ("Blessing of …", "… Aura", "Seal of …") before the spellbook lookup — a
+  paladin hovering an assigned blessing/aura/seal now gets the real spell
+  text (totem chips and duty cards already used exact full names and light
+  up for the class that knows them).
+- **Second skills row: auras.** Under each paladin's blessing ranks, a row of
+  their seven auras with rank+talent overlaid (from `AllPallysAuras`), since
+  talents improve auras — the assigner can see who is best specced for the
+  aura duty. Preview paladins: Protection +5 Devotion, Retribution +3
+  Retribution Aura.
+- **Roomier left column**: the name/skills column widened to 170px with a
+  thin gold separator before the Aura column, rows deepened to 62px (6
+  pooled rows) and the frame grew to 760×680; totem chips and duty cards
+  widened to match.
+
 ### Changed (Blessings tab round 2: skills column, Aura/Seal moved left, tooltip fix)
 - **Aura and Seal are now the FIRST two columns** of the grid (slots 1-2, as
   requested), followed by the ten buff classes.
