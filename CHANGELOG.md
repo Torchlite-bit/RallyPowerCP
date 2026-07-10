@@ -29,6 +29,33 @@ Author: **Subtilizer (Torchlite)**.
 Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
 classes look and behave the same way; the bespoke grid bar is gone.
 
+### Added (Assignment & Sync — step 2: the RPCX sync protocol)
+The final milestone piece: the totem, duty, and raid-buff-grid assignments the
+panel shows now **broadcast to the raid** and **receive** others', so a raid
+leader's plan actually reaches everyone. Implements `docs/DESIGN_SYNC.md`.
+Requires two RallyPowerCP clients to see end-to-end. **Blessings are
+untouched** — they keep syncing over the legacy `PLPWR` channel, so
+stock-PallyPower interop is unaffected.
+- **`Core/RallyPowerCP_Sync.lua`** — a new `RPCX` addon-message channel
+  (separate from PLPWR) that serializes each caster's block to a compact wire
+  form (`BLK <caster> <seq> cTOKEN;t<wids>;d<entries>;b<pairs>`), using the
+  catalog **wire ids** so spell names never cross the wire (Turtle-rename
+  safe) and unknown ids are skipped rather than misparsed (forward-compat).
+- **Flows**: `REQ` on entering world / roster change (others reply with their
+  blocks, and I push mine); a **0.5 s debounced broadcast** on any local edit;
+  whole-block replace on receive with an echo guard so applying a remote block
+  never re-broadcasts. Roster leavers are pruned, exactly like PallyPower.
+- **Permissions** mirror PallyPower verbatim: a block for a caster is accepted
+  from that caster (self-assign) or from **lead/assist** (who may push anyone's
+  plan); conflicts resolve arrival-order last-writer-wins. The strips and panel
+  need no new wiring — they already read the model, so remote assignments
+  appear the moment a block lands.
+- **`/rpc sync`** forces a full re-request + re-broadcast; the panel's Sync
+  pill now reads **SYNC** and its tooltip explains the PLPWR / RPCX split.
+- Fast-follows (documented, not in this step): cast-exact shared timers via
+  SuperWoW `UNIT_CASTEVENT`, message chunking, and Free Assignment for
+  non-paladins.
+
 ### Added (Assignment & Sync — step 1: the shared data model)
 Foundation only; nothing consumes it yet (sync = step 2, panel = step 3), so
 there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
