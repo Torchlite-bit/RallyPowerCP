@@ -1431,10 +1431,12 @@ function RallyPowerCP_SetTestMode(on)
     else
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Test mode off - back to live casting and your real spellbook.")
         -- Leaving test mode drops the preview raid's totem/duty rows from the
-        -- assignment store (your own block survives PruneToRoster).
+        -- assignment store (your own block survives PruneToRoster) and the
+        -- preview paladins' blessing table.
         if RallyPowerCP.Assign then
             RallyPowerCP.Assign.PruneToRoster()
         end
+        RallyPowerCP_Settings.testBless = nil
     end
     if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
         RallyPowerCP.active:OnActivate()

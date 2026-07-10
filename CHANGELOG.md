@@ -47,6 +47,20 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Fixed (post-test polish round 2)
+- **Preview-paladin blessings now survive `/reload`**: the fake paladins'
+  assignments moved from a session-only table into the saved settings
+  (`RallyPowerCP_Settings.testBless`); they are still wiped when test mode
+  turns off, and the legacy tables / PLPWR wire still never see fake names.
+- **Options frame grows for tall tabs**: the Shaman Buttons tab (four totem
+  dropdowns + shared behaviour section) overflowed the fixed 480px frame,
+  leaving the last dropdown on the border. Each tab now reports its content
+  height and the frame gains bottom breathing room when needed.
+- **Closer to the concept**: panel widened to 640×620 with concept-scale
+  cells (45px blessing cells / 30px chips, 98px element chips, 292px duty
+  cards), the tab row now sits flush on the content box with the active tab
+  merging into it, and grid/typography spacing was retuned throughout.
+
 ### Changed (assignment panel rebuilt to the concept spec)
 The panel now follows `docs/RallyPowerCP_assignment_concept.html` instead of
 approximating it: a 566×612 gold-framed "Who Covers What" dialog with status
