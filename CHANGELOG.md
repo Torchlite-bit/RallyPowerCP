@@ -47,6 +47,22 @@ there is no user-visible change. Implements `docs/DESIGN_ASSIGNMENTS.md`.
   utility, and the Shaman totem lists — nothing class-specific lives in the
   engine.
 
+### Changed (Blessings tab round 2: skills column, Aura/Seal moved left, tooltip fix)
+- **Aura and Seal are now the FIRST two columns** of the grid (slots 1-2, as
+  requested), followed by the ten buff classes.
+- **Per-paladin skills strip**, imitating the classic frame's left column:
+  under each paladin's name, an icon for every blessing they can cast with
+  its **rank and talent points** ("6+5") overlaid, and the number of
+  **Symbols of Kings** in their bags on the subtitle line ("34 sym", from the
+  legacy `SYMCOUNT` broadcasts) — so the assigner can see at a glance who has
+  the best rank/talents for each blessing. Preview paladins show max ranks
+  with +5 on their spec's blessing. Blessing rows grew to 50px (7 pooled
+  rows); the frame is 700×640.
+- **Tooltip fix**: `GameTooltip:SetSpell` now passes the literal `"spell"`
+  book type, and every tooltip handler is wrapped so an OnEnter error prints
+  `RallyPowerCP error: … (tooltip)` to chat instead of silently killing the
+  tooltip (the likely cause of tooltips not appearing at all).
+
 ### Added (Blessings tab: Aura + Seal columns, real spell tooltips)
 - **Aura and Seal columns** on the Blessings tab, exactly like the classic
   PallyPower frame: two extra cells per paladin (gold-labelled, headed by the
