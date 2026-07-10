@@ -38,7 +38,7 @@ local A = RallyPowerCP.Assign   -- loads before this file (TOC order)
 -- theme (colors lifted from the concept page)
 --------------------------------------------------------------------------
 
-local FRAME_W, FRAME_H = 640, 620
+local FRAME_W, FRAME_H = 700, 620
 local NAME_W   = 118         -- caster-name column
 local ROW_H    = 40
 local CELL_H   = 36          -- concept cells, scaled to fit ten columns
@@ -66,9 +66,13 @@ local ECOL = {
     Water = { 0.18, 0.50, 0.69 }, Air  = { 0.12, 0.62, 0.53 },
 }
 
--- legacy blessing-grid class ids 0-9 (PallyPower's own column order)
+-- legacy blessing-grid class ids 0-9 (PallyPower's own column order) plus
+-- the classic frame's two extra columns: 10 = Aura, 11 = Seal
 local CLASS_LABEL = { [0] = "Warrior", "Rogue", "Priest", "Druid", "Paladin",
-                      "Hunter", "Mage", "Warlock", "Shaman", "Pet" }
+                      "Hunter", "Mage", "Warlock", "Shaman", "Pet",
+                      "Aura", "Seal" }
+local BLESS_COLS = 11        -- grid columns run 0..11
+local FAKE_MAX = { [10] = 6, [11] = 5 }   -- preview cycle: 7 auras, 6 seals
 
 local PANEL_BD = {
     bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -283,6 +287,19 @@ local function MakeCell(parent, w, h)
     return b
 end
 
+-- Real spell tooltip (name, rank, description) when the spell is in YOUR
+-- spellbook, so the assigner can read what each spell does; the caller
+-- appends assignment context after it. Returns false when the spell isn't
+-- known so the caller draws its plain header instead.
+local function SpellTip(owner, spellName)
+    if not spellName then return false end
+    local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(spellName)
+    if not sp or not sp.index then return false end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetSpell(sp.index, BOOKTYPE_SPELL)
+    return true
+end
+
 local RefreshCurrent   -- forward declaration (handlers below close over it)
 
 --------------------------------------------------------------------------
@@ -323,17 +340,40 @@ local function PallyList()
 end
 
 local function BlessBid(pally, class)
-    local t
-    if IsFakeRow(pally) then t = TestBless()[pally]
-    else t = PallyPower_Assignments and PallyPower_Assignments[pally] end
-    local bid = t and t[class]
+    local bid
+    if IsFakeRow(pally) then
+        local t = TestBless()[pally]
+        bid = t and t[class]
+    elseif class == 10 then
+        bid = PallyPower_AuraAssignments and PallyPower_AuraAssignments[pally]
+    elseif class == 11 then
+        bid = PallyPower_SealAssignments and PallyPower_SealAssignments[pally]
+    else
+        local t = PallyPower_Assignments and PallyPower_Assignments[pally]
+        bid = t and t[class]
+    end
     if bid == nil then bid = -1 end
     return bid
 end
 
--- letter fallback when BlessingIcon isn't populated (e.g. odd class states)
-local function BlessAbbrev(bid)
-    local n = PallyPower_BlessingID and PallyPower_BlessingID[bid]
+-- icon / localized name for a column's assignment (10 = aura, 11 = seal)
+local function BlessIconFor(class, bid)
+    if class == 10 then return AuraIcons and AuraIcons[bid] end
+    if class == 11 then return SealIcons and SealIcons[bid] end
+    return BlessingIcon and BlessingIcon[bid]
+end
+
+local function BlessNameFor(class, bid)
+    local t
+    if class == 10 then t = PallyPower_AuraID
+    elseif class == 11 then t = PallyPower_SealID
+    else t = PallyPower_BlessingID end
+    return t and t[bid]
+end
+
+-- letter fallback when the icon tables aren't populated (odd class states)
+local function BlessAbbrev(class, bid)
+    local n = BlessNameFor(class, bid)
     if not n then return "?" end
     local _, _, w = string.find(n, "of%s+(%a+)")
     return string.sub(w or n, 1, 2)
@@ -344,12 +384,13 @@ local function BlessCycle(pally, class, dir)
         -- preview store only: the wire and the legacy tables never see fakes
         local tb = TestBless()
         tb[pally] = tb[pally] or {}
+        local top = FAKE_MAX[class] or 5
         local cur = tb[pally][class]
         if cur == nil then cur = -1 end
         cur = cur + dir
-        if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
-        if IsShiftKeyDown() then
-            for c = 0, 9 do tb[pally][c] = cur end
+        if cur > top then cur = -1 elseif cur < -1 then cur = top end
+        if IsShiftKeyDown() and class <= 9 then
+            for c = 0, 9 do tb[pally][c] = cur end   -- aura/seal excluded, as legacy
         else
             tb[pally][class] = cur
         end
@@ -381,28 +422,40 @@ end
 local function BlessCellTip()
     if RallyPowerCP_Settings.tooltips == false then return end
     local pally, class = this.pally, this.classID
-    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-    GameTooltip:SetText(pally .. "  -  " .. (CLASS_LABEL[class] or "?"), 1, 1, 1)
     local bid = BlessBid(pally, class)
-    if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
-        GameTooltip:AddLine(PallyPower_BlessingID[bid], 0.5, 1, 0.5)
+    local spellName = (bid >= 0) and BlessNameFor(class, bid) or nil
+    -- real spell tooltip first (description readable by the assigner),
+    -- assignment context appended under it
+    if spellName and SpellTip(this, spellName) then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(pally .. "  -  " .. (CLASS_LABEL[class] or "?"), 1, 1, 1)
     else
-        GameTooltip:AddLine("No blessing assigned", 0.7, 0.7, 0.7)
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        GameTooltip:SetText(pally .. "  -  " .. (CLASS_LABEL[class] or "?"), 1, 1, 1)
+        if spellName then
+            GameTooltip:AddLine(spellName, 0.5, 1, 0.5)
+        else
+            local what = (class == 10 and "aura") or (class == 11 and "seal") or "blessing"
+            GameTooltip:AddLine("No " .. what .. " assigned", 0.7, 0.7, 0.7)
+        end
     end
     GameTooltip:AddLine("Click: next  -  Right-click: previous  -  Wheel: cycle", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Shift: set ALL classes at once", 0.6, 0.6, 0.6)
+    if class <= 9 then
+        GameTooltip:AddLine("Shift: set ALL classes at once", 0.6, 0.6, 0.6)
+    end
     GameTooltip:Show()
 end
 
 local function BuildBlessings(p)
-    -- column headers: class icon + tiny label
-    for c = 0, 9 do
+    -- column headers: class icon + tiny label (Aura/Seal columns included,
+    -- like the classic PallyPower frame)
+    for c = 0, BLESS_COLS do
         local t = p:CreateTexture(nil, "ARTWORK")
-        t:SetWidth(26); t:SetHeight(26)
-        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 47 + 10, -42)
-        local l = Fnt(p, 8, INK_DIM, "CENTER")
-        l:SetWidth(47); l:SetHeight(9)
-        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 47 - 1, -70)
+        t:SetWidth(24); t:SetHeight(24)
+        t:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44 + 9, -42)
+        local l = Fnt(p, 8, c >= 10 and GOLD or INK_DIM, "CENTER")
+        l:SetWidth(44); l:SetHeight(9)
+        l:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44 - 1, -68)
         l:SetText(CLASS_LABEL[c])
         blessHeader[c] = t
     end
@@ -415,12 +468,12 @@ local function BuildBlessings(p)
         row.sub = Fnt(p, 8, INK_FAINT)
         row.sub:SetWidth(NAME_W - 10); row.sub:SetHeight(9)
         row.sub:SetPoint("TOPLEFT", p, "TOPLEFT", 6, y - 17)
-        for c = 0, 9 do
-            local b = MakeCell(p, 45, CELL_H)
-            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 47, y)
+        for c = 0, BLESS_COLS do
+            local b = MakeCell(p, 42, CELL_H)
+            b:SetPoint("TOPLEFT", p, "TOPLEFT", NAME_W + c * 44, y)
             b.classID = c
             local icon = b:CreateTexture(nil, "ARTWORK")
-            icon:SetWidth(30); icon:SetHeight(30)
+            icon:SetWidth(28); icon:SetHeight(28)
             icon:SetPoint("CENTER", b, "CENTER", 0, 0)
             b.icon = icon
             local txt = Fnt(b, 12, GOLD_BRIGHT, "CENTER")
@@ -443,6 +496,8 @@ local function RefreshBlessings(p)
             blessHeader[c]:SetTexture(PallyPower_ClassTexture[c])
         end
     end
+    if AuraIcons and AuraIcons[0] then blessHeader[10]:SetTexture(AuraIcons[0]) end
+    if SealIcons and SealIcons[0] then blessHeader[11]:SetTexture(SealIcons[0]) end
     local pallys = PallyList()
     local pc = CLASS_RGB.PALADIN
     for r = 1, MAX_ROWS do
@@ -454,18 +509,19 @@ local function RefreshBlessings(p)
             row.name:SetText(pally)
             row.name:SetTextColor(pc[1], pc[2], pc[3])
             row.sub:SetText(SubFor(pally, "PALADIN"))
-            for c = 0, 9 do
+            for c = 0, BLESS_COLS do
                 local b = row.cells[c]
                 b.pally = pally
                 local bid = BlessBid(pally, c)
                 if bid >= 0 then
-                    if BlessingIcon and BlessingIcon[bid] then
-                        b.icon:SetTexture(BlessingIcon[bid])
+                    local tex = BlessIconFor(c, bid)
+                    if tex then
+                        b.icon:SetTexture(tex)
                         b.icon:Show()
                         b.text:SetText("")
                     else
                         b.icon:Hide()
-                        b.text:SetText(BlessAbbrev(bid))
+                        b.text:SetText(BlessAbbrev(c, bid))
                     end
                     b.icon:SetAlpha(control and 1 or 0.4)
                     b:SetBackdropColor(0.13, 0.115, 0.085, 0.95)
@@ -482,7 +538,7 @@ local function RefreshBlessings(p)
             end
         else
             row.name:SetText(""); row.sub:SetText("")
-            for c = 0, 9 do row.cells[c]:Hide() end
+            for c = 0, BLESS_COLS do row.cells[c]:Hide() end
         end
     end
     -- coverage: any class (pets excluded) nobody blesses
@@ -507,7 +563,7 @@ local function RefreshBlessings(p)
         p.cover:SetTextColor(GAP_RED[1], GAP_RED[2], GAP_RED[3])
         p.cover:SetText("No blessing: " .. table.concat(gaps, ", "))
     end
-    p.hint:SetText("Click a cell to cycle that paladin's blessing for the class "
+    p.hint:SetText("Click a cell to cycle that paladin's blessing, aura or seal "
         .. "(right-click backwards, shift = all classes). Byte-compatible with stock PallyPower.")
 end
 
@@ -516,7 +572,7 @@ end
 --------------------------------------------------------------------------
 
 local totemRows = {}
-local PARTY_W, ELEM_W = 64, 98
+local PARTY_W, ELEM_W = 64, 112
 
 local function ShortTotem(name)
     if not name then return nil end
@@ -565,14 +621,21 @@ end
 
 local function TotemCellTip()
     if RallyPowerCP_Settings.tooltips == false then return end
-    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
     if this.element then
-        GameTooltip:SetText(this.shaman .. "  -  " .. this.element, 1, 1, 1)
         local cur = A.GetTotem(this.shaman, this.element)
-        if cur then GameTooltip:AddLine(cur, 0.5, 1, 0.5)
-        else GameTooltip:AddLine("No totem assigned", 0.7, 0.7, 0.7) end
+        -- real spell tooltip when the totem is in your spellbook
+        if cur and SpellTip(this, cur) then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(this.shaman .. "  -  " .. this.element, 1, 1, 1)
+        else
+            GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+            GameTooltip:SetText(this.shaman .. "  -  " .. this.element, 1, 1, 1)
+            if cur then GameTooltip:AddLine(cur, 0.5, 1, 0.5)
+            else GameTooltip:AddLine("No totem assigned", 0.7, 0.7, 0.7) end
+        end
         GameTooltip:AddLine("Click: next  -  Right-click: previous  -  Wheel: cycle", 0.6, 0.6, 0.6)
     else
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
         GameTooltip:SetText(this.shaman .. "  -  covered party", 1, 1, 1)
         local party = A.GetTotemParty(this.shaman)
         GameTooltip:AddLine(party and ("Group " .. party) or "Their own subgroup", 0.5, 1, 0.5)
@@ -776,8 +839,13 @@ local function DutyCardTip()
     if RallyPowerCP_Settings.tooltips == false then return end
     local def = A.duties[this.dutyKey]
     if not def then return end
-    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-    GameTooltip:SetText(def.spell or this.dutyKey, 1, 1, 1)
+    -- real spell tooltip when the duty's spell is in your spellbook
+    if SpellTip(this, def.spell) then
+        GameTooltip:AddLine(" ")
+    else
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        GameTooltip:SetText(def.spell or this.dutyKey, 1, 1, 1)
+    end
     local _, holders = HolderText(this.dutyKey)
     for i = 1, table.getn(holders) do
         local h = holders[i]
@@ -794,20 +862,20 @@ local function BuildDutyTab(p, tabIndex)
     for i = 1, DUTY_POOL do
         local col = math.mod(i - 1, 2)          -- 0 left, 1 right
         local rowN = math.floor((i - 1) / 2)
-        local card = MakeCell(p, 292, 46)
-        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 300, -46 - rowN * 48)
+        local card = MakeCell(p, 320, 46)
+        card:SetPoint("TOPLEFT", p, "TOPLEFT", col * 330, -46 - rowN * 48)
         local icon = card:CreateTexture(nil, "ARTWORK")
         icon:SetWidth(32); icon:SetHeight(32)
         icon:SetPoint("LEFT", card, "LEFT", 8, 0)
         card.icon = icon
         card.name = Fnt(card, 11, INK)
-        card.name:SetWidth(160); card.name:SetHeight(12)
+        card.name:SetWidth(180); card.name:SetHeight(12)
         card.name:SetPoint("TOPLEFT", card, "TOPLEFT", 48, -9)
         card.sub = Fnt(card, 9, INK_FAINT)
-        card.sub:SetWidth(160); card.sub:SetHeight(10)
+        card.sub:SetWidth(180); card.sub:SetHeight(10)
         card.sub:SetPoint("TOPLEFT", card, "TOPLEFT", 48, -26)
         card.holder = Fnt(card, 11, INK, "RIGHT")
-        card.holder:SetWidth(76); card.holder:SetHeight(12)
+        card.holder:SetWidth(84); card.holder:SetHeight(12)
         card.holder:SetPoint("RIGHT", card, "RIGHT", -8, 0)
         card:SetScript("OnClick", DutyCardClick)
         card:SetScript("OnMouseWheel", DutyCardWheel)
@@ -1086,7 +1154,7 @@ local function CreatePanel()
 
     -- content panels + per-tab chrome (title, desc, note, hint, coverage)
     local CHROME = {
-        { "Blessings", "Each paladin's blessing per class - the live PallyPower grid." },
+        { "Blessings", "Each paladin's blessing per class, plus their aura and seal - the live PallyPower grid." },
         { "Totems", "Which totem each shaman drops per element, and which group they cover." },
         { "Raid buff coverage", "Which caster keeps each raid-wide buff up." },
         { "Target debuff duty", "Who maintains each debuff on the kill target." },
@@ -1101,18 +1169,18 @@ local function CreatePanel()
         t:SetPoint("TOPLEFT", p, "TOPLEFT", 0, 0)
         t:SetText(CHROME[i][1])
         local d = Fnt(p, 10, INK_DIM)
-        d:SetWidth(430); d:SetHeight(11)
+        d:SetWidth(470); d:SetHeight(11)
         d:SetPoint("TOPLEFT", p, "TOPLEFT", 0, -21)
         d:SetText(CHROME[i][2])
         p.note = Fnt(p, 11, GOLD, "RIGHT")
         p.note:SetWidth(130); p.note:SetHeight(12)
         p.note:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, -4)
         p.hint = Fnt(p, 9, INK_FAINT)
-        p.hint:SetWidth(588); p.hint:SetHeight(22)
+        p.hint:SetWidth(648); p.hint:SetHeight(22)
         p.hint:SetJustifyV("BOTTOM")
         p.hint:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 14)
         p.cover = Fnt(p, 10, INK_DIM)
-        p.cover:SetWidth(588); p.cover:SetHeight(11)
+        p.cover:SetWidth(648); p.cover:SetHeight(11)
         p.cover:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 1)
         panels[i] = p
     end
