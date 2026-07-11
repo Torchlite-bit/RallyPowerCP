@@ -30,6 +30,7 @@ contain spaces or `;` (client rule), so both split cleanly.
 <v> REQ
 <v> BLK <caster> <seq> <payload>
 <v> CLR <caster>
+<v> FA  <0|1>
 ```
 
 - `<v>` — schema version (`1`). A client ignores a message whose `<v>` it
@@ -39,6 +40,10 @@ contain spaces or `;` (client rule), so both split cleanly.
   merge). `<seq>` is the caster block's monotonic counter (carried for future
   ordering; v1 correctness is arrival-order LWW + permission, §4).
 - `CLR` — drop `<caster>`'s block entirely (the panel's Clear on your own row).
+- `FA` — the raid-wide **Free Assignment** flag. Only a leader may send it;
+  receivers accept it only from a leader (§4). When on, any member may edit
+  any row. Announced by the leader on `REQ`-reply so joiners learn the state.
+  (Blessings keep PallyPower's own per-paladin free-assign, unchanged.)
 
 ### Payload sections (each `<tag><data>`, joined by `;`, empty ones omitted)
 

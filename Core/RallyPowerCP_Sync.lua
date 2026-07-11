@@ -32,6 +32,7 @@ local MAX_LEN     = 250         -- addon-message payload ceiling (warn only)
 
 local applyingRemote = false    -- true while installing a received block
 local dirty = {}                -- set of caster names pending broadcast
+local freeDirty = false         -- Free Assignment flag changed, pending send
 local flushAccum = 0
 local lastReq = -100
 
@@ -108,12 +109,17 @@ end
 
 local function CanAccept(sender, caster)
     if sender == caster then return true end
-    return LeaderLike(sender) and true or false
+    -- a leader may set anyone's block; Free Assignment opens it to everyone
+    return (LeaderLike(sender) and true or false) or A.GetFreeAssign()
 end
 
--- may I broadcast this caster's block? (my own always; others' if I lead)
+-- may I broadcast this caster's block? (my own always; others' if I lead -
+-- A.IAmLead is party-leader-safe, unlike PallyPower_CheckRaidLeader(Me),
+-- which never matches the player's own party leadership). Preview-raid rows
+-- never hit the wire.
 local function MayAssert(caster)
-    return caster == Me() or (LeaderLike(Me()) and true or false)
+    if RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[caster] then return false end
+    return caster == Me() or A.IAmLead()
 end
 
 --------------------------------------------------------------------------
@@ -212,6 +218,9 @@ end
 --------------------------------------------------------------------------
 
 local function RawSend(msg)
+    -- test mode is a local sandbox: never broadcast (preview edits, and even
+    -- real ones, stay off the wire so a tester can't pollute a live raid)
+    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return end
     if string.len(msg) > MAX_LEN then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP:|r assignment too large to "
             .. "sync in one message (" .. string.len(msg) .. " chars) - some of it may not "
@@ -250,14 +259,21 @@ end
 -- queue every block I'm authoritative for (my own; all, if I lead) - used on
 -- login, roster change, and as the reply to a REQ
 local function MarkAuthoritativeDirty()
-    local iLead = LeaderLike(Me())
+    local iLead = A.IAmLead()
     for name in pairs(RallyPowerCP_Assign.casters) do
         if name == Me() or iLead then dirty[name] = true end
     end
     dirty[Me()] = true          -- always assert myself, even with an empty block skipped later
+    if iLead then freeDirty = true end   -- announce the Free Assignment state
 end
 
 local function Flush()
+    -- Free Assignment: only a leader announces it (a caster block skip below
+    -- still lets FA go out on its own)
+    if freeDirty and A.IAmLead() then
+        RawSend(PROTO_V .. " FA " .. (A.GetFreeAssign() and "1" or "0"))
+    end
+    freeDirty = false
     local any = false
     for name in pairs(dirty) do any = true; break end
     if not any then return end
@@ -304,6 +320,16 @@ local function Receive(sender, msg)
         end
         return
     end
+
+    if cmd == "FA" then
+        -- only a leader may set the raid-wide Free Assignment flag
+        if LeaderLike(sender) then
+            applyingRemote = true
+            A.ApplyFreeAssign(tok[3] == "1")
+            applyingRemote = false
+        end
+        return
+    end
 end
 
 --------------------------------------------------------------------------
@@ -313,6 +339,10 @@ end
 
 A.Subscribe(function(domain, caster)
     if applyingRemote then return end
+    if domain == "free" then
+        freeDirty = true          -- leader flipped Free Assignment; broadcast it
+        return
+    end
     if domain == "totem" or domain == "duty" or domain == "cbuff" then
         MarkDirty(caster)
     end

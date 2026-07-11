@@ -215,6 +215,10 @@ for i, r in ipairs(ROSTER40) do
     FAKE[r[1]] = r[2]; SPEC[r[1]] = r[3]
     FAKE_GROUP[r[1]] = math.floor((i - 1) / 5) + 1   -- groups 1-8, five a group
 end
+-- Exposed so the sync + prune layers can tell preview names from real ones:
+-- fake rows are editable/visible for solo testing but never touch the wire
+-- and survive a roster change while test mode is on.
+RallyPowerCP.PreviewNames = FAKE
 
 --------------------------------------------------------------------------
 -- shared state + small helpers
@@ -256,16 +260,10 @@ local function TitleCase(s)
     return string.upper(string.sub(s, 1, 1)) .. string.lower(string.sub(s, 2))
 end
 
--- May I edit OTHER people's rows? (test mode = always: it's a preview)
+-- May I edit OTHER people's rows? Lead/assist, or Free Assignment is on
+-- (test mode leads; solo leads). Single source of truth: the model's gate.
 local function LeaderLike()
-    if RallyPowerCP.IsTestMode() then return true end
-    if GetNumRaidMembers() > 0 then
-        return (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
-    end
-    if GetNumPartyMembers() > 0 then
-        return IsPartyLeader() == 1
-    end
-    return true   -- solo: you lead a party of one
+    return A.IAmLead() or A.GetFreeAssign()
 end
 
 -- Group members of one class token: you first, then the real roster, then
@@ -1413,27 +1411,25 @@ local function UpdatePills()
     else
         pills.test:Hide()
     end
-    local lead
+    local iLead = A.IAmLead()
     if GetNumRaidMembers() > 0 then
-        lead = (IsRaidLeader() == 1) or (IsRaidOfficer() == 1)
-        pills.leader.text:SetText(lead and "|cff5be07a\226\151\143|r Lead/Assist"
-                                       or "|cff777777\226\151\143|r Member")
+        pills.leader.text:SetText(iLead and "|cff5be07a\226\151\143|r Lead/Assist"
+                                        or "|cff777777\226\151\143|r Member")
     elseif GetNumPartyMembers() > 0 then
-        lead = (IsPartyLeader() == 1)
-        pills.leader.text:SetText(lead and "|cff5be07a\226\151\143|r Party Lead"
-                                       or "|cff777777\226\151\143|r Member")
+        pills.leader.text:SetText(iLead and "|cff5be07a\226\151\143|r Party Lead"
+                                        or "|cff777777\226\151\143|r Member")
     else
         pills.leader.text:SetText("|cff5be07a\226\151\143|r Solo")
     end
-    if PP_PerUser then
-        pills.free:Show()
-        if PP_PerUser.freeassign then
-            pills.free.text:SetText("|cff5be07a\226\151\143|r Free Assign: on")
-        else
-            pills.free.text:SetText("|cff777777\226\151\143|r Free Assign: off")
-        end
+    -- Free Assignment is a synced raid-wide flag; only a leader can flip it,
+    -- so it reflects the same value on every client
+    pills.free:Show()
+    if A.GetFreeAssign() then
+        pills.free.text:SetText("|cff5be07a\226\151\143|r Free Assign: on")
+    elseif iLead then
+        pills.free.text:SetText("|cff777777\226\151\143|r Free Assign: off")
     else
-        pills.free:Hide()
+        pills.free.text:SetText("|cff555555\226\151\143|r Free Assign: off")
     end
 end
 
@@ -1576,16 +1572,24 @@ local function CreatePanel()
     pills.free = MakePill(f, 108)
     pills.free:SetPoint("RIGHT", pills.sync, "LEFT", -4, 0)
     pills.free:SetScript("OnClick", function()
-        if not PP_PerUser then return end
-        PP_PerUser.freeassign = not PP_PerUser.freeassign
-        if PallyPower_SendSelf then pcall(PallyPower_SendSelf) end
+        -- leader-only flip; A.SetFreeAssign gates and syncs it to the raid
+        if not A.SetFreeAssign(not A.GetFreeAssign()) then
+            Msg("Only the raid leader / assist can change Free Assignment.")
+            return
+        end
         UpdatePills()
     end)
     pills.free:SetScript("OnEnter", function()
         GameTooltip:SetOwner(this, "ANCHOR_LEFT")
         GameTooltip:SetText("Free Assignment", 1, 1, 1)
-        GameTooltip:AddLine("When ON, anyone may edit YOUR row (not just lead/assist).", 0.8, 0.8, 0.8, 1)
-        GameTooltip:AddLine("Click to toggle.", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("When ON, ANY member may edit ANY row - the leader lets people "
+            .. "spread the assignments out themselves.", 0.8, 0.8, 0.8, 1)
+        GameTooltip:AddLine("Leader-controlled and synced to the whole raid.", 0.6, 1, 0.6, 1)
+        if A.IAmLead() then
+            GameTooltip:AddLine("Click to toggle.", 0.6, 0.6, 0.6)
+        else
+            GameTooltip:AddLine("Only the leader can change this.", 0.7, 0.5, 0.5)
+        end
         GameTooltip:Show()
     end)
     pills.free:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1670,7 +1674,11 @@ local function CreatePanel()
         return b
     end
     local bRefresh = BottomButton("RallyPowerCP_AssignBtnRefresh", "Refresh", function()
+        -- universal refresh: PallyPower's blessing report request (paladins
+        -- resend blessings/symbols) AND our RPCX re-request (everyone resends
+        -- totems/duties/raid buffs), so the whole plan reconciles on demand
         if PallyPower_Refresh then pcall(PallyPower_Refresh) end
+        if RallyPowerCP_SyncNow then pcall(RallyPowerCP_SyncNow) end
         RefreshCurrent()
     end)
     bRefresh:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
