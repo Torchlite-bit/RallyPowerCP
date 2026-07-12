@@ -24,6 +24,32 @@ Author: **Subtilizer (Torchlite)**.
 
 ---
 
+## [0.14.0] — 2026-07-12
+**Raid roles: mark tanks & healers, and give tanks their own blessing.**
+
+### Added (Roles tab)
+- A sixth **Roles** tab on the assignment panel lists every raid/party member
+  (preview raid in test mode) in a two-column grid. **Left-click a name** to
+  cycle **Tank → Healer → none**.
+- **Byte-compatible with PallyPower**: roles are stored in PallyPower's own
+  `PallyPower_Tanks` / `PallyPower_Healers` tables and broadcast with the
+  identical `TANK` / `HEALER` / `CLTNK` / `CLHLR` messages, so a player you
+  mark here shows up for stock-PallyPower users (and vice versa) and drives
+  PallyPower's own tank logic — most notably **no Salvation on a marked
+  tank**.
+- **Per-tank blessing override** (the "give tanks a different blessing"
+  feature): **right-click or mouse-wheel a tank** to cycle the blessing it
+  gets instead of its class default, shown as an icon on the row. This is
+  PallyPower's per-player `NormalAssignments` with the identical `NASSIGN`
+  message, applied across the known paladins so the tank gets it whoever
+  buffs them.
+- Roles are **leader-gated** (or open with Free Assignment on), like the rest
+  of the panel; the tab header shows the tank/healer counts, and **Clear**
+  wipes all role marks. Nothing role-related touches the RPCX channel — it
+  all rides PLPWR through the untouched PallyPower engine.
+
+---
+
 ## [0.13.0] — 2026-07-12
 **The Assignment & Sync milestone.** A five-tab *"Who Covers What"* panel
 (right-click a strip's title or the paladin buff bar, or `/rpc assign`) now

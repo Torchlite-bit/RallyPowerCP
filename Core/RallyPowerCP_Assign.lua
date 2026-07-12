@@ -436,6 +436,97 @@ function A.SetNormalBlessing(pally, classID, tname, bid)
 end
 
 --------------------------------------------------------------------------
+-- role domain: ADAPTER over PallyPower's own Tanks/Healers tables. Reusing
+-- them (not a parallel store) means roles are shared byte-for-byte with
+-- stock PallyPower over the legacy PLPWR channel AND drive its own tank
+-- logic (e.g. no Salvation on a marked tank). Nothing role-related rides
+-- RPCX. A player marked here shows up in a stock-PallyPower user's raid and
+-- vice versa.
+--------------------------------------------------------------------------
+
+-- Preview-raid roles/overrides live here (never saved, never broadcast), so
+-- a solo tester can mark preview tanks without polluting the real
+-- PallyPower_Tanks table or the PLPWR wire.
+local previewRoles = {}          -- [name] = "TANK" | "HEALER"
+local previewTankBless = {}      -- [name][classID] = bid
+
+local function IsPreview(name)
+    return RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[name]
+end
+
+function A.GetRole(name)
+    if IsPreview(name) then return previewRoles[name] end
+    if PallyPower_Tanks and PallyPower_Tanks[name] then return "TANK" end
+    if PallyPower_Healers and PallyPower_Healers[name] then return "HEALER" end
+    return nil
+end
+
+-- role = "TANK" | "HEALER" | nil. Leader-gated (roles are a raid-wide plan);
+-- sends the byte-identical TANK/HEALER/CLTNK/CLHLR messages PallyPower uses.
+function A.SetRole(name, role)
+    if not (A.IAmLead() or A.GetFreeAssign()) then return false end
+    if IsPreview(name) then
+        previewRoles[name] = role     -- sandbox: no legacy table, no wire
+        Notify("role", name)
+        return true
+    end
+    PallyPower_Tanks = PallyPower_Tanks or {}
+    PallyPower_Healers = PallyPower_Healers or {}
+    local wasTank, wasHealer = PallyPower_Tanks[name], PallyPower_Healers[name]
+    PallyPower_Tanks[name] = nil
+    PallyPower_Healers[name] = nil
+    local send = PallyPower_SendMessage
+    if role == "TANK" then
+        PallyPower_Tanks[name] = true
+        if send then send("TANK " .. name) end
+    elseif role == "HEALER" then
+        PallyPower_Healers[name] = true
+        if send then send("HEALER " .. name) end
+    else
+        if wasTank and send then send("CLTNK " .. name) end
+        if wasHealer and send then send("CLHLR " .. name) end
+    end
+    Notify("role", name)
+    return true
+end
+
+--------------------------------------------------------------------------
+-- tank blessing override: the blessing a specific player (tank) gets instead
+-- of their class default. This is PallyPower's per-player NormalAssignments,
+-- byte-identical NASSIGN. Read from any known paladin; write to every paladin
+-- the editor controls, so the tank gets it whoever buffs them.
+--------------------------------------------------------------------------
+
+function A.GetTankBlessing(tname, classID)
+    if IsPreview(tname) then
+        local t = previewTankBless[tname]
+        return (t and t[classID]) or -1
+    end
+    if not AllPallys then return -1 end
+    for pally in pairs(AllPallys) do
+        local bid = A.GetNormalBlessing(pally, classID, tname)
+        if bid and bid ~= -1 then return bid end
+    end
+    return -1
+end
+
+function A.SetTankBlessing(tname, classID, bid)
+    if IsPreview(tname) then
+        previewTankBless[tname] = previewTankBless[tname] or {}
+        previewTankBless[tname][classID] = bid   -- sandbox: no legacy, no wire
+        Notify("blessings", tname)
+        return true
+    end
+    if not AllPallys then return false end
+    local any = false
+    for pally in pairs(AllPallys) do
+        if A.SetNormalBlessing(pally, classID, tname, bid) then any = true end
+    end
+    if any then Notify("blessings", tname) end
+    return any
+end
+
+--------------------------------------------------------------------------
 -- sync bridge (step 2): the RPCX layer decodes a remote caster block and
 -- installs it here. Whole-block REPLACE (the sender is authoritative for
 -- that caster), then the same Notify the panel already listens to. Kept in

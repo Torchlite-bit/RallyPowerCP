@@ -245,8 +245,10 @@ local TAB_INFO = {
     { label = "Raid Buffs", live = false },
     { label = "Debuffs",    live = false },
     { label = "Utility",    live = false },
+    { label = "Roles",      live = true  },   -- tanks/healers ride PLPWR
 }
--- tabs 4/5 are duty-card lists; tab 3 is the caster x class buff grid
+-- tabs 4/5 are duty-card lists; tab 3 is the caster x class buff grid;
+-- tab 6 is the roles grid (over PallyPower's Tanks/Healers)
 local DUTY_TAB = { [4] = "debuff", [5] = "utility" }
 
 local function Me() return UnitName("player") end
@@ -1401,6 +1403,191 @@ local function RefreshDutyTab(p, tabIndex)
 end
 
 --------------------------------------------------------------------------
+-- ROLES TAB - mark tanks / healers (over PallyPower's own Tanks/Healers, so
+-- it's shared with stock PallyPower and drives its no-Salvation-on-tanks
+-- rule) and give a tank its own blessing (per-player NormalAssignments).
+--------------------------------------------------------------------------
+
+local roleCells = {}
+local ROLE_COLS, ROLE_ROWS = 2, 18
+local ROLE_CELL_W = 344
+
+-- every raid/party member (you first); preview raid in test mode
+local function AllMembers()
+    local out, seen = {}, {}
+    local function add(n) if n and not seen[n] then seen[n] = true; table.insert(out, n) end end
+    add(Me())
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do add(UnitName("raid" .. i)) end
+    else
+        for i = 1, GetNumPartyMembers() do add(UnitName("party" .. i)) end
+    end
+    if RallyPowerCP.IsTestMode() then
+        for _, r in ipairs(ROSTER40) do add(r[1]) end
+    end
+    return out
+end
+
+local function MemberClass(name)
+    if name == Me() then local _, c = UnitClass("player"); return c end
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do
+            if UnitName("raid" .. i) == name then local _, c = UnitClass("raid" .. i); return c end
+        end
+    else
+        for i = 1, GetNumPartyMembers() do
+            if UnitName("party" .. i) == name then local _, c = UnitClass("party" .. i); return c end
+        end
+    end
+    if RallyPowerCP.IsTestMode() and FAKE[name] then return FAKE[name] end
+    return nil
+end
+
+local ROLE_NEXT = { [""] = "TANK", TANK = "HEALER", HEALER = "" }
+local function CycleMemberRole(name)
+    local nxt = ROLE_NEXT[A.GetRole(name) or ""] or ""
+    if not A.SetRole(name, (nxt ~= "") and nxt or nil) then
+        Msg("Only the raid leader / assist can set roles (or turn on Free Assign).")
+    end
+    RefreshCurrent()
+end
+
+local function CycleTankBless(name, dir)
+    if A.GetRole(name) ~= "TANK" then
+        Msg("Left-click to mark " .. name .. " a Tank first, then set its blessing.")
+        return
+    end
+    -- preview tanks use the sandbox override; real ones need a paladin to cast
+    local preview = RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[name]
+    if not preview and not (AllPallys and next(AllPallys)) then
+        Msg("No paladins known - a tank blessing needs a paladin to cast it.")
+        return
+    end
+    local tok = MemberClass(name)
+    local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+    if not cid then return end
+    local cur = A.GetTankBlessing(name, cid)
+    cur = cur + dir
+    if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
+    if not A.SetTankBlessing(name, cid, cur) then
+        Msg("You can't set that blessing (need lead/assist).")
+    end
+    RefreshCurrent()
+end
+
+local function RoleCellClick()
+    if arg1 == "RightButton" then CycleTankBless(this.member, 1)
+    else CycleMemberRole(this.member) end
+end
+
+local function RoleCellWheel()
+    CycleTankBless(this.member, (arg1 and arg1 > 0) and 1 or -1)
+end
+
+local function RoleCellTip()
+    if RallyPowerCP_Settings.tooltips == false then return end
+    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+    GameTooltip:SetText(this.member, 1, 1, 1)
+    local role = A.GetRole(this.member)
+    GameTooltip:AddLine(role == "TANK" and "Tank" or (role == "HEALER" and "Healer" or "No role"),
+        0.7, 0.9, 0.7)
+    if role == "TANK" then
+        local tok = MemberClass(this.member)
+        local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+        local bid = cid and A.GetTankBlessing(this.member, cid) or -1
+        if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
+            GameTooltip:AddLine("Tank blessing: " .. PallyPower_BlessingID[bid], 0.5, 1, 0.5)
+        else
+            GameTooltip:AddLine("Tank blessing: class default", 0.7, 0.7, 0.7)
+        end
+    end
+    GameTooltip:AddLine("Left-click: cycle Tank / Healer", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Right-click / wheel: a tank's own blessing", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Shared with PallyPower.", 0.5, 0.6, 0.8)
+    GameTooltip:Show()
+end
+
+local function BuildRoles(p)
+    for i = 1, ROLE_COLS * ROLE_ROWS do
+        local col = math.mod(i - 1, ROLE_COLS)
+        local rowN = math.floor((i - 1) / ROLE_COLS)
+        local b = MakeCell(p, ROLE_CELL_W, 24)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", col * (ROLE_CELL_W + 8), -44 - rowN * 26)
+        b.name = Fnt(b, 11, INK)
+        b.name:SetWidth(190); b.name:SetHeight(12)
+        b.name:SetPoint("LEFT", b, "LEFT", 8, 0)
+        b.role = Fnt(b, 10, INK_DIM, "RIGHT")
+        b.role:SetWidth(96); b.role:SetHeight(12)
+        b.role:SetPoint("RIGHT", b, "RIGHT", -28, 0)
+        local bi = b:CreateTexture(nil, "ARTWORK")
+        bi:SetWidth(18); bi:SetHeight(18)
+        bi:SetPoint("RIGHT", b, "RIGHT", -6, 0)
+        b.bicon = bi
+        b:SetScript("OnClick", RoleCellClick)
+        b:SetScript("OnMouseWheel", RoleCellWheel)
+        b:SetScript("OnEnter", SafeTip(RoleCellTip))
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        b:Hide()
+        roleCells[i] = b
+    end
+end
+
+local function RefreshRoles(p)
+    local members = AllMembers()
+    local cap = ROLE_COLS * ROLE_ROWS
+    local ntank, nheal = 0, 0
+    for i = 1, cap do
+        local b = roleCells[i]
+        local name = members[i]
+        if name then
+            b.member = name
+            local tok = MemberClass(name)
+            local cc = (tok and CLASS_RGB[tok]) or INK
+            b.name:SetText(name)
+            b.name:SetTextColor(cc[1], cc[2], cc[3])
+            local role = A.GetRole(name)
+            if role == "TANK" then
+                ntank = ntank + 1
+                b.role:SetText("|cff5be07aTank|r")
+                local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+                local bid = cid and A.GetTankBlessing(name, cid) or -1
+                if bid >= 0 and BlessingIcon and BlessingIcon[bid] then
+                    b.bicon:SetTexture(BlessingIcon[bid]); b.bicon:Show()
+                else
+                    b.bicon:Hide()
+                end
+                b:SetBackdropColor(0.10, 0.15, 0.09, 0.9)
+            elseif role == "HEALER" then
+                nheal = nheal + 1
+                b.role:SetText("|cff5b8fffHealer|r")
+                b.bicon:Hide()
+                b:SetBackdropColor(0.09, 0.11, 0.16, 0.9)
+            else
+                b.role:SetText("|cff777777-|r")
+                b.bicon:Hide()
+                b:SetBackdropColor(0.10, 0.088, 0.07, 0.7)
+            end
+            b:Show()
+        else
+            b:Hide()
+        end
+    end
+    p.note:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    p.note:SetText(ntank .. (ntank == 1 and " tank, " or " tanks, ")
+        .. nheal .. (nheal == 1 and " healer" or " healers"))
+    p.cover:SetText("")
+    if table.getn(members) > cap then
+        p.hint:SetText("Showing the first " .. cap .. " members. Left-click a name to mark "
+            .. "Tank/Healer; right-click or wheel a tank for its blessing. Shared with PallyPower.")
+    else
+        p.hint:SetText("Left-click a name to cycle Tank / Healer (shared with PallyPower and its "
+            .. "no-Salvation-on-tanks rule). Right-click or wheel a tank to give it its own blessing.")
+    end
+end
+
+--------------------------------------------------------------------------
 -- status pills (top right, concept header): TEST / leader / free assign / sync
 --------------------------------------------------------------------------
 
@@ -1471,6 +1658,7 @@ local function RefreshInner()
     if currentTab == 1 then RefreshBlessings(p)
     elseif currentTab == 2 then RefreshTotems(p)
     elseif currentTab == 3 then RefreshBuffGrid(p)
+    elseif currentTab == 6 then RefreshRoles(p)
     elseif DUTY_TAB[currentTab] then RefreshDutyTab(p, currentTab) end
 end
 
@@ -1527,6 +1715,11 @@ local function ClearCurrentTab()
             end
         end
         Msg("Assignments on this tab cleared.")
+    elseif currentTab == 6 then
+        for _, name in ipairs(AllMembers()) do
+            if A.GetRole(name) then A.SetRole(name, nil) end
+        end
+        Msg("Raid roles cleared.")
     end
     RefreshCurrent()
 end
@@ -1614,12 +1807,12 @@ local function CreatePanel()
     pills.test.text:SetText("|cffff8800\226\151\143|r TEST RAID")
     pills.test:Hide()
 
-    -- tab row
+    -- tab row (six tabs share the width)
     for i = 1, table.getn(TAB_INFO) do
         local idx = i
         local b = CreateFrame("Button", nil, f)
-        b:SetWidth(114); b:SetHeight(26)
-        b:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 116, -50)
+        b:SetWidth(120); b:SetHeight(26)
+        b:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 122, -50)
         b:SetBackdrop(CELL_BD)
         local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         fs:SetPoint("CENTER", b, "CENTER", 0, 0)
@@ -1646,6 +1839,7 @@ local function CreatePanel()
         { "Raid buff coverage", "Which buff each priest, mage and druid gives every class - their strips follow their rows." },
         { "Target debuff duty", "Who maintains each debuff on the kill target." },
         { "Utility & cooldowns", "Soulstones, tank shields, fear ward, innervate." },
+        { "Raid roles", "Mark tanks and healers (shared with PallyPower); give a tank its own blessing." },
     }
     for i = 1, table.getn(TAB_INFO) do
         local p = CreateFrame("Frame", nil, box)
@@ -1676,6 +1870,7 @@ local function CreatePanel()
     BuildBuffGrid(panels[3])
     BuildDutyTab(panels[4], 4)
     BuildDutyTab(panels[5], 5)
+    BuildRoles(panels[6])
 
     -- bottom buttons: the classic PallyPower frame's row, on our panel
     local function BottomButton(name, label, onclick)
