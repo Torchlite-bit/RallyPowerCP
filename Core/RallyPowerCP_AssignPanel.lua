@@ -1225,7 +1225,7 @@ local function DutyList(tabkey)
     local out = {}
     for i = 1, table.getn(A.dutyOrder) do
         local def = A.duties[A.dutyOrder[i]]
-        if def and def.tab == tabkey then table.insert(out, def) end
+        if def and def.tab == tabkey and not def.hidden then table.insert(out, def) end
     end
     return out
 end
