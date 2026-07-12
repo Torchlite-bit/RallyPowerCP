@@ -12,22 +12,29 @@ Author: **Subtilizer (Torchlite)**.
 
 ## [Unreleased]
 ### Planned / under consideration
-- **Role assignment** (tank/healer tables) so utility buttons and a Tank-Shield
-  box can target by role — e.g. PW: Shield / Fear Ward to tanks and healers.
-- **Cross-caster sync**: two casters of the same class splitting buff duty and
-  sharing timers over a dedicated addon-message channel (also the only way to get
-  exact timers for buffs other players cast).
-- **The full PallyPower grid + pop-outs**, drag-dot lock/unlock, and the
-  right-click assignment matrix / options panel.
-- **More classes**: Hunter (Trueshot Aura) and Shaman (totems) need an
-  aura/range model rather than per-member casting.
+- **Cast-exact shared timers** via SuperWoW `UNIT_CASTEVENT`, so the panel and
+  strips show what is *actually up* across the raid, not just your own casts.
+- **Options Raid tab** — role tables (tank / healer / assist) so utility duties
+  and a Tank-Shield box can target by role (PW: Shield / Fear Ward / Soulstone
+  / Innervate to the right people); this also unlocks the deferred Raid tab.
+- **Message chunking** for the rare assignment block that outgrows one addon
+  message (v1 warns and truncates).
+- **Straggler duty buttons**: Mage/Warrior debuff-duty buttons on the strips,
+  and Priest Tank Shield (both want the role tables above).
 
 ---
 
-## [0.12.0] — 2026-07-09
-**One visual family: every non-paladin class is now a strip.** Priest, Mage,
-Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
-classes look and behave the same way; the bespoke grid bar is gone.
+## [0.13.0] — 2026-07-12
+**The Assignment & Sync milestone.** A five-tab *"Who Covers What"* panel
+(right-click a strip's title or the paladin buff bar, or `/rpc assign`) now
+coordinates the whole raid: Blessings drive the classic PallyPower grid
+byte-for-byte (Aura/Seal columns and per-paladin rank/talent/Symbol info
+included), while Totems, Raid Buffs, Debuffs and Utility ride a new shared
+assignment model that **broadcasts across the raid** over an `RPCX` channel
+separate from PLPWR. A leader's plan reaches every client and drives their
+strips; every class strip and the panel gained a PallyPower-style scale grip;
+and test mode seats a full 40-man preview raid so it all works solo. Blessings
+stay 100% compatible with stock PallyPower users.
 
 ### Fixed (sync testing round 2)
 - **Duties now respect class.** A duty may only be held by a caster of its
@@ -303,6 +310,11 @@ lands, a leader's assignment will take over the same buttons automatically.
 - **Solo test:** `/run RallyPowerCP.Assign.SetTotem(UnitName("player"),
   "Earth", "Tremor Totem")` — the Earth button switches to Tremor on the next
   tick; wheel it and `/run` `GetTotem` to see the assignment follow.
+
+## [0.12.0] — 2026-07-09
+**One visual family: every non-paladin class is now a strip.** Priest, Mage,
+Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
+classes look and behave the same way; the bespoke grid bar is gone.
 
 ### Added (config options for the non-paladin classes)
 The options panel gained the applicable PallyPower-style settings for every
