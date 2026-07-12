@@ -1225,7 +1225,7 @@ local function DutyList(tabkey)
     local out = {}
     for i = 1, table.getn(A.dutyOrder) do
         local def = A.duties[A.dutyOrder[i]]
-        if def and def.tab == tabkey then table.insert(out, def) end
+        if def and def.tab == tabkey and not def.hidden then table.insert(out, def) end
     end
     return out
 end
@@ -1257,24 +1257,36 @@ local function CycleDutyHolder(key, dir)
     local holders = A.GetDutyCasters(key)
 
     if not LeaderLike() then
+        -- a member may only claim/unclaim their OWN role, and only when their
+        -- class matches the duty (a priest can't take a warrior debuff)
+        local _, mycls = UnitClass("player")
         local mine = false
         for i = 1, table.getn(holders) do
             if holders[i].caster == Me() then mine = true end
         end
         if mine then
             A.ClearDuty(Me(), key)
-        else
-            if not A.SetDuty(Me(), key, true) then
-                Msg("Only lead/assist can assign " .. (def.spell or key) .. " to others.")
-            end
+        elseif mycls ~= def.class then
+            Msg("Only a " .. TitleCase(def.class) .. " can take " .. (def.spell or key) .. ".")
+        elseif not A.SetDuty(Me(), key, true) then
+            Msg("You can't take " .. (def.spell or key) .. " right now.")
         end
         RefreshCurrent()
         return
     end
 
+    local n = table.getn(cands)
+    if n == 0 then
+        -- nobody of this class present: clear any stale holder, else say so
+        for i = 1, table.getn(holders) do A.ClearDuty(holders[i].caster, key) end
+        if table.getn(holders) == 0 then
+            Msg("No " .. TitleCase(def.class) .. " in the group for " .. (def.spell or key) .. ".")
+        end
+        RefreshCurrent()
+        return
+    end
     local cur = holders[1] and holders[1].caster or nil
     local idx = 0
-    local n = table.getn(cands)
     for i = 1, n do if cands[i] == cur then idx = i end end
     idx = idx + dir
     if idx > n then idx = 0 elseif idx < 0 then idx = n end

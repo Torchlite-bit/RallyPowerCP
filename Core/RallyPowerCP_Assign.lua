@@ -140,14 +140,26 @@ end
 -- e.g. PallyPower_CanControl). Solo counts as leading a party of one, and
 -- test mode always leads (the preview raid must be fully editable).
 function A.IAmLead()
-    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return true end
     if GetNumRaidMembers() > 0 then
         return (IsRaidLeader() or IsRaidOfficer()) and true or false
     end
     if GetNumPartyMembers() > 0 then
         return IsPartyLeader() and true or false
     end
-    return true   -- solo
+    return true   -- solo: you lead your party of one (test mode included, so
+                  -- the preview raid is editable; grouped test respects the
+                  -- real leader so a party simulates lead/member roles)
+end
+
+-- Best-effort English class token for a caster (block cache -> roster ->
+-- preview raid). nil when we genuinely can't tell (offline/out-of-range).
+local function ClassKnown(name)
+    local c = RallyPowerCP_Assign.casters[name]
+    if c and c.class then return c.class end
+    local cls = ClassOf(name)
+    if cls then return cls end
+    if RallyPowerCP.PreviewNames then return RallyPowerCP.PreviewNames[name] end
+    return nil
 end
 
 -- Free Assignment: a raid-wide flag the LEADER controls (synced over RPCX).
@@ -226,6 +238,13 @@ function A.SetDuty(caster, dutyKey, value)
     local def = A.duties[dutyKey]
     if not def then return false end
     if not Editable(caster) then return false end
+    -- a duty may only be held by a caster of its class (a priest can't take
+    -- Sunder Armor). Enforced only when the caster's class is known, and only
+    -- for assignments - clearing (value == nil) is always allowed.
+    if value ~= nil and def.class then
+        local cls = ClassKnown(caster)
+        if cls and cls ~= def.class then return false end
+    end
     if value ~= nil and def.target == "none" then value = true end
     local c = Block(caster, true)
     c.duty = c.duty or {}
@@ -353,7 +372,24 @@ function A.PruneToRoster()
         RallyPowerCP_Assign.casters[name] = nil
         RallyPowerCP.AssignStatus[name] = nil
     end
-    if table.getn(kill) > 0 then Notify("prune", nil) end
+    -- heal duties held by a caster of the wrong class (stale data from before
+    -- class-matching was enforced), where the class is known
+    local healed = false
+    for name, c in pairs(RallyPowerCP_Assign.casters) do
+        if c.duty then
+            local cls = ClassKnown(name)
+            if cls then
+                for key, val in pairs(c.duty) do
+                    local def = A.duties[key]
+                    if val and def and def.class and def.class ~= cls then
+                        c.duty[key] = nil
+                        healed = true
+                    end
+                end
+            end
+        end
+    end
+    if table.getn(kill) > 0 or healed then Notify("prune", nil) end
 end
 
 --------------------------------------------------------------------------

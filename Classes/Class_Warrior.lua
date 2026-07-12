@@ -104,6 +104,9 @@ M.optionsInfo = {
 if RallyPowerCP.Assign then
     local D = RallyPowerCP.Assign.RegisterDuty
     D{ key="SUNDER",      wid=7, class="WARRIOR", tab="debuff", spell="Sunder Armor",       target="none", multi=false, dur=30 }
-    D{ key="THUNDERCLAP", wid=8, class="WARRIOR", tab="debuff", spell="Thunder Clap",       target="none", multi=false, dur=30 }
-    D{ key="DEMOSHOUT",   wid=9, class="WARRIOR", tab="debuff", spell="Demoralizing Shout", target="none", multi=false, dur=30 }
+    -- Thunder Clap / Demoralizing Shout are group-utility debuffs, not the
+    -- "one caster maintains it on the kill target" kind; hidden from the
+    -- Debuffs tab (wids stay reserved, and the model/sync still carry them).
+    D{ key="THUNDERCLAP", wid=8, class="WARRIOR", tab="debuff", spell="Thunder Clap",       target="none", multi=false, dur=30, hidden=true }
+    D{ key="DEMOSHOUT",   wid=9, class="WARRIOR", tab="debuff", spell="Demoralizing Shout", target="none", multi=false, dur=30, hidden=true }
 end

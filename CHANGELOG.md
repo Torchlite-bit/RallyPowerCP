@@ -29,6 +29,23 @@ Author: **Subtilizer (Torchlite)**.
 Druid and Warrior were rebuilt from scratch on the strip engine, so all nine
 classes look and behave the same way; the bespoke grid bar is gone.
 
+### Fixed (sync testing round 2)
+- **Duties now respect class.** A duty may only be held by a caster of its
+  class - a priest can no longer claim Sunder Armor, and clicking a duty with
+  nobody of its class present no longer assigns it to you; it clears any stale
+  holder instead. Enforced in the model (`Assign.SetDuty`) and the panel, and
+  a heal pass drops any wrong-class duty saved before this (so the old
+  "everything assigned to me" state cleans itself up on the next roster
+  change or `/reload`).
+- **Test mode no longer forces everyone to leader.** Grouped test mode now
+  respects the real party/raid leader, so a two-client test simulates
+  lead/member roles properly; solo test mode stays fully editable as before.
+- **Debuffs tab trimmed** to the "maintain it on the kill target" duties:
+  Thunder Clap and Demoralizing Shout (group-utility shouts) are hidden from
+  the tab via a new `hidden` duty flag. Their wire ids stay reserved and the
+  model/sync still carry them, so nothing else breaks and they can be shown
+  again in one line. (Serpent Sting kept - it's a real damage debuff.)
+
 ### Fixed (sync testing round 1)
 - **Leaders can now edit other players' rows again.** The local edit gate
   (`Assign.CanEdit`, the panel's `LeaderLike`, the pills) compared
