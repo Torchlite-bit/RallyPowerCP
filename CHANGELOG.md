@@ -40,11 +40,15 @@ classes look and behave the same way; the bespoke grid bar is gone.
 - **Test mode no longer forces everyone to leader.** Grouped test mode now
   respects the real party/raid leader, so a two-client test simulates
   lead/member roles properly; solo test mode stays fully editable as before.
-- **Debuffs tab trimmed** to the "maintain it on the kill target" duties:
-  Thunder Clap and Demoralizing Shout (group-utility shouts) are hidden from
-  the tab via a new `hidden` duty flag. Their wire ids stay reserved and the
-  model/sync still carry them, so nothing else breaks and they can be shown
-  again in one line. (Serpent Sting kept - it's a real damage debuff.)
+- **Debuffs tab trimmed** to the raid-maintained utility debuffs. Hidden from
+  the tab (via a new `hidden` duty flag): Thunder Clap and Demoralizing Shout
+  (group-utility shouts), and Serpent Sting, Curse of Agony and Curse of Doom
+  (personal DPS DoTs, not a utility debuff someone is assigned to maintain).
+  Wire ids stay reserved and the model/sync still carry them, so nothing else
+  breaks (the Hunter sting wheel and Warlock curse wheel are unaffected) and
+  any of them can be shown again in one line. The tab keeps the Curses
+  (Elements / Shadow / Weakness / Recklessness / Tongues), Sunder Armor,
+  Expose Armor, Scorch, Viper Sting and Scorpid Sting.
 
 ### Fixed (sync testing round 1)
 - **Leaders can now edit other players' rows again.** The local edit gate
