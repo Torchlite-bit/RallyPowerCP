@@ -194,7 +194,9 @@ M.optionsInfo = {
 -- Assignment model: Hunter sting duties (each sting is its own key). Wids stable.
 if RallyPowerCP.Assign then
     local D = RallyPowerCP.Assign.RegisterDuty
-    D{ key="STING_SERPENT", wid=14, class="HUNTER", tab="debuff", spell="Serpent Sting", target="none", multi=false, dur=15 }
+    -- Serpent Sting is a personal DPS DoT, not a raid-maintained utility
+    -- debuff; hidden from the Debuffs tab (the sting wheel still uses it)
+    D{ key="STING_SERPENT", wid=14, class="HUNTER", tab="debuff", spell="Serpent Sting", target="none", multi=false, dur=15, hidden=true }
     D{ key="STING_VIPER",   wid=15, class="HUNTER", tab="debuff", spell="Viper Sting",   target="none", multi=false, dur=8  }
     D{ key="STING_SCORPID", wid=16, class="HUNTER", tab="debuff", spell="Scorpid Sting", target="none", multi=false, dur=20 }
 end

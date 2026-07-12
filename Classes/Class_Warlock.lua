@@ -351,6 +351,8 @@ if RallyPowerCP.Assign then
     D{ key="CURSE_WEAKNESS",     wid=21, class="WARLOCK", tab="debuff",  spell="Curse of Weakness",      target="none",   multi=false, dur=2*60 }
     D{ key="CURSE_RECKLESSNESS", wid=22, class="WARLOCK", tab="debuff",  spell="Curse of Recklessness",  target="none",   multi=false, dur=2*60 }
     D{ key="CURSE_TONGUES",      wid=23, class="WARLOCK", tab="debuff",  spell="Curse of Tongues",       target="none",   multi=false, dur=30 }
-    D{ key="CURSE_AGONY",        wid=24, class="WARLOCK", tab="debuff",  spell="Curse of Agony",         target="none",   multi=false, dur=24 }
-    D{ key="CURSE_DOOM",         wid=25, class="WARLOCK", tab="debuff",  spell="Curse of Doom",          target="none",   multi=false, dur=60 }
+    -- Agony / Doom are personal DPS DoTs, not a raid-maintained utility
+    -- debuff; hidden from the Debuffs tab (wids reserved, model/sync keep them)
+    D{ key="CURSE_AGONY",        wid=24, class="WARLOCK", tab="debuff",  spell="Curse of Agony",         target="none",   multi=false, dur=24, hidden=true }
+    D{ key="CURSE_DOOM",         wid=25, class="WARLOCK", tab="debuff",  spell="Curse of Doom",          target="none",   multi=false, dur=60, hidden=true }
 end
