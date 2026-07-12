@@ -465,6 +465,14 @@ end
 -- sends the byte-identical TANK/HEALER/CLTNK/CLHLR messages PallyPower uses.
 function A.SetRole(name, role)
     if not (A.IAmLead() or A.GetFreeAssign()) then return false end
+    -- leaving the tank role also drops the tank's blessing override (we
+    -- present it as "the tank's blessing"), so an ex-tank stops overriding
+    -- their class blessing
+    if role ~= "TANK" and A.GetRole(name) == "TANK" then
+        local tok = ClassKnown(name)
+        local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+        if cid then A.SetTankBlessing(name, cid, -1) end
+    end
     if IsPreview(name) then
         previewRoles[name] = role     -- sandbox: no legacy table, no wire
         Notify("role", name)
@@ -510,6 +518,18 @@ function A.GetTankBlessing(tname, classID)
     return -1
 end
 
+-- Can any known paladin actually cast blessing `bid`? (the override only
+-- fires when the paladin has that blessing - PallyPower.lua line 3232 - so a
+-- non-castable pick silently drops the tank's blessing.)
+function A.TankBlessingCastable(bid)
+    if bid == -1 then return true end
+    if not AllPallys then return false end
+    for pally in pairs(AllPallys) do
+        if PallyPower_CanBuff and PallyPower_CanBuff(pally, bid) then return true end
+    end
+    return false
+end
+
 function A.SetTankBlessing(tname, classID, bid)
     if IsPreview(tname) then
         previewTankBless[tname] = previewTankBless[tname] or {}
@@ -520,7 +540,11 @@ function A.SetTankBlessing(tname, classID, bid)
     if not AllPallys then return false end
     local any = false
     for pally in pairs(AllPallys) do
-        if A.SetNormalBlessing(pally, classID, tname, bid) then any = true end
+        -- only set the override on paladins that can cast it (clear always);
+        -- a non-castable override would just drop the tank's blessing
+        if bid == -1 or (PallyPower_CanBuff and PallyPower_CanBuff(pally, bid)) then
+            if A.SetNormalBlessing(pally, classID, tname, bid) then any = true end
+        end
     end
     if any then Notify("blessings", tname) end
     return any

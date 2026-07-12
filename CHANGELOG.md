@@ -27,6 +27,20 @@ Author: **Subtilizer (Torchlite)**.
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
 
+### Fixed (roles testing round 1)
+- **Tank blessing override now only offers blessings a paladin can actually
+  cast.** PallyPower fires the per-player override only when the paladin has
+  that blessing (`PallyPower.lua` line 3232), so cycling to one they lacked
+  silently dropped the tank's blessing (Salvation skipped, nothing cast). The
+  cycle now skips non-castable blessings, and the write only lands on paladins
+  who can cast the pick. (Reminder: the override is a *normal* single-target
+  blessing — apply it by right-clicking the class button or using Auto-buff,
+  exactly like PallyPower; a plain left-click casts only the greater blessing
+  and skips the tank.)
+- **Un-marking a tank clears its blessing override**, so an ex-tank stops
+  overriding its class blessing (the lingering override was why a
+  de-selected player still lost Salvation).
+
 ### Added (Roles tab)
 - A sixth **Roles** tab on the assignment panel lists every raid/party member
   (preview raid in test mode) in a two-column grid. **Left-click a name** to

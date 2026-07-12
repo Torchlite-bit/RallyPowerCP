@@ -1459,19 +1459,38 @@ local function CycleTankBless(name, dir)
         Msg("Left-click to mark " .. name .. " a Tank first, then set its blessing.")
         return
     end
-    -- preview tanks use the sandbox override; real ones need a paladin to cast
-    local preview = RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[name]
-    if not preview and not (AllPallys and next(AllPallys)) then
-        Msg("No paladins known - a tank blessing needs a paladin to cast it.")
-        return
-    end
     local tok = MemberClass(name)
     local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
     if not cid then return end
+    local preview = RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[name]
+    if preview then
+        -- sandbox: cycle every blessing (fake tanks, no real cast)
+        local cur = A.GetTankBlessing(name, cid) + dir
+        if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
+        A.SetTankBlessing(name, cid, cur)
+        RefreshCurrent()
+        return
+    end
+    if not (AllPallys and next(AllPallys)) then
+        Msg("No paladins known - a tank blessing needs a paladin to cast it.")
+        return
+    end
+    -- Only offer blessings a paladin can actually cast (-1 = class default),
+    -- so the override never silently drops the tank's blessing.
+    local opts = { -1 }
+    for bid = 0, 5 do
+        if A.TankBlessingCastable(bid) then table.insert(opts, bid) end
+    end
+    if table.getn(opts) <= 1 then
+        Msg("No paladin here can cast an alternative blessing yet.")
+        return
+    end
     local cur = A.GetTankBlessing(name, cid)
-    cur = cur + dir
-    if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
-    if not A.SetTankBlessing(name, cid, cur) then
+    local idx = 1
+    for i = 1, table.getn(opts) do if opts[i] == cur then idx = i end end
+    idx = idx + dir
+    if idx > table.getn(opts) then idx = 1 elseif idx < 1 then idx = table.getn(opts) end
+    if not A.SetTankBlessing(name, cid, opts[idx]) then
         Msg("You can't set that blessing (need lead/assist).")
     end
     RefreshCurrent()
