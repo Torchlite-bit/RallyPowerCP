@@ -16,12 +16,22 @@ Author: **Subtilizer (Torchlite)**.
   strips show what is *actually up* across the raid, not just your own casts.
 - **Message chunking** for the rare assignment block that outgrows one addon
   message (v1 warns and truncates).
-- **Straggler duty buttons**: Mage/Warrior debuff-duty buttons on the strips.
+- **Mage Scorch button** on the strip (needs the class-buff strip to grow a
+  debuff-button type first).
 
 ---
 
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
+
+### Added (Warrior Sunder Armor button)
+- The Warrior strip gains a **Sunder Armor** button beside Battle Shout: it
+  tracks Sunder on your current target via the icon-seed debuff matcher
+  (SuperWoW-exact where available, texture fallback otherwise) - green with a
+  cast-derived timer while it's up, red when the target is missing it, grey
+  with no hostile target - and clicking applies/refreshes it. Toggle it in the
+  Warrior Buttons options. (Thunder Clap / Demoralizing Shout stay
+  catalog-only; the Mage Scorch button is a follow-up.)
 
 ### Removed
 - **Power Word: Shield** dropped from the Priest entirely - both the utility
