@@ -645,6 +645,44 @@ local function StartThrottle(btn)
     if btn and btn.dim then btn.dim:Show() end
 end
 
+-- unitID for a raid/party member by name (nil if not present).
+local function UnitIdOf(name)
+    if not name then return nil end
+    if name == UnitName("player") then return "player" end
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do if UnitName("raid" .. i) == name then return "raid" .. i end end
+    else
+        for i = 1, GetNumPartyMembers() do if UnitName("party" .. i) == name then return "party" .. i end end
+    end
+    return nil
+end
+
+-- A present, alive member marked with the given role (over PallyPower's own
+-- Tanks/Healers tables, so it honours marks from any PallyPower user).
+local function FirstRoleUnit(role)
+    local tbl = (role == "TANK") and PallyPower_Tanks or PallyPower_Healers
+    if not tbl then return nil end
+    for name in pairs(tbl) do
+        if tbl[name] then
+            local uid = UnitIdOf(name)
+            if uid and UnitExists(uid) and not UnitIsDeadOrGhost(uid) then return uid end
+        end
+    end
+    return nil
+end
+
+-- Resolve a utility button's assigned target: my duty value for it, if it's a
+-- @ROLE or a specific player. Returns a unitID or nil (fall back to `mode`).
+local function ResolveDutyTarget(dutyKey)
+    if not (dutyKey and RallyPowerCP.Assign) then return nil end
+    local v = RallyPowerCP.Assign.GetDuty(UnitName("player"), dutyKey)
+    if type(v) ~= "string" then return nil end
+    if v == "@TANK" then return FirstRoleUnit("TANK") end
+    if v == "@HEALER" then return FirstRoleUnit("HEALER") end
+    return UnitIdOf(v)                      -- a specific player name
+end
+
 -- Click handler for a utility button (PW: Shield, Fear Ward, ...).
 local function UtilityOnClick()
     local u = ACTIVE_UTILITY and ACTIVE_UTILITY[this.utilIndex]
@@ -653,15 +691,19 @@ local function UtilityOnClick()
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r You haven't learned " .. u.name .. ".")
         return
     end
-    local target
-    if u.mode == "lowhp" then
-        target = LowestHealthUnit()
-    else  -- "target": friendly target, else self
-        if UnitExists("target") and UnitIsFriend("player", "target")
-           and UnitIsBuffable("target") then
-            target = "target"
-        else
-            target = "player"
+    -- an assigned @TANK/@HEALER (or player) target wins over the default mode
+    local target = u.duty and ResolveDutyTarget(u.duty)
+    if target and not (UnitExists(target) and UnitIsBuffable(target)) then target = nil end
+    if not target then
+        if u.mode == "lowhp" then
+            target = LowestHealthUnit()
+        else  -- "target": friendly target, else self
+            if UnitExists("target") and UnitIsFriend("player", "target")
+               and UnitIsBuffable("target") then
+                target = "target"
+            else
+                target = "player"
+            end
         end
     end
     if not target then target = "player" end
@@ -1169,14 +1211,40 @@ local function UtilityButtonDef(u, uidx)
         visible = function() return KNOWN[u.name] and RallyPowerCP_Settings.utilRow ~= false end,
         refresh = function(b)
             b:SetLabel("|cffffd100" .. short .. "|r")
-            b:SetSub(u.tip and ("|cff999999" .. u.tip .. "|r") or "")
+            -- show the assigned role target (Fear Ward -> Tank) when I hold it
+            local roleTag
+            if u.duty and RallyPowerCP.Assign then
+                local v = RallyPowerCP.Assign.GetDuty(UnitName("player"), u.duty)
+                if v == "@TANK" then roleTag = "on Tank"
+                elseif v == "@HEALER" then roleTag = "on Healer"
+                elseif type(v) == "string" then roleTag = "on " .. v end
+            end
+            if roleTag then
+                b:SetSub("|cff88ccff" .. roleTag .. "|r")
+                b:SetState("good")
+            else
+                b:SetSub(u.tip and ("|cff999999" .. u.tip .. "|r") or "")
+                b:SetState("off")
+            end
             b:SetIcon(GetSpellIconByName(u.name) or ("Interface\\Icons\\" .. (u.icon or "INV_Misc_QuestionMark")))
-            b:SetTimer(""); b:SetState("off")
+            b:SetTimer("")
         end,
         onClick = function(b) b.utilIndex = uidx; UtilityOnClick() end,
         tooltip = function(b, tt)
             tt:AddLine(u.name, 1, 1, 1)
-            tt:AddLine("Click: cast on " .. (u.tip or "target"), 0.8, 0.8, 0.8)
+            local roleTgt
+            if u.duty and RallyPowerCP.Assign then
+                local v = RallyPowerCP.Assign.GetDuty(UnitName("player"), u.duty)
+                if v == "@TANK" then roleTgt = "the marked Tank"
+                elseif v == "@HEALER" then roleTgt = "the marked Healer"
+                elseif type(v) == "string" then roleTgt = v end
+            end
+            if roleTgt then
+                tt:AddLine("Assigned: cast on " .. roleTgt, 0.6, 1, 0.6)
+                tt:AddLine("(falls back to " .. (u.tip or "target") .. " if not present)", 0.6, 0.6, 0.6)
+            else
+                tt:AddLine("Click: cast on " .. (u.tip or "target"), 0.8, 0.8, 0.8)
+            end
         end,
     }
 end

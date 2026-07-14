@@ -27,6 +27,22 @@ Author: **Subtilizer (Torchlite)**.
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
 
+### Added (role targeting: Fear Ward on the tank; Raid options tab)
+- **Utility duties can now target a role.** On the panel's **Utility** tab,
+  right-click a targeted duty (Fear Ward, PW: Shield, Innervate, Soulstone) to
+  send it to the **Tank** or **Healer** (or leave it to the caster's choice);
+  the card shows `Caster -> Tank`. The target is stored in the duty value
+  (`@TANK` / `@HEALER`) and syncs like the rest.
+- **The Priest's Fear Ward / PW: Shield buttons cast on the assigned role.**
+  When you hold the duty with a `@TANK`/`@HEALER` target, the strip button
+  casts on the marked tank/healer (resolved from PallyPower's Tanks/Healers)
+  and shows `on Tank` under the name — falling back to its normal target if
+  that role isn't present.
+- **Options → Raid tab repurposed** from a stub into a real pane: an **Open
+  Assignment Panel** button, a synced **Free Assignment** toggle, and
+  **Report assignments to chat** / **Re-request sync** buttons, with a note on
+  the PLPWR vs RPCX split.
+
 ### Fixed (roles testing round 1)
 - **Tank blessing override now only offers blessings a paladin can actually
   cast.** PallyPower fires the per-player override only when the paladin has
