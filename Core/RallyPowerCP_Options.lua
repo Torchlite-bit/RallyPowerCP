@@ -547,10 +547,40 @@ local function ButtonsTabEntries()
 end
 
 local RAID_INFO = {
-    { type = "header", label = "Raid" },
-    { type = "note", height = 44, label =
-        "Raid roles & auto-buff overrides arrive with the Assignment & Sync "
-        .. "milestone (MT/MA roles, Free Assignment, auto-buff by role)." },
+    { type = "header", label = "Raid coordination" },
+    { type = "note", height = 40, label =
+        "Roles (tanks / healers), blessings, totems, buffs, debuffs and utility "
+        .. "assignments all live in the assignment panel - open it below, or "
+        .. "right-click a strip's title / the paladin buff bar." },
+    { type = "button", label = "Open Assignment Panel",
+      tip = "The five-tab \"Who Covers What\" panel (/rpc assign)",
+      func = function()
+          if RallyPowerCP_AssignPanelToggle then RallyPowerCP_AssignPanelToggle() end
+      end },
+
+    { type = "header", label = "Free Assignment" },
+    { type = "check", label = "Free Assignment (any member may edit any row)",
+      tip = "Leader-controlled and synced to the raid.",
+      get = function()
+          return RallyPowerCP.Assign and RallyPowerCP.Assign.GetFreeAssign()
+      end,
+      set = function(v)
+          if RallyPowerCP.Assign and not RallyPowerCP.Assign.SetFreeAssign(v) then
+              DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Only the raid "
+                  .. "leader / assist can change Free Assignment.")
+          end
+      end },
+
+    { type = "header", label = "Broadcast" },
+    { type = "button", label = "Report assignments to chat",
+      tip = "Reports each paladin's blessings to raid/party chat (needs lead/assist)",
+      func = function() if PallyPower_Report then PallyPower_Report() end end },
+    { type = "button", label = "Re-request sync",
+      tip = "Force a full assignment re-request + re-broadcast (/rpc sync)",
+      func = function() if RallyPowerCP_SyncNow then RallyPowerCP_SyncNow() end end },
+    { type = "note", height = 28, label =
+        "Roles and blessings sync over PallyPower's PLPWR channel (compatible "
+        .. "with stock PallyPower); totems/duties/buffs ride the RPCX channel." },
 }
 
 --------------------------------------------------------------------------

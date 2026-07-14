@@ -25,10 +25,15 @@ M.buffs = {
 }
 
 -- Utility buttons (situational single-target casts), appended to the strip.
+-- `duty` links the button to its assignment duty: when you hold that duty
+-- with a @TANK/@HEALER target (Roles tab / Utility tab), the button casts on
+-- the marked role member instead of its default `mode` target.
 M.utility = {
-    { name = "Power Word: Shield", mode = "lowhp",  icon = "Spell_Holy_PowerWordShield",
+    { name = "Power Word: Shield", mode = "lowhp",  duty = "PWSHIELD",
+      icon = "Spell_Holy_PowerWordShield",
       tip = "lowest-health member in range (your target first)" },
-    { name = "Fear Ward",          mode = "target", icon = "Spell_Holy_Excorcism_02",
+    { name = "Fear Ward",          mode = "target", duty = "FEARWARD",
+      icon = "Spell_Holy_Excorcism_02",
       tip = "your target, else yourself" },
 }
 

@@ -1288,6 +1288,7 @@ local function CycleDutyHolder(key, dir)
         return
     end
     local cur = holders[1] and holders[1].caster or nil
+    local curTarget = holders[1] and holders[1].target      -- preserve the target
     local idx = 0
     for i = 1, n do if cands[i] == cur then idx = i end end
     idx = idx + dir
@@ -1295,12 +1296,54 @@ local function CycleDutyHolder(key, dir)
     for i = 1, table.getn(holders) do
         A.ClearDuty(holders[i].caster, key)
     end
-    if idx > 0 then A.SetDuty(cands[idx], key, true) end
+    if idx > 0 then
+        local val = true
+        if def.target ~= "none" and type(curTarget) == "string" then val = curTarget end
+        A.SetDuty(cands[idx], key, val)
+    end
+    RefreshCurrent()
+end
+
+-- Targeted utility duties (Fear Ward, PW: Shield, Innervate, Soulstone) carry
+-- WHO they go on in the duty value: true = caster's choice, "@TANK"/"@HEALER"
+-- = a marked role. Cycle the current holder(s) through those.
+local TARGET_OPTS = { true, "@TANK", "@HEALER" }
+local function TargetLabel(t)
+    if t == "@TANK" then return "Tank" end
+    if t == "@HEALER" then return "Healer" end
+    if type(t) == "string" then return t end        -- a specific player name
+    return nil
+end
+
+local function CycleDutyTarget(key, dir)
+    local def = A.duties[key]
+    if not def or def.target == "none" then return end
+    local holders = A.GetDutyCasters(key)
+    if table.getn(holders) == 0 then
+        Msg("Assign a caster first (left-click), then set the target.")
+        return
+    end
+    for i = 1, table.getn(holders) do
+        local h = holders[i]
+        local idx = 1
+        for j = 1, table.getn(TARGET_OPTS) do if TARGET_OPTS[j] == h.target then idx = j end end
+        idx = idx + dir
+        if idx > table.getn(TARGET_OPTS) then idx = 1
+        elseif idx < 1 then idx = table.getn(TARGET_OPTS) end
+        A.SetDuty(h.caster, key, TARGET_OPTS[idx])
+    end
     RefreshCurrent()
 end
 
 local function DutyCardClick()
-    CycleDutyHolder(this.dutyKey, (arg1 == "RightButton") and -1 or 1)
+    local def = A.duties[this.dutyKey]
+    -- right-click a targeted duty picks its target (Tank/Healer); otherwise
+    -- right-click cycles the holder backwards
+    if arg1 == "RightButton" and def and def.target ~= "none" then
+        CycleDutyTarget(this.dutyKey, 1)
+    else
+        CycleDutyHolder(this.dutyKey, (arg1 == "RightButton") and -1 or 1)
+    end
 end
 
 local function DutyCardWheel()
@@ -1322,11 +1365,16 @@ local function DutyCardTip()
     for i = 1, table.getn(holders) do
         local h = holders[i]
         local t = h.caster
-        if type(h.target) == "string" then t = t .. "  ->  " .. h.target end
+        if type(h.target) == "string" then t = t .. "  ->  " .. (TargetLabel(h.target) or h.target) end
         GameTooltip:AddLine(t, 0.5, 1, 0.5)
     end
     if table.getn(holders) == 0 then GameTooltip:AddLine("Unassigned", 0.7, 0.7, 0.7) end
-    GameTooltip:AddLine("Click: cycle who's responsible (right-click backwards)", 0.6, 0.6, 0.6)
+    if def.target ~= "none" then
+        GameTooltip:AddLine("Left-click: who casts it", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("Right-click: send to Tank / Healer", 0.6, 0.6, 0.6)
+    else
+        GameTooltip:AddLine("Click: cycle who's responsible (right-click backwards)", 0.6, 0.6, 0.6)
+    end
     GameTooltip:Show()
 end
 
@@ -1371,9 +1419,18 @@ local function RefreshDutyTab(p, tabIndex)
             if tex then card.icon:SetTexture(tex); card.icon:Show()
             else card.icon:Hide() end
             card.name:SetText(def.spell or def.key)
-            card.sub:SetText(TitleCase(def.class)
-                .. (def.multi and " - any number" or " - one owner"))
+            if def.target ~= "none" then
+                card.sub:SetText(TitleCase(def.class) .. " - right-click: target")
+            else
+                card.sub:SetText(TitleCase(def.class)
+                    .. (def.multi and " - any number" or " - one owner"))
+            end
             local txt = HolderText(def.key)
+            if txt and def.target ~= "none" then
+                local hs = A.GetDutyCasters(def.key)
+                local tl = hs[1] and TargetLabel(hs[1].target)
+                if tl then txt = txt .. " |cffaaaaaa->|r " .. tl end
+            end
             if txt then
                 assigned = assigned + 1
                 local cc = CLASS_RGB[def.class] or INK
@@ -1398,8 +1455,13 @@ local function RefreshDutyTab(p, tabIndex)
         p.note:SetTextColor(OK_GREEN[1], OK_GREEN[2], OK_GREEN[3])
     end
     p.cover:SetText("")
-    p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
-        .. "others claim or unclaim themselves). Synced to the raid.")
+    if DUTY_TAB[tabIndex] == "utility" then
+        p.hint:SetText("Left-click a card to cycle who's responsible; right-click a targeted "
+            .. "one (Fear Ward, PW: Shield, ...) to send it to the Tank or Healer. Synced.")
+    else
+        p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
+            .. "others claim or unclaim themselves). Synced to the raid.")
+    end
 end
 
 --------------------------------------------------------------------------
