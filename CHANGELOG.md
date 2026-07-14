@@ -27,6 +27,18 @@ Author: **Subtilizer (Torchlite)**.
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
 
+### Added ("My raid assignments" - personal targets in the Raid tab)
+- The Options **Raid** tab now shows a personal, per-character panel of MY
+  targeted duties (Warlock **Soulstone**, Druid **Innervate**, Priest **Fear
+  Ward** / **PW: Shield**) - one dropdown each to put it on a **specific
+  player**, a marked **Tank**/**Healer**, anyone (my choice), or nobody. It
+  writes my own row in the shared model (always self-editable, synced to the
+  raid); a leader's Utility-tab plan can still override it. Paladins get a
+  pointer to the Roles tab for alternate tank blessings.
+- (For now the Priest's buttons act on these at cast time; the Warlock/Druid
+  targets are recorded + synced but auto-cast wiring waits on their own
+  utility buttons.)
+
 ### Added (role targeting: Fear Ward on the tank; Raid options tab)
 - **Utility duties can now target a role.** On the panel's **Utility** tab,
   right-click a targeted duty (Fear Ward, PW: Shield, Innervate, Soulstone) to
