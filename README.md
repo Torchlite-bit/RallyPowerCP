@@ -20,7 +20,7 @@ the party/raid.
 | Class | What the bar does |
 |-------|-------------------|
 | **Paladin** | The original PallyPower blessing bar/grid, with a hover **player pop-out** on each buff-bar class button, replicating **PallyPower 3.3.5's player flyout**: skinned status-coloured buttons (green Have / red Need / blue Not Here), buff icon with dimming, personal timer, name, "R" range letter, "D" dead marker, and tank icon. **Click a player to refresh:** left = Greater blessing (out of combat), right = Normal single-target (honours individual assignments; works in combat). |
-| **Priest** | Power Word: Fortitude, Divine Spirit, Shadow Protection — plus a utility row: PW: Shield and Fear Ward. |
+| **Priest** | Power Word: Fortitude, Divine Spirit, Shadow Protection — plus a utility row: Fear Ward. |
 | **Mage** | Arcane Intellect. |
 | **Druid** | Mark of the Wild, Thorns. |
 | **Warrior** | Battle Shout (self-cast; one click refreshes nearby party). |
@@ -62,9 +62,9 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
   for buffs on you; for others they count down from your cast (the 1.12 client
   can't read other players' buff durations — the same limit PallyPower works
   around the same way).
-- **Utility row** (currently Priest): situational single-target casts. PW: Shield
-  goes to your target, else the lowest-health member in range; Fear Ward goes to
-  your target, else you.
+- **Utility row** (currently Priest): situational single-target casts. Fear Ward
+  goes to your assigned tank/healer if set (Roles + Utility tabs), else your
+  target, else you.
 - Only buffs you've learned appear, so the bar scales with level/spec.
 - **Drag** to move; position is saved per character.
 
@@ -174,8 +174,6 @@ player's buffs on the 1.12 client.
   player's buff, so non-self timers count down from your own casts.
 - "In range" uses the game's visibility check, which is a wider radius than buff
   range; an out-of-range cast cancels cleanly and the next click moves on.
-- PW: Shield can't see who your tank is yet (role assignment is on the roadmap),
-  and it may pick a Weakened-Soul target, in which case the cast simply fizzles.
 
 ## Credits
 

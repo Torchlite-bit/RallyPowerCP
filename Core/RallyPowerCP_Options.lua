@@ -584,6 +584,107 @@ local RAID_INFO = {
 }
 
 --------------------------------------------------------------------------
+-- "My raid assignments": a personal, per-character view of MY targeted
+-- duties (Soulstone / Innervate / Fear Ward), each a dropdown
+-- to pick who I put it on - a specific player, a marked Tank/Healer, anyone,
+-- or nobody. Writes my own row in the shared model (always self-editable and
+-- synced); a leader's Utility-tab plan can still override it.
+--------------------------------------------------------------------------
+
+local function RaidMemberNames()
+    local out = { UnitName("player") }
+    local n = GetNumRaidMembers()
+    if n > 0 then
+        for i = 1, n do
+            local nm = UnitName("raid" .. i)
+            if nm and nm ~= UnitName("player") then table.insert(out, nm) end
+        end
+    else
+        for i = 1, GetNumPartyMembers() do
+            local nm = UnitName("party" .. i)
+            if nm then table.insert(out, nm) end
+        end
+    end
+    return out
+end
+
+-- MY class's targeted utility duties (Soulstone, Innervate, Fear Ward, ...).
+local function MyTargetedDuties()
+    local out = {}
+    local A = RallyPowerCP.Assign
+    local _, myclass = UnitClass("player")
+    if not (A and myclass) then return out end
+    for i = 1, table.getn(A.dutyOrder) do
+        local def = A.duties[A.dutyOrder[i]]
+        if def and def.class == myclass and def.target ~= "none" and not def.hidden then
+            table.insert(out, def)
+        end
+    end
+    return out
+end
+
+local function MyAssignmentEntries()
+    local A = RallyPowerCP.Assign
+    if not A then return {} end
+    local me = UnitName("player")
+    local _, myclass = UnitClass("player")
+    local duties = MyTargetedDuties()
+    local entries = {}
+    if table.getn(duties) > 0 then
+        table.insert(entries, { type = "header", label = "My raid assignments" })
+        for i = 1, table.getn(duties) do
+            local key = duties[i].key
+            table.insert(entries, {
+                type = "select", label = duties[i].spell,
+                values = function()
+                    local out = {
+                        { value = "__off", text = "Not me" },
+                        { value = "__any", text = "Anyone (I choose)" },
+                        { value = "@TANK",   text = "Tank (marked)" },
+                        { value = "@HEALER", text = "Healer (marked)" },
+                    }
+                    local names = RaidMemberNames()
+                    for j = 1, table.getn(names) do
+                        table.insert(out, { value = names[j], text = names[j] })
+                    end
+                    return out
+                end,
+                get = function()
+                    local v = A.GetDuty(me, key)
+                    if v == nil then return "__off" end
+                    if v == true then return "__any" end
+                    return v
+                end,
+                set = function(v)
+                    if v == "__off" then A.ClearDuty(me, key)
+                    elseif v == "__any" then A.SetDuty(me, key, true)
+                    else A.SetDuty(me, key, v) end
+                end,
+            })
+        end
+        table.insert(entries, { type = "note", height = 26, label =
+            "Your targets sync to the raid; a leader's Utility-tab plan can override them." })
+    end
+    -- Paladins set alternate tank blessings on the panel's Roles tab.
+    if myclass == "PALADIN" then
+        table.insert(entries, { type = "header", label = "Tank blessings" })
+        table.insert(entries, { type = "note", height = 40, label =
+            "Give a tank a blessing that differs from its class default on the "
+            .. "Assignment panel -> Roles tab: mark the tank, then right-click / "
+            .. "wheel it to pick the blessing." })
+    end
+    return entries
+end
+
+-- Raid tab = my personal assignments, then the shared coordination controls.
+local function RaidTabEntries()
+    local out = {}
+    for _, e in ipairs(MyAssignmentEntries()) do table.insert(out, e) end
+    for _, e in ipairs(RAID_INFO) do table.insert(out, e) end
+    return out
+end
+
+--------------------------------------------------------------------------
 -- tabs + frame
 --------------------------------------------------------------------------
 
@@ -614,7 +715,7 @@ local function ShowTab(i)
         p.built = true
         if i == 1 then BuildControls(p, SettingsTabEntries())
         elseif i == 2 then BuildControls(p, ButtonsTabEntries())
-        else BuildControls(p, RAID_INFO) end
+        else BuildControls(p, RaidTabEntries()) end
     end
     -- grow the frame when a tab's content is taller than the default body
     -- (56px top chrome + content + 18px bottom breathing room), so the last

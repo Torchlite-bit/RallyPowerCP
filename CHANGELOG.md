@@ -14,26 +14,40 @@ Author: **Subtilizer (Torchlite)**.
 ### Planned / under consideration
 - **Cast-exact shared timers** via SuperWoW `UNIT_CASTEVENT`, so the panel and
   strips show what is *actually up* across the raid, not just your own casts.
-- **Options Raid tab** — role tables (tank / healer / assist) so utility duties
-  and a Tank-Shield box can target by role (PW: Shield / Fear Ward / Soulstone
-  / Innervate to the right people); this also unlocks the deferred Raid tab.
 - **Message chunking** for the rare assignment block that outgrows one addon
   message (v1 warns and truncates).
-- **Straggler duty buttons**: Mage/Warrior debuff-duty buttons on the strips,
-  and Priest Tank Shield (both want the role tables above).
+- **Straggler duty buttons**: Mage/Warrior debuff-duty buttons on the strips.
 
 ---
 
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
 
+### Removed
+- **Power Word: Shield** dropped from the Priest entirely - both the utility
+  strip button and the `PWSHIELD` assignment duty. It's spammed reactively
+  rather than assigned/maintained, so it didn't fit the coordination model.
+  Wire id 19 is retired (never reused; the wire stays forward-compatible).
+
+### Added ("My raid assignments" - personal targets in the Raid tab)
+- The Options **Raid** tab now shows a personal, per-character panel of MY
+  targeted duties (Warlock **Soulstone**, Druid **Innervate**, Priest **Fear
+  Ward**) - one dropdown each to put it on a **specific player**, a marked
+  **Tank**/**Healer**, anyone (my choice), or nobody. It
+  writes my own row in the shared model (always self-editable, synced to the
+  raid); a leader's Utility-tab plan can still override it. Paladins get a
+  pointer to the Roles tab for alternate tank blessings.
+- (For now the Priest's buttons act on these at cast time; the Warlock/Druid
+  targets are recorded + synced but auto-cast wiring waits on their own
+  utility buttons.)
+
 ### Added (role targeting: Fear Ward on the tank; Raid options tab)
 - **Utility duties can now target a role.** On the panel's **Utility** tab,
-  right-click a targeted duty (Fear Ward, PW: Shield, Innervate, Soulstone) to
-  send it to the **Tank** or **Healer** (or leave it to the caster's choice);
-  the card shows `Caster -> Tank`. The target is stored in the duty value
+  right-click a targeted duty (Fear Ward, Innervate, Soulstone) to send it to
+  the **Tank** or **Healer** (or leave it to the caster's choice); the card
+  shows `Caster -> Tank`. The target is stored in the duty value
   (`@TANK` / `@HEALER`) and syncs like the rest.
-- **The Priest's Fear Ward / PW: Shield buttons cast on the assigned role.**
+- **The Priest's Fear Ward button casts on the assigned role.**
   When you hold the duty with a `@TANK`/`@HEALER` target, the strip button
   casts on the marked tank/healer (resolved from PallyPower's Tanks/Healers)
   and shows `on Tank` under the name — falling back to its normal target if
