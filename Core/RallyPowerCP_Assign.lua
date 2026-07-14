@@ -18,7 +18,7 @@
 --         seq   = 12,                       -- bumped on every local edit
 --                                           -- (reserved: sync LWW ordering)
 --         totem = { Earth = "Strength of Earth Totem", party = 2 },
---         duty  = { SUNDER = true, SOULSTONE = "Seraphine", PWSHIELD = "@MT" },
+--         duty  = { SUNDER = true, SOULSTONE = "Seraphine", FEARWARD = "@TANK" },
 --       },
 --     },
 --   }

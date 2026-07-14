@@ -108,7 +108,7 @@ duty = {
     -- [dutyKey] = true | "PlayerName" | "@ROLE"
     SUNDER    = true,          -- untargeted duty: maintain on the kill target
     SOULSTONE = "Seraphine",   -- targeted duty: value = the recipient
-    PWSHIELD  = "@MT",         -- role-targeted: resolved via role tables at cast time
+    FEARWARD  = "@TANK",       -- role-targeted: resolved via role tables at cast time
 }
 ```
 
@@ -156,7 +156,7 @@ The concept panel's three duty tabs are one domain filtered by `tab`:
   `CURSE_ELEMENTS`, `CURSE_SHADOW`, … (Warlock), `WINTERSCHILL`/`SCORCH`
   (Mage), `STING_SERPENT`, `STING_VIPER`, `STING_SCORPID` (Hunter) —
   `target="none"`.
-- **Utility**: `SOULSTONE` (`target="player"`), `FEARWARD`, `PWSHIELD`,
+- **Utility**: `SOULSTONE` (`target="player"`), `FEARWARD`,
   `INNERVATE` (`target="player"` or `"role"`).
 
 Note the cycle-strip options become *separate duty keys* (three sting keys,
@@ -296,7 +296,7 @@ RallyPowerCP_Assign = {
         Hexweaver  = { class="WARLOCK", seq=1,
                        duty = { CURSE_SHADOW=true, SOULSTONE="Mindveil" } },   -- multi-caster: 2nd stone
         Ironclad   = { class="WARRIOR", seq=7, duty = { SUNDER=true } },
-        Seraphine  = { class="PRIEST",  seq=3, duty = { FORTITUDE=true, PWSHIELD="@MT" } },
+        Seraphine  = { class="PRIEST",  seq=3, duty = { FORTITUDE=true, FEARWARD="@TANK" } },
     },
 }
 ```

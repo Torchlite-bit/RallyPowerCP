@@ -4,9 +4,9 @@
 -- A class-buff strip (like Mage/Druid): one button per raid class showing the
 -- buff assigned to that class (Fortitude / Divine Spirit / Shadow Protection,
 -- wheel-cycled). Left-click casts the group version, right-click tops off the
--- next member, hover opens the player pop-out. Plus the utility buttons
--- (PW: Shield / Fear Ward) appended to the same strip. All behaviour (scanning,
--- casting, timers, the strip) lives in the core; the module supplies the data.
+-- next member, hover opens the player pop-out. Plus a utility button (Fear
+-- Ward) appended to the same strip. All behaviour (scanning, casting, timers,
+-- the strip) lives in the core; the module supplies the data.
 --=============================================================================
 
 local M = RallyPowerCP:NewClass("PRIEST")
@@ -29,9 +29,6 @@ M.buffs = {
 -- with a @TANK/@HEALER target (Roles tab / Utility tab), the button casts on
 -- the marked role member instead of its default `mode` target.
 M.utility = {
-    { name = "Power Word: Shield", mode = "lowhp",  duty = "PWSHIELD",
-      icon = "Spell_Holy_PowerWordShield",
-      tip = "lowest-health member in range (your target first)" },
     { name = "Fear Ward",          mode = "target", duty = "FEARWARD",
       icon = "Spell_Holy_Excorcism_02",
       tip = "your target, else yourself" },
@@ -52,5 +49,6 @@ if RallyPowerCP.Assign then
     D{ key="SPIRIT",     wid=2,  class="PRIEST", tab="raidbuff", spell="Divine Spirit",          target="none",   multi=false, dur=30*60 }
     D{ key="SHADOWPROT", wid=3,  class="PRIEST", tab="raidbuff", spell="Shadow Protection",      target="none",   multi=false, dur=10*60 }
     D{ key="FEARWARD",   wid=18, class="PRIEST", tab="utility",  spell="Fear Ward",              target="player", multi=false, dur=0 }
-    D{ key="PWSHIELD",   wid=19, class="PRIEST", tab="utility",  spell="Power Word: Shield",     target="role",   multi=true,  dur=30 }
+    -- wid 19 (PW: Shield) is retired - it's spammed reactively, not a
+    -- maintained/assigned duty. Never reuse wid 19 (wire stays forward-safe).
 end

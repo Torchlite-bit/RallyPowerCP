@@ -130,7 +130,6 @@ local DUTY_ICONS = {
     STING_SCORPID = "Interface\\Icons\\Ability_Hunter_CriticalShot",
     SOULSTONE   = "Interface\\Icons\\Spell_Shadow_SoulGem",
     FEARWARD    = "Interface\\Icons\\Spell_Holy_Excorcism",
-    PWSHIELD    = "Interface\\Icons\\Spell_Holy_PowerWordShield",
     INNERVATE   = "Interface\\Icons\\Spell_Nature_Lightning",
 }
 
@@ -1304,7 +1303,7 @@ local function CycleDutyHolder(key, dir)
     RefreshCurrent()
 end
 
--- Targeted utility duties (Fear Ward, PW: Shield, Innervate, Soulstone) carry
+-- Targeted utility duties (Fear Ward, Innervate, Soulstone) carry
 -- WHO they go on in the duty value: true = caster's choice, "@TANK"/"@HEALER"
 -- = a marked role. Cycle the current holder(s) through those.
 local TARGET_OPTS = { true, "@TANK", "@HEALER" }
@@ -1457,7 +1456,7 @@ local function RefreshDutyTab(p, tabIndex)
     p.cover:SetText("")
     if DUTY_TAB[tabIndex] == "utility" then
         p.hint:SetText("Left-click a card to cycle who's responsible; right-click a targeted "
-            .. "one (Fear Ward, PW: Shield, ...) to send it to the Tank or Healer. Synced.")
+            .. "one (Fear Ward, Innervate, Soulstone) to send it to the Tank or Healer. Synced.")
     else
         p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
             .. "others claim or unclaim themselves). Synced to the raid.")

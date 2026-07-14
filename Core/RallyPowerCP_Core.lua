@@ -17,7 +17,7 @@
 --       red+count = members missing it, green+timer = covered; scroll a button
 --       to switch that class's buff, left-click casts the group version,
 --       right-click tops off the next member, hover opens the player pop-out.
---       Priest also appends its utility buttons (PW: Shield / Fear Ward).
+--       Priest also appends its utility button (Fear Ward).
 --       Everything (frame, drag, scale grip, position) comes from the strip
 --       engine, so these read identically to Shaman/Hunter/Warlock/Rogue.
 --   * The engine also provides an expiry "ding", a Smart Buff key binding, and
@@ -683,7 +683,7 @@ local function ResolveDutyTarget(dutyKey)
     return UnitIdOf(v)                      -- a specific player name
 end
 
--- Click handler for a utility button (PW: Shield, Fear Ward, ...).
+-- Click handler for a utility button (Fear Ward, ...).
 local function UtilityOnClick()
     local u = ACTIVE_UTILITY and ACTIVE_UTILITY[this.utilIndex]
     if not u then return end
@@ -1200,7 +1200,7 @@ local function ClassButtonDef(ct)
     }
 end
 
--- One utility button def (Priest PW: Shield / Fear Ward): the same strip
+-- One utility button def (Priest Fear Ward): the same strip
 -- anatomy, cast on click.
 local function UtilityButtonDef(u, uidx)
     local short = u.name

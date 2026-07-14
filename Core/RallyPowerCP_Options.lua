@@ -585,7 +585,7 @@ local RAID_INFO = {
 
 --------------------------------------------------------------------------
 -- "My raid assignments": a personal, per-character view of MY targeted
--- duties (Soulstone / Innervate / Fear Ward / PW: Shield), each a dropdown
+-- duties (Soulstone / Innervate / Fear Ward), each a dropdown
 -- to pick who I put it on - a specific player, a marked Tank/Healer, anyone,
 -- or nobody. Writes my own row in the shared model (always self-editable and
 -- synced); a leader's Utility-tab plan can still override it.
