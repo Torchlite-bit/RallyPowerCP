@@ -23,7 +23,7 @@ the party/raid.
 | **Priest** | Power Word: Fortitude, Divine Spirit, Shadow Protection — plus a utility row: Fear Ward. |
 | **Mage** | Arcane Intellect. |
 | **Druid** | Mark of the Wild, Thorns. |
-| **Warrior** | Battle Shout (self-cast; one click refreshes nearby party). |
+| **Warrior** | Battle Shout (self-cast; one click refreshes nearby party) and a Sunder Armor button that tracks/applies it on your target. |
 | **Shaman** | A four-button totem strip (Earth / Fire / Water / Air). Scroll to pick a totem, click to drop it; shows its icon, green-with-timer when down. Toggle from the minimap or `/rpc`. |
 | **Hunter** | A Sting button: scroll to pick Serpent / Scorpid / Viper, click to apply to your target; green while your sting is up. |
 | **Warlock** | Armor (self, tracked), Soulstone (green = ready in bags, red = cooldown, grey = none — click creates/uses it), and a Curse cycle for your target. |
