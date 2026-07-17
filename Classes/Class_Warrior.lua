@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Warrior.lua  -  Warrior module for RallyPowerCP
+-- Class_Warrior.lua  -  Warrior module for AegisRP
 --
 -- Two strip buttons:
 --   Battle Shout - a self-cast party buff (one cast refreshes nearby party,
@@ -13,7 +13,7 @@
 -- timers are cast-derived (Vanilla defaults - one-line edits if Turtle differs).
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("WARRIOR")
+local M = AegisRP:NewClass("WARRIOR")
 
 local SHOUT = { name = "Battle Shout", dur = 2 * 60 }
 -- Sunder Armor: a target debuff (Vanilla 30s per stack). The button tracks it
@@ -31,7 +31,7 @@ local function ShoutUp()
     while j <= 32 do
         local tex = UnitBuff("player", j)
         if not tex then break end
-        if RallyPowerCP.TexBase(tex) == SHOUT._tex then return true end
+        if AegisRP.TexBase(tex) == SHOUT._tex then return true end
         j = j + 1
     end
     return false
@@ -39,25 +39,25 @@ end
 
 local function BuildUI()
     if strip then return end
-    strip = RallyPowerCP.NewStrip("warrior", "Shout")
+    strip = AegisRP.NewStrip("warrior", "Shout")
     strip:AddButton{
         key = "shout",
         refresh = function(b)
-            local sp = RallyPowerCP.FindSpell(SHOUT.name)
-            local test = RallyPowerCP.IsTestMode()
+            local sp = AegisRP.FindSpell(SHOUT.name)
+            local test = AegisRP.IsTestMode()
             if not sp and not test then
                 b:SetIcon(nil); b:SetLabel("|cffffd100Shout|r")
                 b:SetSub("|cff888888not learned|r"); b:SetTimer(""); b:SetState("off")
                 return
             end
-            if sp then SHOUT._tex = RallyPowerCP.TexBase(sp.texture) end
+            if sp then SHOUT._tex = AegisRP.TexBase(sp.texture) end
             b:SetIcon(sp and sp.texture or nil)
             b:SetLabel("|cffffd100Shout|r")
             b:SetSub("Battle" .. ((not sp) and " |cffff8800*|r" or ""))
             -- Test mode: state runs purely off the simulated timer.
             if test then
                 if deadline > GetTime() then
-                    b:SetState("good"); b:SetTimer(RallyPowerCP.FmtTime(deadline - GetTime()))
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(deadline - GetTime()))
                 else
                     b:SetState("need"); b:SetTimer("")
                 end
@@ -66,15 +66,15 @@ local function BuildUI()
             if ShoutUp() then
                 b:SetState("good")
                 if deadline > GetTime() then
-                    b:SetTimer(RallyPowerCP.FmtTime(deadline - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(deadline - GetTime()))
                 else b:SetTimer("") end
             else
                 b:SetState("need"); b:SetTimer("")
             end
         end,
         onClick = function(b)
-            local sp = RallyPowerCP.FindSpell(SHOUT.name)
-            if RallyPowerCP.IsTestMode() then
+            local sp = AegisRP.FindSpell(SHOUT.name)
+            if AegisRP.IsTestMode() then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would cast " .. SHOUT.name)
                 deadline = GetTime() + SHOUT.dur
                 return
@@ -91,21 +91,21 @@ local function BuildUI()
     strip:AddButton{
         key = "sunder",
         refresh = function(b)
-            local sp = RallyPowerCP.FindSpell(SUNDER.name)
-            local test = RallyPowerCP.IsTestMode()
+            local sp = AegisRP.FindSpell(SUNDER.name)
+            local test = AegisRP.IsTestMode()
             if not sp and not test then
                 b:SetIcon(nil); b:SetLabel("|cffffd100Sunder|r")
                 b:SetSub("|cff888888not learned|r"); b:SetTimer(""); b:SetState("off")
                 return
             end
-            if sp then SUNDER._tex = RallyPowerCP.TexBase(sp.texture) end
+            if sp then SUNDER._tex = AegisRP.TexBase(sp.texture) end
             b:SetIcon(sp and sp.texture or SUNDER.icon)
             b:SetLabel("|cffffd100Sunder|r")
             b:SetSub("Armor" .. ((not sp) and " |cffff8800*|r" or ""))
             -- Test mode: state runs purely off the simulated timer.
             if test then
                 if sunder.deadline > GetTime() then
-                    b:SetState("good"); b:SetTimer(RallyPowerCP.FmtTime(sunder.deadline - GetTime()))
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(sunder.deadline - GetTime()))
                 else
                     b:SetState("need"); b:SetTimer("")
                 end
@@ -115,10 +115,10 @@ local function BuildUI()
                 b:SetTimer(""); b:SetState("off")
                 return
             end
-            if RallyPowerCP.UnitHasDebuffEntry("target", SUNDER) then
+            if AegisRP.UnitHasDebuffEntry("target", SUNDER) then
                 b:SetState("good")
                 if sunder.target == UnitName("target") and sunder.deadline > GetTime() then
-                    b:SetTimer(RallyPowerCP.FmtTime(sunder.deadline - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(sunder.deadline - GetTime()))
                 else
                     b:SetTimer("")
                 end
@@ -127,15 +127,15 @@ local function BuildUI()
             end
         end,
         onClick = function(b)
-            local sp = RallyPowerCP.FindSpell(SUNDER.name)
-            if RallyPowerCP.IsTestMode() then
+            local sp = AegisRP.FindSpell(SUNDER.name)
+            if AegisRP.IsTestMode() then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would apply " .. SUNDER.name)
                 sunder = { target = "(test)", deadline = GetTime() + SUNDER.dur }
                 return
             end
             if not sp then return end
             if not UnitExists("target") or UnitIsFriend("player", "target") then return end
-            if RallyPowerCP.CastAtTarget(SUNDER.name) then
+            if AegisRP.CastAtTarget(SUNDER.name) then
                 sunder = { target = UnitName("target"), deadline = GetTime() + SUNDER.dur }
             end
         end,
@@ -160,15 +160,15 @@ end
 M.optionsInfo = {
     { type = "header", label = "Buttons" },
     { type = "check", key = "btn_shout", label = "Battle Shout button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "check", key = "btn_sunder", label = "Sunder Armor button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
 }
 
 -- Assignment model: Warrior debuff duties (Sunder has a strip button above;
 -- Thunder Clap / Demoralizing Shout are catalog-only).
-if RallyPowerCP.Assign then
-    local D = RallyPowerCP.Assign.RegisterDuty
+if AegisRP.Assign then
+    local D = AegisRP.Assign.RegisterDuty
     D{ key="SUNDER",      wid=7, class="WARRIOR", tab="debuff", spell="Sunder Armor",       target="none", multi=false, dur=30 }
     -- Thunder Clap / Demoralizing Shout are group-utility debuffs, not the
     -- "one caster maintains it on the kill target" kind; hidden from the

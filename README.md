@@ -96,10 +96,10 @@ skins ship (Blue & Gold default, Ivory, White, Gold, Pearl).
 
 ## Installation
 
-1. Put the `RallyPowerCP` folder in `Interface/AddOns/` (the folder name stays
-   `RallyPowerCP` — a technical requirement; only the display name is
-   "Aegis: RallyPower" — and it must
-   match `RallyPowerCP.toc`).
+1. Put the `Aegis_RallyPower` folder in `Interface/AddOns/` (the folder name
+   must be `Aegis_RallyPower`, matching `Aegis_RallyPower.toc`). Upgrading from
+   the pre-rebrand build? Delete the old `RallyPowerCP` folder first — saved
+   settings are not carried over.
 2. That's it — all art, sounds, and textures are bundled, and every path is
    verified against a real file.
 
@@ -119,13 +119,13 @@ Aegis: RallyPower follows an AutoRota-style layout — a class-independent core,
 module per class, and the legacy engine quarantined in its own folder:
 
 ```
-RallyPowerCP\
-  RallyPowerCP.toc
+Aegis_RallyPower\
+  Aegis_RallyPower.toc
   Bindings.xml                  (key bindings — must stay at the root)
   PallyPower-ResizeGrip.tga     (referenced by absolute path — stays at root)
   Core\
-    RallyPowerCP_Core.lua       (the class-independent engine)
-    RallyPowerCP_Popout.lua     (the PallyPower buff-bar player pop-out)
+    Aegis_Core.lua       (the class-independent engine)
+    Aegis_Popout.lua     (the PallyPower buff-bar player pop-out)
   Classes\
     Class_Priest.lua  Class_Mage.lua  Class_Druid.lua  Class_Warrior.lua
   PallyPower\                   (the original PallyPower engine, untouched)
@@ -134,12 +134,12 @@ RallyPowerCP\
   Locale\   Icons\   HDIcons\   Sounds\
 ```
 
-- **`Core\RallyPowerCP_Core.lua`** — the engine: roster scanning, buff
+- **`Core\Aegis_Core.lua`** — the engine: roster scanning, buff
   detection, casting, the bar UI, timers, tooltips, scrolling, minimap skins,
   and slash commands. It knows nothing about specific classes.
 - **`Classes\Class_<Name>.lua`** — one module per class. Each registers with
-  `RallyPowerCP:NewClass("TOKEN")` and supplies only its data.
-- **`Core\RallyPowerCP_Popout.lua`** — attaches the player pop-out to the
+  `AegisRP:NewClass("TOKEN")` and supplies only its data.
+- **`Core\Aegis_Popout.lua`** — attaches the player pop-out to the
   PallyPower buff bar. Reads PallyPower's own per-button data without modifying
   the engine.
 - **`PallyPower\`** — the original engine, deliberately left intact.
@@ -147,7 +147,7 @@ RallyPowerCP\
 ### Adding a class or buff
 
 Copy an existing `Classes\Class_<Name>.lua`, change the token and data, and list
-the file in `RallyPowerCP.toc`. Buff entry fields:
+the file in `Aegis_RallyPower.toc`. Buff entry fields:
 
 ```lua
 { name     = "Power Word: Fortitude",        -- single-target spell name

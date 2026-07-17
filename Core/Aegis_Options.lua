@@ -1,5 +1,5 @@
 --=============================================================================
--- RallyPowerCP_Options.lua  -  tabbed options frame (Settings / Buttons / Raid)
+-- Aegis_Options.lua  -  tabbed options frame (Settings / Buttons / Raid)
 --
 -- Milestone A of docs\OPTIONS_UI_SPEC.md. Hand-built from 1.12 building
 -- blocks (no Ace3): OptionsCheckButtonTemplate / OptionsSliderTemplate /
@@ -20,7 +20,7 @@
 --   { type = "button", label = "...", func = fn, tip = "..." }
 --   { type = "note",   label = "wrapped text", height = 28 }
 --
--- Binding: `key` is a path into RallyPowerCP_Settings with one optional dotted
+-- Binding: `key` is a path into AegisRP_Settings with one optional dotted
 -- level ("roguePoison.mh"). Reads fall back to `default` when the key is
 -- absent (nothing is written until the user touches a control); checks write
 -- an explicit false so default-on settings can be turned off. Optional
@@ -31,7 +31,7 @@
 -- M.optionsInfo); the Raid tab is the Milestone-B stub.
 --=============================================================================
 
-RallyPowerCP_Settings = RallyPowerCP_Settings or {}
+AegisRP_Settings = AegisRP_Settings or {}
 
 local FRAME_W, FRAME_H = 360, 480
 local PAD_X = 16                       -- left inset for controls
@@ -52,7 +52,7 @@ local TAB_INFO = {
 
 -- Same skin family as the strips (Smooth + tooltip border, official look).
 local TAB_SKIN = {
-    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
+    bgFile   = "Interface\\AddOns\\Aegis_RallyPower\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
@@ -67,11 +67,11 @@ local function GetPath(key)
     if dot then
         local a = string.sub(key, 1, dot - 1)
         local b = string.sub(key, dot + 1)
-        local t = RallyPowerCP_Settings[a]
+        local t = AegisRP_Settings[a]
         if type(t) == "table" then return t[b] end
         return nil
     end
-    return RallyPowerCP_Settings[key]
+    return AegisRP_Settings[key]
 end
 
 local function SetPath(key, v)
@@ -79,12 +79,12 @@ local function SetPath(key, v)
     if dot then
         local a = string.sub(key, 1, dot - 1)
         local b = string.sub(key, dot + 1)
-        if type(RallyPowerCP_Settings[a]) ~= "table" then
-            RallyPowerCP_Settings[a] = {}
+        if type(AegisRP_Settings[a]) ~= "table" then
+            AegisRP_Settings[a] = {}
         end
-        RallyPowerCP_Settings[a][b] = v
+        AegisRP_Settings[a][b] = v
     else
-        RallyPowerCP_Settings[key] = v
+        AegisRP_Settings[key] = v
     end
 end
 
@@ -114,7 +114,7 @@ end
 
 local function NextName()
     ctlCounter = ctlCounter + 1
-    return "RallyPowerCP_OptCtl" .. ctlCounter
+    return "AegisRP_OptCtl" .. ctlCounter
 end
 
 -- 1.12's UIDropDownMenu_SetWidth reads the implicit `this`; set it explicitly
@@ -328,17 +328,17 @@ end
 
 local function ResetFramePositions()
     local kill = {}
-    for k in pairs(RallyPowerCP_Settings) do
+    for k in pairs(AegisRP_Settings) do
         if string.find(k, "^stripPos_") then table.insert(kill, k) end
     end
-    for _, k in ipairs(kill) do RallyPowerCP_Settings[k] = nil end
-    if RallyPowerCP.strips then
-        for _, S in pairs(RallyPowerCP.strips) do
+    for _, k in ipairs(kill) do AegisRP_Settings[k] = nil end
+    if AegisRP.strips then
+        for _, S in pairs(AegisRP.strips) do
             S.frame:ClearAllPoints()
             S.frame:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
         end
     end
-    RallyPowerCP_ResetBarPosition()
+    AegisRP_ResetBarPosition()
     DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Frame positions reset.")
 end
 
@@ -383,20 +383,20 @@ local function MinimapSkinEntry()
     return { type = "select", key = "minimapSkin", label = "Minimap icon", default = "blue",
       values = function()
           local out = {}
-          for i = 1, table.getn(RallyPowerCP_MinimapSkins) do
-              local v = RallyPowerCP_MinimapSkins[i]
-              local lbl = (RallyPowerCP_MinimapSkinLabels and RallyPowerCP_MinimapSkinLabels[v]) or v
+          for i = 1, table.getn(AegisRP_MinimapSkins) do
+              local v = AegisRP_MinimapSkins[i]
+              local lbl = (AegisRP_MinimapSkinLabels and AegisRP_MinimapSkinLabels[v]) or v
               table.insert(out, { value = v, text = lbl })
           end
           return out
       end,
-      set = function(v) RallyPowerCP_ApplyMinimapSkin(v) end }
+      set = function(v) AegisRP_ApplyMinimapSkin(v) end }
 end
 
 local function TestModeEntry()
     return { type = "check", key = "testMode", label = "Test mode", default = false,
       tip = "Same as /rpc test: every option is shown (unlearned ones marked *) and clicks simulate casts.",
-      set = function(v) RallyPowerCP_SetTestMode(v) end }
+      set = function(v) AegisRP_SetTestMode(v) end }
 end
 
 local function ShowMinimapButtonEntry()
@@ -437,23 +437,23 @@ local function SettingsTabEntries()
     entries = {
         { type = "header", label = "When to show" },
         { type = "check", key = "showSolo",  label = "Show when solo",  default = true,
-          onChange = function() RallyPowerCP_ApplyVisibility() end },
+          onChange = function() AegisRP_ApplyVisibility() end },
         { type = "check", key = "showParty", label = "Show in a party", default = true,
-          onChange = function() RallyPowerCP_ApplyVisibility() end },
+          onChange = function() AegisRP_ApplyVisibility() end },
         { type = "check", key = "showRaid",  label = "Show in a raid",  default = true,
-          onChange = function() RallyPowerCP_ApplyVisibility() end },
+          onChange = function() AegisRP_ApplyVisibility() end },
         { type = "check", key = "tooltips",  label = "Show tooltips",   default = true },
         TestModeEntry(),
         { type = "header", label = "Looks" },
         { type = "slider", key = "uiScale", label = "UI scale",
           min = 0.5, max = 1.5, step = 0.05, default = 1.0,
-          onChange = function() RallyPowerCP_ApplyUIScale() end },
+          onChange = function() AegisRP_ApplyUIScale() end },
         { type = "slider", key = "stripAlpha", label = "Transparency",
           min = 0, max = 1, step = 0.05, default = 0.5,
           tip = "Backdrop opacity of the strip buttons." },
         { type = "check", key = "stripHorizontal", label = "Horizontal layout", default = false,
           tip = "Lay the strip buttons left-to-right instead of stacked.",
-          onChange = function() if RallyPowerCP.ReflowStrips then RallyPowerCP.ReflowStrips() end end },
+          onChange = function() if AegisRP.ReflowStrips then AegisRP.ReflowStrips() end end },
         MinimapSkinEntry(),
         ShowMinimapButtonEntry(),
         { type = "check", key = "locked", label = "Lock frame positions", default = false },
@@ -515,7 +515,7 @@ local function ButtonsTabEntries()
         min = 0.25, max = 3, step = 0.25, default = 1,
         tip = "How often coverage is rescanned. Lower = snappier, more CPU." })
 
-    local M = RallyPowerCP.active
+    local M = AegisRP.active
     if not M then
         return entries
     end
@@ -526,13 +526,13 @@ local function ButtonsTabEntries()
             local nm = b.name or b.group
             table.insert(entries, { type = "check", key = "gridbuff_" .. nm,
                 label = nm, default = true,
-                onChange = function() RallyPowerCP_GridRefresh() end })
+                onChange = function() AegisRP_GridRefresh() end })
         end
     end
     if M.utility and table.getn(M.utility) > 0 then
         table.insert(entries, { type = "check", key = "utilRow",
             label = "Utility buttons (top row)", default = true,
-            onChange = function() RallyPowerCP_GridRefresh() end })
+            onChange = function() AegisRP_GridRefresh() end })
     end
     if M.optionsInfo then
         for i = 1, table.getn(M.optionsInfo) do
@@ -555,17 +555,17 @@ local RAID_INFO = {
     { type = "button", label = "Open Assignment Panel",
       tip = "The five-tab \"Who Covers What\" panel (/rpc assign)",
       func = function()
-          if RallyPowerCP_AssignPanelToggle then RallyPowerCP_AssignPanelToggle() end
+          if AegisRP_AssignPanelToggle then AegisRP_AssignPanelToggle() end
       end },
 
     { type = "header", label = "Free Assignment" },
     { type = "check", label = "Free Assignment (any member may edit any row)",
       tip = "Leader-controlled and synced to the raid.",
       get = function()
-          return RallyPowerCP.Assign and RallyPowerCP.Assign.GetFreeAssign()
+          return AegisRP.Assign and AegisRP.Assign.GetFreeAssign()
       end,
       set = function(v)
-          if RallyPowerCP.Assign and not RallyPowerCP.Assign.SetFreeAssign(v) then
+          if AegisRP.Assign and not AegisRP.Assign.SetFreeAssign(v) then
               DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Only the raid "
                   .. "leader / assist can change Free Assignment.")
           end
@@ -577,7 +577,7 @@ local RAID_INFO = {
       func = function() if PallyPower_Report then PallyPower_Report() end end },
     { type = "button", label = "Re-request sync",
       tip = "Force a full assignment re-request + re-broadcast (/rpc sync)",
-      func = function() if RallyPowerCP_SyncNow then RallyPowerCP_SyncNow() end end },
+      func = function() if AegisRP_SyncNow then AegisRP_SyncNow() end end },
     { type = "note", height = 28, label =
         "Roles and blessings sync over PallyPower's PLPWR channel (compatible "
         .. "with stock PallyPower); totems/duties/buffs ride the RPCX channel." },
@@ -611,7 +611,7 @@ end
 -- MY class's targeted utility duties (Soulstone, Innervate, Fear Ward, ...).
 local function MyTargetedDuties()
     local out = {}
-    local A = RallyPowerCP.Assign
+    local A = AegisRP.Assign
     local _, myclass = UnitClass("player")
     if not (A and myclass) then return out end
     for i = 1, table.getn(A.dutyOrder) do
@@ -624,7 +624,7 @@ local function MyTargetedDuties()
 end
 
 local function MyAssignmentEntries()
-    local A = RallyPowerCP.Assign
+    local A = AegisRP.Assign
     if not A then return {} end
     local me = UnitName("player")
     local _, myclass = UnitClass("player")
@@ -704,7 +704,7 @@ end
 local function ShowTab(i)
     if not panels[i] then i = 1 end
     currentTab = i
-    RallyPowerCP_Settings.optLastTab = i
+    AegisRP_Settings.optLastTab = i
     for n = 1, table.getn(panels) do
         if n == i then panels[n]:Show() else panels[n]:Hide() end
     end
@@ -728,7 +728,7 @@ local function ShowTab(i)
 end
 
 local function CreateOptionsFrame()
-    local f = CreateFrame("Frame", "RallyPowerCP_OptionsFrame", UIParent)
+    local f = CreateFrame("Frame", "AegisRP_OptionsFrame", UIParent)
     optFrame = f
     f:SetWidth(FRAME_W); f:SetHeight(FRAME_H)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
@@ -747,7 +747,7 @@ local function CreateOptionsFrame()
     f:SetScript("OnDragStart", function() f:StartMoving() end)
     f:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
     f:Hide()
-    tinsert(UISpecialFrames, "RallyPowerCP_OptionsFrame")   -- ESC closes
+    tinsert(UISpecialFrames, "AegisRP_OptionsFrame")   -- ESC closes
 
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", f, "TOP", 0, -10)
@@ -782,7 +782,7 @@ local function CreateOptionsFrame()
     end
 
     f:SetScript("OnShow", function()
-        ShowTab(RallyPowerCP_Settings.optLastTab or 1)
+        ShowTab(AegisRP_Settings.optLastTab or 1)
     end)
 
     -- slow settings-only refresh while open, so strip-wheel changes show up
@@ -796,7 +796,7 @@ local function CreateOptionsFrame()
 end
 
 -- Entry point: /rpc options and the minimap right-click (non-Paladins).
-function RallyPowerCP_OptionsToggle()
+function AegisRP_OptionsToggle()
     if not optFrame then CreateOptionsFrame() end
     if optFrame:IsShown() then optFrame:Hide() else optFrame:Show() end
 end

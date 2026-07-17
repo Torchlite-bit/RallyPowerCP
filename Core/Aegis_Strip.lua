@@ -1,12 +1,12 @@
 --=============================================================================
--- RallyPowerCP_Strip.lua  -  shared utility-strip engine
+-- Aegis_Strip.lua  -  shared utility-strip engine
 --
 -- The reusable machinery behind every "cycle button" class (Hunter stings,
 -- Warlock curses/armor/soulstone, Rogue poisons/expose, Warrior debuffs, and
 -- eventually a refactored Shaman): a movable titled strip of skinned buttons,
 -- where each button is pure BEHAVIOUR supplied by the class module:
 --
---   strip = RallyPowerCP.NewStrip("hunter", "Stings")
+--   strip = AegisRP.NewStrip("hunter", "Stings")
 --   strip:AddButton{
 --       key     = "sting",
 --       refresh = function(b) ... set b.icon/b.label/b.sub/b.timer + state ... end,
@@ -29,14 +29,14 @@
 
 local HAS_SUPERWOW = (SUPERWOW_VERSION ~= nil)
 
-RallyPowerCP_Settings = RallyPowerCP_Settings or {}
+AegisRP_Settings = AegisRP_Settings or {}
 
 -- Registry of live strips ([key] = strip object). The options UI iterates it
 -- for re-flow, scale and position resets; only the active class's strip exists.
-RallyPowerCP.strips = RallyPowerCP.strips or {}
+AegisRP.strips = AegisRP.strips or {}
 
 local SKIN = {
-    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
+    bgFile   = "Interface\\AddOns\\Aegis_RallyPower\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
@@ -58,7 +58,7 @@ local BTN_GAP = 2
 --------------------------------------------------------------------------
 
 -- last path segment, lowercased ("Interface\Icons\Foo_Bar" -> "foo_bar")
-function RallyPowerCP.TexBase(path)
+function AegisRP.TexBase(path)
     if not path then return "" end
     local s = string.lower(path)
     local last = s
@@ -70,7 +70,7 @@ end
 -- the highest rank, or nil. Cached: modules call this inside 4Hz refresh ticks,
 -- so results are cached and invalidated on SPELLS_CHANGED.
 local spellCache = {}
-function RallyPowerCP.FindSpell(name)
+function AegisRP.FindSpell(name)
     local hit = spellCache[name]
     if hit ~= nil then
         if hit == false then return nil end
@@ -112,7 +112,7 @@ local function BagContents()
     end
     return bagCache
 end
-function RallyPowerCP.FindBagItem(pattern)
+function AegisRP.FindBagItem(pattern)
     local fb, fs, fn = nil, nil, nil
     local items = BagContents()
     for _, it in ipairs(items) do
@@ -124,7 +124,7 @@ function RallyPowerCP.FindBagItem(pattern)
 end
 
 -- cache invalidation
-local inv = CreateFrame("Frame", "RallyPowerCP_StripCacheWatch")
+local inv = CreateFrame("Frame", "AegisRP_StripCacheWatch")
 inv:RegisterEvent("SPELLS_CHANGED")
 inv:RegisterEvent("BAG_UPDATE")
 inv:SetScript("OnEvent", function()
@@ -138,14 +138,14 @@ end)
 -- Target-debuff presence with SuperWoW id-learning.
 -- `entry` carries: _tex (spellbook texture base) and _ids (learned id set).
 -- Returns true if the debuff is on the given unit.
-function RallyPowerCP.UnitHasDebuffEntry(unit, entry)
+function AegisRP.UnitHasDebuffEntry(unit, entry)
     if not UnitExists(unit) then return false end
     entry._ids = entry._ids or {}
     local j = 1
     while j <= 24 do
         local tex, _, _, id = UnitDebuff(unit, j)
         if not tex then break end
-        local base = RallyPowerCP.TexBase(tex)
+        local base = AegisRP.TexBase(tex)
         if HAS_SUPERWOW and id then
             if entry._ids[id] then return true end
             if entry._tex and base == entry._tex then
@@ -161,7 +161,7 @@ function RallyPowerCP.UnitHasDebuffEntry(unit, entry)
 end
 
 -- Cast an offensive spell at your current (hostile) target.
-function RallyPowerCP.CastAtTarget(name)
+function AegisRP.CastAtTarget(name)
     if not UnitExists("target") then return false end
     if HAS_SUPERWOW then
         CastSpellByName(name, "target")
@@ -180,7 +180,7 @@ local function fmtTime(t)
     local m = math.floor(t / 60)
     return string.format("%d:%02d", m, math.floor(t - m * 60))
 end
-RallyPowerCP.FmtTime = fmtTime
+AegisRP.FmtTime = fmtTime
 
 local function Btn_SetIcon(self, tex)  self.icon:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark") end
 local function Btn_SetLabel(self, txt) self.eln:SetText(txt or "") end
@@ -203,7 +203,7 @@ end
 
 local function Btn_SetState(self, st)
     local c = COLORS[st] or COLORS.off
-    local a = RallyPowerCP_Settings.stripAlpha
+    local a = AegisRP_Settings.stripAlpha
     if a == nil then a = c[4] end                 -- Transparency slider (default 0.5)
     self:SetBackdropColor(c[1], c[2], c[3], a)
     self.icon:SetAlpha(st == "good" and 1 or 0.55)
@@ -219,7 +219,7 @@ end
 -- re-anchored position persist per frame.
 --------------------------------------------------------------------------
 
-local GRIP_TEX = "Interface\\AddOns\\RallyPowerCP\\PallyPower-ResizeGrip"
+local GRIP_TEX = "Interface\\AddOns\\Aegis_RallyPower\\PallyPower-ResizeGrip"
 local scaling = {}
 local scaleDriver = CreateFrame("Frame")
 scaleDriver:Hide()
@@ -254,7 +254,7 @@ scaleDriver:SetScript("OnUpdate", function()
     end
     if newscale then
         newscale = ApplyScale(f, newscale)
-        RallyPowerCP_Settings[scaling.scaleKey] = newscale
+        AegisRP_Settings[scaling.scaleKey] = newscale
         if scaling.onChanged then scaling.onChanged(newscale) end
     end
 end)
@@ -262,7 +262,7 @@ end)
 -- onChanged(scale) runs after every applied step - use it to persist the
 -- re-anchored position (GetLeft/GetTop are SetPoint-compatible offsets at
 -- the frame's current scale).
-function RallyPowerCP.AddScaleGrip(frame, scaleKey, onChanged)
+function AegisRP.AddScaleGrip(frame, scaleKey, onChanged)
     local grip = CreateFrame("Button", nil, frame)
     grip:SetWidth(16); grip:SetHeight(16)
     grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
@@ -274,7 +274,7 @@ function RallyPowerCP.AddScaleGrip(frame, scaleKey, onChanged)
     hl:SetBlendMode("ADD")
     grip:SetScript("OnMouseDown", function()
         if arg1 ~= "LeftButton" then return end
-        if RallyPowerCP_Settings.locked then return end
+        if AegisRP_Settings.locked then return end
         scaling.frame = frame
         scaling.scaleKey = scaleKey
         scaling.onChanged = onChanged
@@ -289,9 +289,9 @@ function RallyPowerCP.AddScaleGrip(frame, scaleKey, onChanged)
         scaling.frame = nil
     end)
     grip:SetScript("OnEnter", function()
-        if RallyPowerCP_Settings.tooltips == false then return end
+        if AegisRP_Settings.tooltips == false then return end
         GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-        if RallyPowerCP_Settings.locked then
+        if AegisRP_Settings.locked then
             GameTooltip:SetText("Frames locked", 1, 0.5, 0.5)
         else
             GameTooltip:SetText("Drag to scale", 1, 1, 1)
@@ -302,36 +302,36 @@ function RallyPowerCP.AddScaleGrip(frame, scaleKey, onChanged)
     return grip
 end
 
-function RallyPowerCP.NewStrip(key, title)
+function AegisRP.NewStrip(key, title)
     local S = { key = key, buttons = {} }
     local posKey = "stripPos_" .. key
     local hidKey = "stripHidden_" .. key
 
-    local f = CreateFrame("Frame", "RallyPowerCP_Strip_" .. key, UIParent)
+    local f = CreateFrame("Frame", "AegisRP_Strip_" .. key, UIParent)
     S.frame = f
-    RallyPowerCP.strips[key] = S
+    AegisRP.strips[key] = S
     f:SetWidth(STRIP_W)
     -- per-strip grip scale wins; the global slider resets it (see Core)
-    f:SetScale(RallyPowerCP_Settings["stripScale_" .. key]
-        or RallyPowerCP_Settings.uiScale or 1)
+    f:SetScale(AegisRP_Settings["stripScale_" .. key]
+        or AegisRP_Settings.uiScale or 1)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", function()
-        if RallyPowerCP_Settings.locked then return end
+        if AegisRP_Settings.locked then return end
         f:StartMoving()
     end)
     f:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
         -- keep the relative point: grip-scaling re-anchors TOPLEFT->BOTTOMLEFT
         local p, _, rp, x, y = f:GetPoint()
-        RallyPowerCP_Settings[posKey] = { p = p, rel = rp, x = x, y = y }
+        AegisRP_Settings[posKey] = { p = p, rel = rp, x = x, y = y }
     end)
     -- Right-click on the strip frame (the title area - the buttons swallow
     -- their own clicks) opens the assignment panel.
     f:SetScript("OnMouseUp", function()
-        if arg1 == "RightButton" and RallyPowerCP_AssignPanelToggle then
-            RallyPowerCP_AssignPanelToggle()
+        if arg1 == "RightButton" and AegisRP_AssignPanelToggle then
+            AegisRP_AssignPanelToggle()
         end
     end)
 
@@ -340,7 +340,7 @@ function RallyPowerCP.NewStrip(key, title)
     S.header = hdr
     S.title = title
     local function SetHeader()
-        if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then
+        if AegisRP.IsTestMode and AegisRP.IsTestMode() then
             hdr:SetText("|cffffd100" .. title .. "|r |cffff8800[TEST]|r")
         else
             hdr:SetText("|cffffd100" .. title .. "|r")
@@ -351,7 +351,7 @@ function RallyPowerCP.NewStrip(key, title)
 
     function S:AddButton(def)
         local i = table.getn(self.buttons) + 1
-        local b = CreateFrame("Button", "RallyPowerCP_Strip_" .. key .. "_" .. i, f)
+        local b = CreateFrame("Button", "AegisRP_Strip_" .. key .. "_" .. i, f)
         b:SetWidth(STRIP_W); b:SetHeight(BTN_H)
         b:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -18 - (i - 1) * (BTN_H + BTN_GAP))
         b:SetBackdrop(SKIN)
@@ -392,7 +392,7 @@ function RallyPowerCP.NewStrip(key, title)
             -- A button may take over hover entirely (the class-buff buttons use
             -- this for the paladin-style player pop-out instead of a tooltip).
             if def.onEnter then def.onEnter(b); return end
-            if RallyPowerCP_Settings.tooltips == false then return end
+            if AegisRP_Settings.tooltips == false then return end
             if def.tooltip then
                 GameTooltip:SetOwner(b, "ANCHOR_LEFT")
                 def.tooltip(b, GameTooltip)
@@ -421,10 +421,10 @@ function RallyPowerCP.NewStrip(key, title)
     -- predicate gates it further (the class-buff strips use it for roster
     -- presence: absent classes hide, test mode shows all).
     function S:Reflow()
-        local horiz = RallyPowerCP_Settings.stripHorizontal and true or false
+        local horiz = AegisRP_Settings.stripHorizontal and true or false
         local shown = 0
         for _, b in ipairs(self.buttons) do
-            if RallyPowerCP_Settings["btn_" .. string.lower(b.def.key or "")] == false
+            if AegisRP_Settings["btn_" .. string.lower(b.def.key or "")] == false
                or (b.def.visible and not b.def.visible()) then
                 b:Hide()
             else
@@ -454,14 +454,14 @@ function RallyPowerCP.NewStrip(key, title)
 
     function S:Finish()
         self:Reflow()
-        local pos = RallyPowerCP_Settings[posKey]
+        local pos = AegisRP_Settings[posKey]
         if pos then f:SetPoint(pos.p, UIParent, pos.rel or pos.p, pos.x, pos.y)
         else f:SetPoint("CENTER", UIParent, "CENTER", 260, 0) end
         -- scale grip (bottom-right, PallyPower art); scaling re-anchors the
         -- frame, so persist the new position alongside the scale
         if not S.grip then
-            S.grip = RallyPowerCP.AddScaleGrip(f, "stripScale_" .. key, function()
-                RallyPowerCP_Settings[posKey] = { p = "TOPLEFT", rel = "BOTTOMLEFT",
+            S.grip = AegisRP.AddScaleGrip(f, "stripScale_" .. key, function()
+                AegisRP_Settings[posKey] = { p = "TOPLEFT", rel = "BOTTOMLEFT",
                     x = f:GetLeft(), y = f:GetTop() }
             end)
         end
@@ -473,22 +473,22 @@ function RallyPowerCP.NewStrip(key, title)
             S:Refresh()
         end)
         self:Refresh()
-        if RallyPowerCP_Settings[hidKey] then f:Hide() else f:Show() end
+        if AegisRP_Settings[hidKey] then f:Hide() else f:Show() end
     end
 
     function S:Toggle()
-        if f:IsShown() then f:Hide(); RallyPowerCP_Settings[hidKey] = true
-        else f:Show(); RallyPowerCP_Settings[hidKey] = false end
+        if f:IsShown() then f:Hide(); AegisRP_Settings[hidKey] = true
+        else f:Show(); AegisRP_Settings[hidKey] = false end
     end
 
-    function S:Show() f:Show(); RallyPowerCP_Settings[hidKey] = false end
+    function S:Show() f:Show(); AegisRP_Settings[hidKey] = false end
 
     return S
 end
 
 -- Options hook: re-flow every live strip after a per-button enable changed.
-function RallyPowerCP.ReflowStrips()
-    for _, S in pairs(RallyPowerCP.strips) do
+function AegisRP.ReflowStrips()
+    for _, S in pairs(AegisRP.strips) do
         S:Reflow()
         S:Refresh()
     end

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RallyPowerCP structural verifier.
+"""AegisRP structural verifier.
 
 No standalone Lua 5.0 interpreter is assumed, so this catches the two failure
 classes that brick a 1.12 addon before it ever loads:

@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Druid.lua  -  Druid module for RallyPowerCP
+-- Class_Druid.lua  -  Druid module for AegisRP
 --
 -- A class-buff strip (like Priest/Mage): one button per raid class showing the
 -- buff assigned to that class. Wheel cycles Mark of the Wild <-> Thorns for
@@ -8,7 +8,7 @@
 -- casting and the strip; the module only supplies the buff data.
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("DRUID")
+local M = AegisRP:NewClass("DRUID")
 
 M.buffs = {
     { name = "Mark of the Wild", group = "Gift of the Wild",
@@ -20,16 +20,16 @@ M.buffs = {
 }
 
 function M:OnActivate()
-    RallyPowerCP.BuildClassBuffs()
+    AegisRP.BuildClassBuffs()
 end
 
 function M:Toggle()
-    RallyPowerCP.BuildClassBuffs():Toggle()
+    AegisRP.BuildClassBuffs():Toggle()
 end
 
 -- Assignment model: Druid duties. Wids are stable.
-if RallyPowerCP.Assign then
-    local D = RallyPowerCP.Assign.RegisterDuty
+if AegisRP.Assign then
+    local D = AegisRP.Assign.RegisterDuty
     D{ key="MARK",      wid=5,  class="DRUID", tab="raidbuff", spell="Mark of the Wild", target="none",   multi=false, dur=30*60 }
     D{ key="THORNS",    wid=6,  class="DRUID", tab="raidbuff", spell="Thorns",           target="none",   multi=false, dur=10*60 }
     D{ key="INNERVATE", wid=20, class="DRUID", tab="utility",  spell="Innervate",        target="player", multi=true,  dur=0 }

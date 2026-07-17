@@ -1,4 +1,4 @@
-PallyPower_Version = GetAddOnMetadata("RallyPowerCP", "Version")
+PallyPower_Version = GetAddOnMetadata("Aegis_RallyPower", "Version")
 SLASH_PALLYPOWER1 = "/pp"
 SLASH_PALLYPOWER2 = "/pallypower"
 SLASH_PALLYPOWER3 = "/rp"

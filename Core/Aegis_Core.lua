@@ -1,18 +1,18 @@
 --=============================================================================
--- RallyPowerCP_Core.lua
--- Class-independent engine for RallyPowerCP's all-class buff bar.
+-- Aegis_Core.lua
+-- Class-independent engine for AegisRP's all-class buff bar.
 -- (Turtle WoW 1.18.1 / 1.12 client).  Author: Subtilizer (Torchlite)
 --
 -- ARCHITECTURE (AutoRota-style)
 --   This file is the engine. It knows nothing about specific classes. Each
---   Classes\Class_<Name>.lua registers itself via RallyPowerCP:NewClass(token)
+--   Classes\Class_<Name>.lua registers itself via AegisRP:NewClass(token)
 --   and supplies the DATA (which buffs, which utility spells). On login the core
 --   picks the module matching the player's class and drives everything from it.
 --
 -- WHAT THE ENGINE DOES
 --   * PALADIN  -> uses the original PallyPower bar/grid, now enhanced with the
---                 hover player pop-out (RallyPowerCP_Popout.lua). No separate UI.
---   * Priest/Mage/Druid -> the class-buff strip (RallyPowerCP.BuildClassBuffs):
+--                 hover player pop-out (Aegis_Popout.lua). No separate UI.
+--   * Priest/Mage/Druid -> the class-buff strip (AegisRP.BuildClassBuffs):
 --       one strip button per raid class showing that class's assigned buff;
 --       red+count = members missing it, green+timer = covered; scroll a button
 --       to switch that class's buff, left-click casts the group version,
@@ -33,7 +33,7 @@
 --
 -- ADDING A CLASS
 --   Copy an existing Classes\Class_<Name>.lua, change the token and the data,
---   and list the new file in RallyPowerCP.toc. Buff entry fields:
+--   and list the new file in Aegis_RallyPower.toc. Buff entry fields:
 --     name      = exact single-target spell name (cast + spellbook check)
 --     group     = exact group/greater spell name (optional, right-click cast)
 --     ids       = { spellID, ... } applied-aura spell id(s)  [SuperWoW path]
@@ -44,8 +44,8 @@
 --                 (e.g. Battle Shout): a click just casts it, no per-member aim
 --=============================================================================
 
-RallyPowerCP_Settings = RallyPowerCP_Settings or {}
-RallyPowerCP_Roles    = RallyPowerCP_Roles or {}   -- [playerName] = "MT" | "MA" (local, per character)
+AegisRP_Settings = AegisRP_Settings or {}
+AegisRP_Roles    = AegisRP_Roles or {}   -- [playerName] = "MT" | "MA" (local, per character)
 
 -- SuperWoW capability flag. When true we use spell-id buff detection and direct
 -- CastSpellByName(spell, unit) casting; when false we keep the icon-match +
@@ -53,17 +53,17 @@ RallyPowerCP_Roles    = RallyPowerCP_Roles or {}   -- [playerName] = "MT" | "MA"
 local HAS_SUPERWOW = (SUPERWOW_VERSION ~= nil)
 
 --=============================================================================
--- RallyPowerCP class-module registry  (AutoRota-style).
+-- AegisRP class-module registry  (AutoRota-style).
 -- The core below is class-independent. Each Classes\Class_<Name>.lua registers
--- itself via RallyPowerCP:NewClass("<TOKEN>") and fills in .buffs (and optionally
+-- itself via AegisRP:NewClass("<TOKEN>") and fills in .buffs (and optionally
 -- .utility). On login the core selects the module matching the player's class
 -- and drives the bar entirely from its data. __index inheritance means a class
 -- module can call shared core methods as self:Something() if it ever needs
 -- custom behaviour; today the modules are pure data.
 --=============================================================================
-RallyPowerCP = RallyPowerCP or { classes = {}, active = nil }
+AegisRP = AegisRP or { classes = {}, active = nil }
 
-function RallyPowerCP:NewClass(token)
+function AegisRP:NewClass(token)
     local m = setmetatable({ classToken = token, buffs = {}, utility = nil },
                            { __index = self })
     self.classes[token] = m
@@ -79,7 +79,7 @@ local lastScan = 0
 local SCAN_INTERVAL = 1.0        -- default seconds between roster rescans
 -- Scan-frequency slider (options): how often ScanRoster runs. The force idiom
 -- `lastScan = ScanInterval()` still triggers a scan on the next tick.
-local function ScanInterval() return RallyPowerCP_Settings.scanFreq or SCAN_INTERVAL end
+local function ScanInterval() return AegisRP_Settings.scanFreq or SCAN_INTERVAL end
 
 -- Line-of-sight gate: reuses the legacy engine's UnitXP SP3 check (shared
 -- PP_PerUser.useunitxp_sp3 setting). Returns true when the feature is off or
@@ -102,7 +102,7 @@ for _, c in pairs(CLASS_ORDER) do CLASS_SET[c] = true end
 -- with the assignment panel and the class-buff domain of the model
 local TOKEN2ID = { WARRIOR = 0, ROGUE = 1, PRIEST = 2, DRUID = 3, PALADIN = 4,
                    HUNTER = 5, MAGE = 6, WARLOCK = 7, SHAMAN = 8 }
-RallyPowerCP.Token2ClassID = TOKEN2ID
+AegisRP.Token2ClassID = TOKEN2ID
 local classUnits    = {}         -- [classToken] = { unitIDs of that class }
 local presentClasses = {}        -- ordered list of class tokens with >=1 member
 local rowNeed       = {}         -- [classToken][buffIndex] = members of that class missing it
@@ -323,7 +323,7 @@ local function RebuildKnownSpells()
     end
     -- Test mode: pretend every buff this class defines is learned, so the full
     -- kit can be previewed on an under-levelled character.
-    if RallyPowerCP_Settings.testMode and ACTIVE_BUFFS then
+    if AegisRP_Settings.testMode and ACTIVE_BUFFS then
         for _, b in pairs(ACTIVE_BUFFS) do
             if b.name then KNOWN[b.name] = true end
             if b.group then KNOWN[b.group] = true end
@@ -335,7 +335,7 @@ end
 -- it isn't switched off on the options Buttons tab (explicit false; absent
 -- means enabled). This is the single choke point the wheel/rows flow through.
 local function BuffIsUsable(b)
-    if RallyPowerCP_Settings["gridbuff_" .. (b.name or b.group or "")] == false then
+    if AegisRP_Settings["gridbuff_" .. (b.name or b.group or "")] == false then
         return false
     end
     if b.name and KNOWN[b.name] then return true end
@@ -344,16 +344,16 @@ local function BuffIsUsable(b)
 end
 
 --=============================================================================
--- SHARED LOOK  (the class-buff UI is a strip: Core\RallyPowerCP_Strip.lua
+-- SHARED LOOK  (the class-buff UI is a strip: Core\Aegis_Strip.lua
 -- builds the frame and buttons; only the pop-out geometry lives here)
 --=============================================================================
 -- Hover pop-out: 100x34 player rows replicating PallyPowerPopupTemplate,
 -- stacked flush and floating bare, expanding to the LEFT of the class buttons
--- (mirror of Core\RallyPowerCP_Popout.lua, the Paladin reference).
+-- (mirror of Core\Aegis_Popout.lua, the Paladin reference).
 local POP_ROW_W = 100
 local POP_ROW_H = 34
 local ROW_BACKDROP = {
-    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
+    bgFile   = "Interface\\AddOns\\Aegis_RallyPower\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
@@ -552,7 +552,7 @@ end
 local function CastBuffOn(spell, unit, b, dur, isGroup)
     if not spell then return end
     -- Test mode: SIMULATE - record the timer and announce, cast nothing.
-    if RallyPowerCP_Settings.testMode then
+    if AegisRP_Settings.testMode then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would cast " .. spell .. " on " .. (UnitName(unit) or unit))
         if isGroup then RecordGroupExpiry(unit, b, dur)
         else RecordExpiry(unit, b, dur) end
@@ -604,7 +604,7 @@ end
 
 -- Reliable single-target cast with no timer tracking (utility spells).
 local function CastSpellOnUnit(spell, unit)
-    if RallyPowerCP_Settings.testMode then
+    if AegisRP_Settings.testMode then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would cast " .. tostring(spell) .. " on " .. (UnitName(unit) or tostring(unit)))
         return true
     end
@@ -614,7 +614,7 @@ end
 -- One-key smart buff (for the key binding): casts on the next group member
 -- missing ANY of your tracked buffs — soonest-expiring buff types first.
 -- Press it repeatedly to top off the whole group hands-free.
-function RallyPowerCP_SmartBuff()
+function AegisRP_SmartBuff()
     if not ACTIVE_BUFFS then return end
     for i = 1, table.getn(ACTIVE_BUFFS) do
         local b = ACTIVE_BUFFS[i]
@@ -675,8 +675,8 @@ end
 -- Resolve a utility button's assigned target: my duty value for it, if it's a
 -- @ROLE or a specific player. Returns a unitID or nil (fall back to `mode`).
 local function ResolveDutyTarget(dutyKey)
-    if not (dutyKey and RallyPowerCP.Assign) then return nil end
-    local v = RallyPowerCP.Assign.GetDuty(UnitName("player"), dutyKey)
+    if not (dutyKey and AegisRP.Assign) then return nil end
+    local v = AegisRP.Assign.GetDuty(UnitName("player"), dutyKey)
     if type(v) ~= "string" then return nil end
     if v == "@TANK" then return FirstRoleUnit("TANK") end
     if v == "@HEALER" then return FirstRoleUnit("HEALER") end
@@ -727,8 +727,8 @@ local function RowBuffIndex(ct)
     -- Effective selection (DESIGN_ASSIGNMENTS.md 9): my row in the shared
     -- model first (the panel's Raid Buffs grid writes it), the local wheel
     -- choice second, first usable buff last.
-    if RallyPowerCP.Assign then
-        local want = RallyPowerCP.Assign.GetClassBuff(UnitName("player"), TOKEN2ID[ct])
+    if AegisRP.Assign then
+        local want = AegisRP.Assign.GetClassBuff(UnitName("player"), TOKEN2ID[ct])
         if want then
             for i = 1, table.getn(ACTIVE_BUFFS) do
                 local bb = ACTIVE_BUFFS[i]
@@ -762,8 +762,8 @@ local function CycleRowBuff(ct, dir)
     rowBuff[ct] = i
     -- wheeling self-assigns in the shared model (step-1b style), so the
     -- panel's Raid Buffs grid and this strip are two views of one row
-    if RallyPowerCP.Assign and ACTIVE_BUFFS[i] then
-        RallyPowerCP.Assign.SetClassBuff(UnitName("player"), TOKEN2ID[ct],
+    if AegisRP.Assign and ACTIVE_BUFFS[i] then
+        AegisRP.Assign.SetClassBuff(UnitName("player"), TOKEN2ID[ct],
             ACTIVE_BUFFS[i].name or ACTIVE_BUFFS[i].group)
     end
     if RefreshClassStrip then RefreshClassStrip() end
@@ -772,12 +772,12 @@ end
 
 -- Local per-player role tags (MT = main tank, MA = main assist), cycled with
 -- CTRL+click on a pop-out player bar. Local only for now: not synced to other
--- RallyPowerCP users and not yet wired into smart targeting.
+-- AegisRP users and not yet wired into smart targeting.
 local ROLE_NEXT = { [""] = "MT", MT = "MA", MA = "" }
 local function CycleRole(name)
     if not name then return end
-    local nxt = ROLE_NEXT[RallyPowerCP_Roles[name] or ""] or ""
-    if nxt == "" then RallyPowerCP_Roles[name] = nil else RallyPowerCP_Roles[name] = nxt end
+    local nxt = ROLE_NEXT[AegisRP_Roles[name] or ""] or ""
+    if nxt == "" then AegisRP_Roles[name] = nil else AegisRP_Roles[name] = nxt end
 end
 
 -- Next member of class ct who needs buff b (renew=true also returns an already-
@@ -937,7 +937,7 @@ local function PopoutPlayerOnClick()
     end
     -- Smart buffs (default on): don't waste a group cast on someone already
     -- buffed. Turn the option off to allow re-casting on covered players.
-    if RallyPowerCP_Settings.smartBuffs ~= false and UnitHasBuff(unit, b) then
+    if AegisRP_Settings.smartBuffs ~= false and UnitHasBuff(unit, b) then
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r " .. (UnitName(unit) or "?") .. " already has " .. (b.name or b.group) .. ".")
         return
     end
@@ -1005,7 +1005,7 @@ function RefreshPopout()
                 pr.dead:SetAlpha(0)
             end
             pr.timer:SetText(timerText)
-            local role = nm and RallyPowerCP_Roles[nm]
+            local role = nm and AegisRP_Roles[nm]
             if role == "MT" then
                 pr.tank:SetVertexColor(1, 1, 1); pr.tank:SetAlpha(1)
             elseif role == "MA" then
@@ -1036,11 +1036,11 @@ local function PopoutOnUpdate()
 end
 
 -- Build one popup row, laid out exactly like PallyPowerPopupTemplate
--- (mirror of GetRow in Core\RallyPowerCP_Popout.lua).
+-- (mirror of GetRow in Core\Aegis_Popout.lua).
 local function GetPopoutRow(i)
     local pr = popoutRows[i]
     if pr then return pr end
-    pr = CreateFrame("Button", "RallyPowerCP_PopRow" .. i, popout)
+    pr = CreateFrame("Button", "AegisRP_PopRow" .. i, popout)
     pr:SetWidth(POP_ROW_W); pr:SetHeight(POP_ROW_H)
     pr:SetFrameStrata("DIALOG")
     pr:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -1093,10 +1093,10 @@ end
 local function CreatePopout()
     -- Bare container: the official popup rows float with their own backdrops,
     -- so this frame exists only for layout and the keep-open hit-test.
-    local p = CreateFrame("Frame", "RallyPowerCP_Popout", UIParent)
+    local p = CreateFrame("Frame", "AegisRP_Popout", UIParent)
     p:SetWidth(POP_ROW_W); p:SetHeight(POP_ROW_H)
     p:SetFrameStrata("DIALOG")
-    p:SetScale(RallyPowerCP_Settings.uiScale or 1)
+    p:SetScale(AegisRP_Settings.uiScale or 1)
     p:EnableMouse(false)
     p:Hide()
     p:SetScript("OnUpdate", PopoutOnUpdate)
@@ -1131,7 +1131,7 @@ end
 -- Is class ct shown on the strip right now? Present in the group, or always in
 -- test mode (so the full nine-button layout previews solo).
 local function ClassPresent(ct)
-    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return true end
+    if AegisRP.IsTestMode and AegisRP.IsTestMode() then return true end
     for i = 1, table.getn(presentClasses) do
         if presentClasses[i] == ct then return true end
     end
@@ -1149,7 +1149,7 @@ local function ClassIconPath(ct)
     if PallyPower_ClassTexture and id and PallyPower_ClassTexture[id] then
         return PallyPower_ClassTexture[id]
     end
-    return "Interface\\AddOns\\RallyPowerCP\\Icons\\" .. TitleCase(ct)
+    return "Interface\\AddOns\\Aegis_RallyPower\\Icons\\" .. TitleCase(ct)
 end
 
 -- One class-buff button def for the shared strip, in the paladin buff bar's
@@ -1178,7 +1178,7 @@ local function ClassButtonDef(ct)
                 b:SetState("need")                              -- red: someone needs it
                 b:SetTimer("|cffffffff" .. need .. "|r")
             elseif mr and mr <= WARN_TIME then
-                b:SetBackdropColor(1, 1, 0.5, RallyPowerCP_Settings.stripAlpha or 0.5)   -- yellow: covered but expiring
+                b:SetBackdropColor(1, 1, 0.5, AegisRP_Settings.stripAlpha or 0.5)   -- yellow: covered but expiring
                 b.icon:SetAlpha(1)
                 if b.icon2 then b.icon2:SetAlpha(1) end
                 local m = math.floor(mr / 60)
@@ -1208,13 +1208,13 @@ local function UtilityButtonDef(u, uidx)
     if after then short = after end
     return {
         key = "util_" .. uidx,
-        visible = function() return KNOWN[u.name] and RallyPowerCP_Settings.utilRow ~= false end,
+        visible = function() return KNOWN[u.name] and AegisRP_Settings.utilRow ~= false end,
         refresh = function(b)
             b:SetLabel("|cffffd100" .. short .. "|r")
             -- show the assigned role target (Fear Ward -> Tank) when I hold it
             local roleTag
-            if u.duty and RallyPowerCP.Assign then
-                local v = RallyPowerCP.Assign.GetDuty(UnitName("player"), u.duty)
+            if u.duty and AegisRP.Assign then
+                local v = AegisRP.Assign.GetDuty(UnitName("player"), u.duty)
                 if v == "@TANK" then roleTag = "on Tank"
                 elseif v == "@HEALER" then roleTag = "on Healer"
                 elseif type(v) == "string" then roleTag = "on " .. v end
@@ -1233,8 +1233,8 @@ local function UtilityButtonDef(u, uidx)
         tooltip = function(b, tt)
             tt:AddLine(u.name, 1, 1, 1)
             local roleTgt
-            if u.duty and RallyPowerCP.Assign then
-                local v = RallyPowerCP.Assign.GetDuty(UnitName("player"), u.duty)
+            if u.duty and AegisRP.Assign then
+                local v = AegisRP.Assign.GetDuty(UnitName("player"), u.duty)
                 if v == "@TANK" then roleTgt = "the marked Tank"
                 elseif v == "@HEALER" then roleTgt = "the marked Healer"
                 elseif type(v) == "string" then roleTgt = v end
@@ -1253,10 +1253,10 @@ end
 -- class in CLASS_ORDER plus the module's utility buttons; presence gating and
 -- the drag/scale/position furniture all come from the strip engine, so these
 -- classes read identically to Shaman / Hunter / Warlock / Rogue.
-function RallyPowerCP.BuildClassBuffs()
+function AegisRP.BuildClassBuffs()
     if classStrip then return classStrip end
     local title = PLAYER_CLASS and TitleCase(PLAYER_CLASS) or "Buffs"
-    classStrip = RallyPowerCP.NewStrip("classbuffs", title)
+    classStrip = AegisRP.NewStrip("classbuffs", title)
     for ci = 1, table.getn(CLASS_ORDER) do
         local ct = CLASS_ORDER[ci]
         local b = classStrip:AddButton(ClassButtonDef(ct))
@@ -1297,8 +1297,8 @@ function UpdateDisplays()
                     if not warned[i] then
                         warned[i] = true
                         -- "Sound when a buff runs out" toggle (default on).
-                        if RallyPowerCP_Settings.expirySound ~= false then
-                            PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                        if AegisRP_Settings.expirySound ~= false then
+                            PlaySoundFile("Interface\\Addons\\Aegis_RallyPower\\Sounds\\ding.mp3")
                         end
                         local bb = ACTIVE_BUFFS[i]
                         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r "
@@ -1399,20 +1399,20 @@ local function Activate()
 
     if PLAYER_CLASS == "PALADIN" then
         -- Paladins use the original PallyPower bar/grid (now with the hover
-        -- player pop-out from RallyPowerCP_Popout.lua). No separate strip.
+        -- player pop-out from Aegis_Popout.lua). No separate strip.
         ACTIVE_BUFFS = nil
         return
     end
 
-    RallyPowerCP.active = RallyPowerCP.classes[PLAYER_CLASS]
-    ACTIVE_BUFFS   = RallyPowerCP.active and RallyPowerCP.active.buffs
-    ACTIVE_UTILITY = RallyPowerCP.active and RallyPowerCP.active.utility
+    AegisRP.active = AegisRP.classes[PLAYER_CLASS]
+    ACTIVE_BUFFS   = AegisRP.active and AegisRP.active.buffs
+    ACTIVE_UTILITY = AegisRP.active and AegisRP.active.utility
 
     -- Every non-paladin module builds its own strip UI here: Shaman totems,
     -- Hunter stings, Warlock/Rogue duties, the Warrior shout, and the
-    -- Priest/Mage/Druid class-buff strip (RallyPowerCP.BuildClassBuffs).
-    if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
-        RallyPowerCP.active:OnActivate()
+    -- Priest/Mage/Druid class-buff strip (AegisRP.BuildClassBuffs).
+    if AegisRP.active and AegisRP.active.OnActivate then
+        AegisRP.active:OnActivate()
     end
 
     -- Strip-only modules (no tracked group buffs) are fully set up now.
@@ -1439,7 +1439,7 @@ end
 --=============================================================================
 -- EVENT FRAME  (separate from PallyPower's, so the Paladin engine is untouched)
 --=============================================================================
-local f = CreateFrame("Frame", "RallyPowerCP_ClassFrame")
+local f = CreateFrame("Frame", "AegisRP_ClassFrame")
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("SPELLS_CHANGED")
@@ -1453,10 +1453,10 @@ f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:SetScript("OnEvent", function()
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         Activate()
-        RallyPowerCP_ApplyVisibility()    -- honor show-solo/party/raid
-        RallyPowerCP_ApplyMinimapSkin()   -- restore the saved icon skin
-        if event == "PLAYER_LOGIN" and not HAS_SUPERWOW and not RallyPowerCP_Settings._swowNagged then
-            RallyPowerCP_Settings._swowNagged = true
+        AegisRP_ApplyVisibility()    -- honor show-solo/party/raid
+        AegisRP_ApplyMinimapSkin()   -- restore the saved icon skin
+        if event == "PLAYER_LOGIN" and not HAS_SUPERWOW and not AegisRP_Settings._swowNagged then
+            AegisRP_Settings._swowNagged = true
             DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r SuperWoW not detected - running in 1.12 compatibility mode (icon-based buff detection). SuperWoW is recommended on Turtle for exact tracking.")
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -1470,7 +1470,7 @@ f:SetScript("OnEvent", function()
             auraDirty = true
         end
     elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
-        RallyPowerCP_ApplyVisibility()    -- group size may have crossed a show rule
+        AegisRP_ApplyVisibility()    -- group size may have crossed a show rule
         if PLAYER_CLASS and PLAYER_CLASS ~= "PALADIN" then
             auraDirty = true
         end
@@ -1504,13 +1504,13 @@ end)
 -- Global toggle, callable from the slash command AND the minimap button.
 -- Returns true if it handled a class bar; false if the caller (minimap) should
 -- fall back to the Paladin behaviour.
-function RallyPowerCP_ToggleBar()
+function AegisRP_ToggleBar()
     if PLAYER_CLASS == "PALADIN" then
         return false   -- let the Paladin engine handle it
     end
     -- Every non-paladin class now renders a strip and manages its own show/hide.
-    if RallyPowerCP.active and RallyPowerCP.active.Toggle then
-        RallyPowerCP.active:Toggle()
+    if AegisRP.active and AegisRP.active.Toggle then
+        AegisRP.active:Toggle()
         return true
     end
     DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r No tracked buffs for your class yet.")
@@ -1518,19 +1518,19 @@ function RallyPowerCP_ToggleBar()
 end
 
 -- Is the player a class the class bar serves? (used by the minimap routing)
-function RallyPowerCP_IsClassBarUser()
+function AegisRP_IsClassBarUser()
     return PLAYER_CLASS ~= nil and PLAYER_CLASS ~= "PALADIN"
 end
 
 --=============================================================================
--- OPTIONS HOOKS  (shared by /rpc and Core\RallyPowerCP_Options.lua)
+-- OPTIONS HOOKS  (shared by /rpc and Core\Aegis_Options.lua)
 --=============================================================================
 
 -- Central test-mode switch: one code path for /rpc test AND the options check.
-function RallyPowerCP_SetTestMode(on)
+function AegisRP_SetTestMode(on)
     on = on and true or false
-    if on == (RallyPowerCP_Settings.testMode and true or false) then return end
-    RallyPowerCP_Settings.testMode = on
+    if on == (AegisRP_Settings.testMode and true or false) then return end
+    AegisRP_Settings.testMode = on
     if on then
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
     else
@@ -1538,13 +1538,13 @@ function RallyPowerCP_SetTestMode(on)
         -- Leaving test mode drops the preview raid's totem/duty rows from the
         -- assignment store (your own block survives PruneToRoster) and the
         -- preview paladins' blessing table.
-        if RallyPowerCP.Assign then
-            RallyPowerCP.Assign.PruneToRoster()
+        if AegisRP.Assign then
+            AegisRP.Assign.PruneToRoster()
         end
-        RallyPowerCP_Settings.testBless = nil
+        AegisRP_Settings.testBless = nil
     end
-    if RallyPowerCP.active and RallyPowerCP.active.OnActivate then
-        RallyPowerCP.active:OnActivate()
+    if AegisRP.active and AegisRP.active.OnActivate then
+        AegisRP.active:OnActivate()
     end
     if PLAYER_CLASS == "PALADIN" then
         -- Repaint the legacy bar now so its test-mode all-class buttons appear
@@ -1558,7 +1558,7 @@ function RallyPowerCP_SetTestMode(on)
 end
 
 -- Options hook: a gridbuff_*/utilRow flag changed - re-derive and re-flow.
-function RallyPowerCP_GridRefresh()
+function AegisRP_GridRefresh()
     if not ACTIVE_BUFFS then return end
     RebuildKnownSpells()
     if classStrip then classStrip:Reflow() end
@@ -1566,37 +1566,37 @@ function RallyPowerCP_GridRefresh()
 end
 
 -- Show-when-solo/party/raid gate (Settings tab; absent settings mean shown).
-function RallyPowerCP_VisibilityAllowed()
+function AegisRP_VisibilityAllowed()
     local key
     if GetNumRaidMembers() > 0 then key = "showRaid"
     elseif GetNumPartyMembers() > 0 then key = "showParty"
     else key = "showSolo" end
-    return RallyPowerCP_Settings[key] ~= false
+    return AegisRP_Settings[key] ~= false
 end
 
 -- ANDed with the per-frame hidden flags: hiding here never overwrites what the
 -- user toggled by hand, and the Paladin legacy frames are deliberately exempt.
 -- Every non-paladin class UI (including the class-buff strip) is a registered
 -- strip, so one loop covers them all.
-function RallyPowerCP_ApplyVisibility()
-    local ok = RallyPowerCP_VisibilityAllowed()
-    if RallyPowerCP.strips then
-        for k, S in pairs(RallyPowerCP.strips) do
+function AegisRP_ApplyVisibility()
+    local ok = AegisRP_VisibilityAllowed()
+    if AegisRP.strips then
+        for k, S in pairs(AegisRP.strips) do
             if not ok then S.frame:Hide()
-            elseif not RallyPowerCP_Settings["stripHidden_" .. k] then S.frame:Show() end
+            elseif not AegisRP_Settings["stripHidden_" .. k] then S.frame:Show() end
         end
     end
 end
 
 -- Options hook: live UI-scale application (every strip + the pop-out; the
 -- Paladin engine keeps its own scale settings under /pp Options).
-function RallyPowerCP_ApplyUIScale()
-    local s = RallyPowerCP_Settings.uiScale or 1
-    if RallyPowerCP.strips then
+function AegisRP_ApplyUIScale()
+    local s = AegisRP_Settings.uiScale or 1
+    if AegisRP.strips then
         -- the global slider re-unifies every strip: per-strip grip scales
         -- are cleared so the slider does what it says
-        for key, S in pairs(RallyPowerCP.strips) do
-            RallyPowerCP_Settings["stripScale_" .. key] = nil
+        for key, S in pairs(AegisRP.strips) do
+            AegisRP_Settings["stripScale_" .. key] = nil
             S.frame:SetScale(s)
         end
     end
@@ -1605,8 +1605,8 @@ end
 
 -- Class-buff strip back to its default anchor (shared by /rpc reset and Reset
 -- Frames). Other strips are handled by the options Reset Frames sweep.
-function RallyPowerCP_ResetBarPosition()
-    RallyPowerCP_Settings["stripPos_classbuffs"] = nil
+function AegisRP_ResetBarPosition()
+    AegisRP_Settings["stripPos_classbuffs"] = nil
     if classStrip and classStrip.frame then
         classStrip.frame:ClearAllPoints()
         classStrip.frame:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
@@ -1616,7 +1616,7 @@ end
 --=============================================================================
 -- MINIMAP ICON SKINS  (shared minimap button -> works for every class)
 --=============================================================================
-RallyPowerCP_MinimapSkins = { "blue", "ivory", "white", "gold", "pearl" }
+AegisRP_MinimapSkins = { "blue", "ivory", "white", "gold", "pearl" }
 local SKIN_FILE = {
     blue  = "Minimap",        -- the default (also the XML fallback)
     ivory = "Minimap_ivory",
@@ -1628,66 +1628,66 @@ local SKIN_LABEL = {
     blue="Blue & Gold", ivory="Ivory & Gold", white="White & Gold",
     gold="Gold & White", pearl="Pearl & Gold",
 }
-RallyPowerCP_MinimapSkinLabels = SKIN_LABEL   -- exposed for the options dropdown
+AegisRP_MinimapSkinLabels = SKIN_LABEL   -- exposed for the options dropdown
 
-function RallyPowerCP_ApplyMinimapSkin(name)
-    name = name or RallyPowerCP_Settings.minimapSkin or "blue"
+function AegisRP_ApplyMinimapSkin(name)
+    name = name or AegisRP_Settings.minimapSkin or "blue"
     if not SKIN_FILE[name] then name = "blue" end
-    RallyPowerCP_Settings.minimapSkin = name
+    AegisRP_Settings.minimapSkin = name
     local btn = getglobal("PallyPowerMinimapButton")
     if not btn then return end
-    local base = "Interface\\AddOns\\RallyPowerCP\\Icons\\" .. SKIN_FILE[name]
+    local base = "Interface\\AddOns\\Aegis_RallyPower\\Icons\\" .. SKIN_FILE[name]
     btn:SetNormalTexture(base)
     btn:SetPushedTexture(base .. "_Down")
 end
 
 -- Cycle to the next skin, or set one directly by name. Callable from the slash
 -- command and from a shift-click on the minimap button.
-function RallyPowerCP_MinimapSkinCommand(arg)
+function AegisRP_MinimapSkinCommand(arg)
     arg = arg and string.gsub(arg, "^%s*(.-)%s*$", "%1") or ""
     if arg ~= "" and SKIN_FILE[arg] then
-        RallyPowerCP_ApplyMinimapSkin(arg)
+        AegisRP_ApplyMinimapSkin(arg)
     else
-        local cur = RallyPowerCP_Settings.minimapSkin or "blue"
+        local cur = AegisRP_Settings.minimapSkin or "blue"
         local idx = 1
-        for i = 1, table.getn(RallyPowerCP_MinimapSkins) do
-            if RallyPowerCP_MinimapSkins[i] == cur then idx = i end
+        for i = 1, table.getn(AegisRP_MinimapSkins) do
+            if AegisRP_MinimapSkins[i] == cur then idx = i end
         end
         idx = idx + 1
-        if idx > table.getn(RallyPowerCP_MinimapSkins) then idx = 1 end
-        RallyPowerCP_ApplyMinimapSkin(RallyPowerCP_MinimapSkins[idx])
+        if idx > table.getn(AegisRP_MinimapSkins) then idx = 1 end
+        AegisRP_ApplyMinimapSkin(AegisRP_MinimapSkins[idx])
     end
-    local cur = RallyPowerCP_Settings.minimapSkin
+    local cur = AegisRP_Settings.minimapSkin
     DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Minimap icon: |cffffd700"
         .. (SKIN_LABEL[cur] or cur) .. "|r  (/rpc icon to cycle, or shift-click the icon)")
 end
 
-SLASH_RALLYPOWERCP1 = "/rpc"
-SLASH_RALLYPOWERCP2 = "/aegis"      -- rebrand alias; /rpc stays the short form
-SlashCmdList["RALLYPOWERCP"] = function(msg)
+SLASH_AEGISRP1 = "/rpc"
+SLASH_AEGISRP2 = "/aegis"      -- rebrand alias; /rpc stays the short form
+SlashCmdList["AEGISRP"] = function(msg)
     msg = string.lower(msg or "")
 
     -- Icon skin toggle: available to EVERY class (the minimap button is shared).
     if msg == "icon" then
-        RallyPowerCP_MinimapSkinCommand("")
+        AegisRP_MinimapSkinCommand("")
         return
     end
     if string.sub(msg, 1, 5) == "icon " then
-        RallyPowerCP_MinimapSkinCommand(string.sub(msg, 6))
+        AegisRP_MinimapSkinCommand(string.sub(msg, 6))
         return
     end
 
     -- Test mode: preview every option and simulate casts (for under-levelled
     -- characters). Available to every class.
     if msg == "test" then
-        RallyPowerCP_SetTestMode(not RallyPowerCP_Settings.testMode)
+        AegisRP_SetTestMode(not AegisRP_Settings.testMode)
         return
     end
 
     -- Options frame: every class (the Settings + Buttons tabs adapt per class;
     -- Paladins get the merged legacy PallyPower settings).
     if msg == "options" or msg == "opt" or msg == "config" then
-        if RallyPowerCP_OptionsToggle then RallyPowerCP_OptionsToggle() end
+        if AegisRP_OptionsToggle then AegisRP_OptionsToggle() end
         return
     end
 
@@ -1701,14 +1701,14 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
     -- Assignment panel: every class (Blessings tab drives the legacy PLPWR
     -- tables; the other tabs drive the shared assignment model).
     if msg == "assign" or msg == "assignments" then
-        if RallyPowerCP_AssignPanelToggle then RallyPowerCP_AssignPanelToggle() end
+        if AegisRP_AssignPanelToggle then AegisRP_AssignPanelToggle() end
         return
     end
 
     -- Force a full assignment re-sync (request others' + push mine). Every
     -- class; blessings still sync separately over PLPWR.
     if msg == "sync" then
-        if RallyPowerCP_SyncNow then RallyPowerCP_SyncNow() end
+        if AegisRP_SyncNow then AegisRP_SyncNow() end
         return
     end
 
@@ -1717,14 +1717,14 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
         return
     end
     if msg == "reset" then
-        RallyPowerCP_ResetBarPosition()
+        AegisRP_ResetBarPosition()
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Bar position reset.")
         return
     end
-    RallyPowerCP_ToggleBar()
+    AegisRP_ToggleBar()
 end
 
 -- Shared accessor for the class modules / strip engine.
-function RallyPowerCP.IsTestMode()
-    return RallyPowerCP_Settings.testMode and true or false
+function AegisRP.IsTestMode()
+    return AegisRP_Settings.testMode and true or false
 end

@@ -2,24 +2,24 @@ PP_Presets = {}
 
 function PallyPower_MinimapButton_OnClick(mouseBtn)
 	PallyPowerMinimapPresetsDropDown:Hide();
-	-- RallyPowerCP: shift-click the minimap icon to cycle the icon skin (any class)
-	if IsShiftKeyDown() and RallyPowerCP_MinimapSkinCommand then
-		RallyPowerCP_MinimapSkinCommand("");
+	-- AegisRP: shift-click the minimap icon to cycle the icon skin (any class)
+	if IsShiftKeyDown() and AegisRP_MinimapSkinCommand then
+		AegisRP_MinimapSkinCommand("");
 		return;
 	end
 	if mouseBtn == "LeftButton" then
 		-- non-Paladins toggle their class buff bar; Paladins keep the original
 		-- assignment-grid toggle.
-		if RallyPowerCP_IsClassBarUser and RallyPowerCP_IsClassBarUser() then
-			RallyPowerCP_ToggleBar();
+		if AegisRP_IsClassBarUser and AegisRP_IsClassBarUser() then
+			AegisRP_ToggleBar();
 		else
 			PallyPower_SlashCommandHandler("");
 		end
 	else
-		-- RallyPowerCP: right-click opens the RallyPowerCP options for EVERY
+		-- AegisRP: right-click opens the AegisRP options for EVERY
 		-- class (the classic PallyPower frame stays reachable at /rpc legacy).
-		if RallyPowerCP_OptionsToggle then
-			RallyPowerCP_OptionsToggle();
+		if AegisRP_OptionsToggle then
+			AegisRP_OptionsToggle();
 		else
 			PallyPower_Options();
 		end

@@ -1,8 +1,8 @@
 --=============================================================================
--- RallyPowerCP_AssignPanel.lua  -  "Who covers what" (milestone step 3)
+-- Aegis_AssignPanel.lua  -  "Who covers what" (milestone step 3)
 --
 -- The raid-leader coordination grid, styled after
--- docs\RallyPowerCP_assignment_concept.html: dark gold-framed panel, five
+-- docs\AegisRP_assignment_concept.html: dark gold-framed panel, five
 -- tabs, class-coloured caster rows, chip cells, a coverage line, and the
 -- classic PallyPower bottom-button row (Refresh / Clear / Options / Reset
 -- Position / Presets).
@@ -13,12 +13,12 @@
 --               functions the /pp grid uses - so every edit writes the legacy
 --               tables and sends the byte-identical ASSIGN message. Paladins
 --               on stock PallyPower/PallyPowerTW interoperate unchanged.
---   Totems      shaman x element grid + auto group, over RallyPowerCP_Assign.
+--   Totems      shaman x element grid + auto group, over AegisRP_Assign.
 --   Raid Buffs   caster x class buff grid (Priest/Mage/Druid), over the model.
 --   Debuffs / Utility
 --               duty cards from the module-declared catalog: click cycles
 --               who's responsible. All non-blessing tabs sync over RPCX
---               (Core\RallyPowerCP_Sync.lua) to other RallyPowerCP users.
+--               (Core\Aegis_Sync.lua) to other AegisRP users.
 --
 -- TEST MODE seats a full fake 40-man raid of lore characters (every class,
 -- with specs) so each tab is exercisable solo. Fake blessing edits stay in a
@@ -32,9 +32,9 @@
 -- Lua 5.0 (table.getn, no #/gmatch/select/%).
 --=============================================================================
 
-RallyPowerCP_Settings = RallyPowerCP_Settings or {}
+AegisRP_Settings = AegisRP_Settings or {}
 
-local A = RallyPowerCP.Assign   -- loads before this file (TOC order)
+local A = AegisRP.Assign   -- loads before this file (TOC order)
 
 --------------------------------------------------------------------------
 -- theme (colors lifted from the concept page)
@@ -98,7 +98,7 @@ local PANEL_BD = {
     insets = { left = 4, right = 4, top = 4, bottom = 4 },
 }
 local CELL_BD = {
-    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
+    bgFile   = "Interface\\AddOns\\Aegis_RallyPower\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
@@ -217,7 +217,7 @@ end
 -- Exposed so the sync + prune layers can tell preview names from real ones:
 -- fake rows are editable/visible for solo testing but never touch the wire
 -- and survive a roster change while test mode is on.
-RallyPowerCP.PreviewNames = FAKE
+AegisRP.PreviewNames = FAKE
 
 --------------------------------------------------------------------------
 -- shared state + small helpers
@@ -234,8 +234,8 @@ local pills    = {}
 -- the table when test mode turns off); the legacy tables and the PLPWR wire
 -- never see fake names.
 local function TestBless()
-    RallyPowerCP_Settings.testBless = RallyPowerCP_Settings.testBless or {}
-    return RallyPowerCP_Settings.testBless
+    AegisRP_Settings.testBless = AegisRP_Settings.testBless or {}
+    return AegisRP_Settings.testBless
 end
 
 local TAB_INFO = {
@@ -290,7 +290,7 @@ local function MembersOfClass(token)
             if cls == token then add(UnitName(u)) end
         end
     end
-    if RallyPowerCP.IsTestMode() then
+    if AegisRP.IsTestMode() then
         for _, r in ipairs(ROSTER40) do
             if r[2] == token then add(r[1]) end
         end
@@ -301,7 +301,7 @@ end
 -- Row subtitle: "Holy Paladin *" for preview raiders, "Paladin - you" for
 -- yourself, plain class for everyone else.
 local function SubFor(name, token)
-    if RallyPowerCP.IsTestMode() and FAKE[name] and name ~= Me() then
+    if AegisRP.IsTestMode() and FAKE[name] and name ~= Me() then
         return (SPEC[name] or "") .. " " .. TitleCase(FAKE[name]) .. " |cffff8800*|r"
     end
     if name == Me() then return TitleCase(token) .. " - you" end
@@ -342,7 +342,7 @@ end
 -- known so the caller draws its plain header instead.
 local function SpellTip(owner, spellName)
     if not spellName then return false end
-    local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(spellName)
+    local sp = AegisRP.FindSpell and AegisRP.FindSpell(spellName)
     if not sp or not sp.index then return false end
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
     GameTooltip:SetSpell(sp.index, "spell")   -- literal: BOOKTYPE_SPELL may not exist
@@ -374,7 +374,7 @@ local blessHeader = {}
 -- A row is a "preview" row when the name is a test-raid paladin that the
 -- legacy engine does NOT know (a real guildie named Uther stays real).
 local function IsFakeRow(name)
-    if not RallyPowerCP.IsTestMode() then return false end
+    if not AegisRP.IsTestMode() then return false end
     if AllPallys and AllPallys[name] then return false end
     return FAKE[name] == "PALADIN"
 end
@@ -391,7 +391,7 @@ local function PallyList()
     for i, n in ipairs(out) do
         if n == Me() then table.remove(out, i); table.insert(out, 1, n); break end
     end
-    if RallyPowerCP.IsTestMode() then
+    if AegisRP.IsTestMode() then
         for _, r in ipairs(ROSTER40) do
             if r[2] == "PALADIN" and not seen[r[1]] then
                 seen[r[1]] = true; table.insert(out, r[1])
@@ -567,7 +567,7 @@ local function BlessCellWheel()
 end
 
 local function BlessCellTip()
-    if RallyPowerCP_Settings.tooltips == false then return end
+    if AegisRP_Settings.tooltips == false then return end
     local pally, class = this.pally, this.classID
     local bid = BlessBid(pally, class)
     local spellName = (bid >= 0) and BlessNameFor(class, bid) or nil
@@ -834,7 +834,7 @@ local function GroupOf(name)
             if rname == name then return subgroup end
         end
     end
-    if RallyPowerCP.IsTestMode() and FAKE_GROUP[name] then
+    if AegisRP.IsTestMode() and FAKE_GROUP[name] then
         return FAKE_GROUP[name]
     end
     return 1
@@ -844,7 +844,7 @@ end
 -- for other shamans' totems.
 local function TotemIconFor(totemName)
     if not totemName then return nil end
-    local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(totemName)
+    local sp = AegisRP.FindSpell and AegisRP.FindSpell(totemName)
     if sp and sp.texture then return sp.texture end
     return TOTEM_ICONS[totemName]
 end
@@ -862,7 +862,7 @@ local function TotemCellWheel()
 end
 
 local function TotemCellTip()
-    if RallyPowerCP_Settings.tooltips == false then return end
+    if AegisRP_Settings.tooltips == false then return end
     if this.element then
         local cur = A.GetTotem(this.shaman, this.element)
         -- real spell tooltip when the totem is in your spellbook
@@ -1028,7 +1028,7 @@ local BUFF_ROWS = 9
 local BUFFER_CLASSES = { "PRIEST", "MAGE", "DRUID" }
 
 local function BuffCatalog(token)
-    local m = RallyPowerCP.classes and RallyPowerCP.classes[token]
+    local m = AegisRP.classes and AegisRP.classes[token]
     return (m and m.buffs) or {}
 end
 
@@ -1041,7 +1041,7 @@ local function BufferList()
         local members = MembersOfClass(tok)
         for i = 1, table.getn(members) do
             local nm = members[i]
-            if RallyPowerCP.IsTestMode() and FAKE[nm] and nm ~= Me() then
+            if AegisRP.IsTestMode() and FAKE[nm] and nm ~= Me() then
                 fakes = fakes + 1
                 if fakes <= 3 then table.insert(out, { name = nm, token = tok }) end
             else
@@ -1091,7 +1091,7 @@ local function BuffCellWheel()
 end
 
 local function BuffCellTip()
-    if RallyPowerCP_Settings.tooltips == false then return end
+    if AegisRP_Settings.tooltips == false then return end
     local cur = A.GetClassBuff(this.caster, this.classID)
     if cur and SpellTip(this, cur) then
         GameTooltip:AddLine(" ")
@@ -1233,7 +1233,7 @@ end
 
 local function DutyIcon(def)
     if def.spell then
-        local sp = RallyPowerCP.FindSpell and RallyPowerCP.FindSpell(def.spell)
+        local sp = AegisRP.FindSpell and AegisRP.FindSpell(def.spell)
         if sp and sp.texture then return sp.texture end
     end
     return DUTY_ICONS[def.key]
@@ -1350,7 +1350,7 @@ local function DutyCardWheel()
 end
 
 local function DutyCardTip()
-    if RallyPowerCP_Settings.tooltips == false then return end
+    if AegisRP_Settings.tooltips == false then return end
     local def = A.duties[this.dutyKey]
     if not def then return end
     -- real spell tooltip when the duty's spell is in your spellbook
@@ -1484,7 +1484,7 @@ local function AllMembers()
     else
         for i = 1, GetNumPartyMembers() do add(UnitName("party" .. i)) end
     end
-    if RallyPowerCP.IsTestMode() then
+    if AegisRP.IsTestMode() then
         for _, r in ipairs(ROSTER40) do add(r[1]) end
     end
     return out
@@ -1502,7 +1502,7 @@ local function MemberClass(name)
             if UnitName("party" .. i) == name then local _, c = UnitClass("party" .. i); return c end
         end
     end
-    if RallyPowerCP.IsTestMode() and FAKE[name] then return FAKE[name] end
+    if AegisRP.IsTestMode() and FAKE[name] then return FAKE[name] end
     return nil
 end
 
@@ -1521,9 +1521,9 @@ local function CycleTankBless(name, dir)
         return
     end
     local tok = MemberClass(name)
-    local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+    local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
     if not cid then return end
-    local preview = RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[name]
+    local preview = AegisRP.PreviewNames and AegisRP.PreviewNames[name]
     if preview then
         -- sandbox: cycle every blessing (fake tanks, no real cast)
         local cur = A.GetTankBlessing(name, cid) + dir
@@ -1567,7 +1567,7 @@ local function RoleCellWheel()
 end
 
 local function RoleCellTip()
-    if RallyPowerCP_Settings.tooltips == false then return end
+    if AegisRP_Settings.tooltips == false then return end
     GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
     GameTooltip:SetText(this.member, 1, 1, 1)
     local role = A.GetRole(this.member)
@@ -1575,7 +1575,7 @@ local function RoleCellTip()
         0.7, 0.9, 0.7)
     if role == "TANK" then
         local tok = MemberClass(this.member)
-        local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+        local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
         local bid = cid and A.GetTankBlessing(this.member, cid) or -1
         if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
             GameTooltip:AddLine("Tank blessing: " .. PallyPower_BlessingID[bid], 0.5, 1, 0.5)
@@ -1631,7 +1631,7 @@ local function RefreshRoles(p)
             if role == "TANK" then
                 ntank = ntank + 1
                 b.role:SetText("|cff5be07aTank|r")
-                local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+                local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
                 local bid = cid and A.GetTankBlessing(name, cid) or -1
                 if bid >= 0 and BlessingIcon and BlessingIcon[bid] then
                     b.bicon:SetTexture(BlessingIcon[bid]); b.bicon:Show()
@@ -1685,7 +1685,7 @@ end
 
 local function UpdatePills()
     if not pills.leader then return end
-    if RallyPowerCP.IsTestMode() then
+    if AegisRP.IsTestMode() then
         pills.test:Show()
     else
         pills.test:Hide()
@@ -1754,7 +1754,7 @@ end
 local function ShowTab(i)
     if not panels[i] then i = 1 end
     currentTab = i
-    RallyPowerCP_Settings.assignLastTab = i
+    AegisRP_Settings.assignLastTab = i
     for n = 1, table.getn(panels) do
         if n == i then panels[n]:Show() else panels[n]:Hide() end
     end
@@ -1766,7 +1766,7 @@ end
 -- broadcast; totem/duty rows clear for every caster you may edit).
 local function ClearCurrentTab()
     if currentTab == 1 then
-        RallyPowerCP_Settings.testBless = nil
+        AegisRP_Settings.testBless = nil
         if PallyPower_Clear then PallyPower_Clear() end
         Msg("Blessing assignments cleared (for everyone you may edit).")
     elseif currentTab == 2 then
@@ -1805,11 +1805,11 @@ local function ClearCurrentTab()
 end
 
 local function CreatePanel()
-    local f = CreateFrame("Frame", "RallyPowerCP_AssignFrame", UIParent)
+    local f = CreateFrame("Frame", "AegisRP_AssignFrame", UIParent)
     frame = f
     f:SetWidth(FRAME_W); f:SetHeight(FRAME_H)
-    f:SetScale(RallyPowerCP_Settings.assignScale or 1)   -- before the SetPoint
-    local pos = RallyPowerCP_Settings.assignPos
+    f:SetScale(AegisRP_Settings.assignScale or 1)   -- before the SetPoint
+    local pos = AegisRP_Settings.assignPos
     if pos then f:SetPoint(pos.p, UIParent, pos.rel or pos.p, pos.x, pos.y)
     else f:SetPoint("CENTER", UIParent, "CENTER", 0, 30) end
     f:SetBackdrop(PANEL_BD)
@@ -1824,10 +1824,10 @@ local function CreatePanel()
         f:StopMovingOrSizing()
         -- keep the relative point: grip-scaling re-anchors TOPLEFT->BOTTOMLEFT
         local p, _, rp, x, y = f:GetPoint()
-        RallyPowerCP_Settings.assignPos = { p = p, rel = rp, x = x, y = y }
+        AegisRP_Settings.assignPos = { p = p, rel = rp, x = x, y = y }
     end)
     f:Hide()
-    tinsert(UISpecialFrames, "RallyPowerCP_AssignFrame")   -- ESC closes
+    tinsert(UISpecialFrames, "AegisRP_AssignFrame")   -- ESC closes
 
     -- header: eyebrow + title (concept), close button, status pills
     local eyebrow = Fnt(f, 9, GOLD_DIM)
@@ -1960,24 +1960,24 @@ local function CreatePanel()
         b:SetScript("OnClick", onclick)
         return b
     end
-    local bRefresh = BottomButton("RallyPowerCP_AssignBtnRefresh", "Refresh", function()
+    local bRefresh = BottomButton("AegisRP_AssignBtnRefresh", "Refresh", function()
         -- universal refresh: PallyPower's blessing report request (paladins
         -- resend blessings/symbols) AND our RPCX re-request (everyone resends
         -- totems/duties/raid buffs), so the whole plan reconciles on demand
         if PallyPower_Refresh then pcall(PallyPower_Refresh) end
-        if RallyPowerCP_SyncNow then pcall(RallyPowerCP_SyncNow) end
+        if AegisRP_SyncNow then pcall(AegisRP_SyncNow) end
         RefreshCurrent()
     end)
     bRefresh:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
-    local bClear = BottomButton("RallyPowerCP_AssignBtnClear", "Clear", ClearCurrentTab)
+    local bClear = BottomButton("AegisRP_AssignBtnClear", "Clear", ClearCurrentTab)
     bClear:SetPoint("RIGHT", bRefresh, "LEFT", -4, 0)
-    local bOptions = BottomButton("RallyPowerCP_AssignBtnOptions", "Options", function()
-        if RallyPowerCP_OptionsToggle then RallyPowerCP_OptionsToggle() end
+    local bOptions = BottomButton("AegisRP_AssignBtnOptions", "Options", function()
+        if AegisRP_OptionsToggle then AegisRP_OptionsToggle() end
     end)
     bOptions:SetPoint("RIGHT", bClear, "LEFT", -4, 0)
-    local bReset = BottomButton("RallyPowerCP_AssignBtnReset", "Reset Position", function()
-        RallyPowerCP_Settings.assignPos = nil
-        RallyPowerCP_Settings.assignScale = nil
+    local bReset = BottomButton("AegisRP_AssignBtnReset", "Reset Position", function()
+        AegisRP_Settings.assignPos = nil
+        AegisRP_Settings.assignScale = nil
         f:SetScale(1)
         f:ClearAllPoints()
         f:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
@@ -1986,24 +1986,24 @@ local function CreatePanel()
 
     -- scale grip, bottom-right (the PallyPower resize corner); scaling
     -- re-anchors the frame, so persist the new position with the scale
-    RallyPowerCP.AddScaleGrip(f, "assignScale", function()
-        RallyPowerCP_Settings.assignPos = { p = "TOPLEFT", rel = "BOTTOMLEFT",
+    AegisRP.AddScaleGrip(f, "assignScale", function()
+        AegisRP_Settings.assignPos = { p = "TOPLEFT", rel = "BOTTOMLEFT",
             x = f:GetLeft(), y = f:GetTop() }
     end)
     -- blessing presets are a paladin feature (same dropdown as the classic frame)
     local _, mycls = UnitClass("player")
     if mycls == "PALADIN" and PallyPowerMinimapPresetsDropDown then
-        local bPresets = BottomButton("RallyPowerCP_AssignBtnPresets", "Presets", function()
+        local bPresets = BottomButton("AegisRP_AssignBtnPresets", "Presets", function()
             PallyPowerMinimapPresetsDropDown.point = "TOPRIGHT"
             PallyPowerMinimapPresetsDropDown.relativePoint = "BOTTOMLEFT"
             ToggleDropDownMenu(1, nil, PallyPowerMinimapPresetsDropDown,
-                "RallyPowerCP_AssignBtnPresets", 0, 0)
+                "AegisRP_AssignBtnPresets", 0, 0)
         end)
         bPresets:SetPoint("RIGHT", bReset, "LEFT", -4, 0)
     end
 
     f:SetScript("OnShow", function()
-        ShowTab(RallyPowerCP_Settings.assignLastTab or 1)
+        ShowTab(AegisRP_Settings.assignLastTab or 1)
     end)
 
     -- slow repaint while open: rosters, legacy PLPWR traffic and remote
@@ -2022,7 +2022,7 @@ end
 
 -- Entry points: strip title right-click, paladin buff bar right-click,
 -- /rpc assign.
-function RallyPowerCP_AssignPanelToggle()
+function AegisRP_AssignPanelToggle()
     if not frame then CreatePanel() end
     if frame:IsShown() then frame:Hide() else frame:Show() end
 end
@@ -2042,7 +2042,7 @@ if PallyPowerBuffBar_MouseUp then
         if arg1 == "RightButton" and PallyPowerFrame
            and PallyPowerFrame:IsVisible() and not wasShown then
             PallyPowerFrame:Hide()
-            RallyPowerCP_AssignPanelToggle()
+            AegisRP_AssignPanelToggle()
         end
     end
 end
@@ -2051,8 +2051,8 @@ end
 -- classic options frame stays reachable via /rpc legacy).
 if PallyPowerFrameOptions then
     PallyPowerFrameOptions:SetScript("OnClick", function()
-        if RallyPowerCP_OptionsToggle then
-            RallyPowerCP_OptionsToggle()
+        if AegisRP_OptionsToggle then
+            AegisRP_OptionsToggle()
         elseif PallyPower_Options then
             PallyPower_Options()
         end

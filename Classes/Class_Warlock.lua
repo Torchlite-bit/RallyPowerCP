@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Warlock.lua  -  Warlock module for RallyPowerCP
+-- Class_Warlock.lua  -  Warlock module for AegisRP
 --
 -- Three buttons on the shared strip:
 --
@@ -18,7 +18,7 @@
 -- SuperWoW id-learning on top. Timers are cast-derived.
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("WARLOCK")
+local M = AegisRP:NewClass("WARLOCK")
 
 local ARMORS = {
     { name = "Demon Armor", dur = 30 * 60 },
@@ -43,13 +43,13 @@ local curseApplied = {}   -- [curseName] = { target, deadline }
 -- highest known armor (test mode: first defined, marked simulated)
 local function BestArmor()
     for _, a in ipairs(ARMORS) do
-        local sp = RallyPowerCP.FindSpell(a.name)
+        local sp = AegisRP.FindSpell(a.name)
         if sp then
-            a._tex = RallyPowerCP.TexBase(sp.texture); a._icon = sp.texture; a._sim = nil
+            a._tex = AegisRP.TexBase(sp.texture); a._icon = sp.texture; a._sim = nil
             return a
         end
     end
-    if RallyPowerCP.IsTestMode() then
+    if AegisRP.IsTestMode() then
         local a = ARMORS[1]
         a._icon = nil; a._sim = true
         return a
@@ -65,7 +65,7 @@ local function ArmorUp(a)
     while j <= 32 do
         local tex = UnitBuff("player", j)
         if not tex then break end
-        if RallyPowerCP.TexBase(tex) == a._tex then return true end
+        if AegisRP.TexBase(tex) == a._tex then return true end
         j = j + 1
     end
     return false
@@ -73,11 +73,11 @@ end
 
 local function KnownCurses()
     local out = {}
-    local test = RallyPowerCP.IsTestMode()
+    local test = AegisRP.IsTestMode()
     for _, c in ipairs(CURSES) do
-        local sp = RallyPowerCP.FindSpell(c.name)
+        local sp = AegisRP.FindSpell(c.name)
         if sp then
-            c._tex = RallyPowerCP.TexBase(sp.texture); c._icon = sp.texture; c._sim = nil
+            c._tex = AegisRP.TexBase(sp.texture); c._icon = sp.texture; c._sim = nil
             table.insert(out, c)
         elseif test then
             c._icon = nil; c._sim = true
@@ -94,11 +94,11 @@ local function SelectedCurse()
     if table.getn(list) == 0 then return nil, list end
     local want
     for _, c in ipairs(CURSES) do
-        if not want and RallyPowerCP.Assign.GetDuty(UnitName("player"), c.duty) then
+        if not want and AegisRP.Assign.GetDuty(UnitName("player"), c.duty) then
             want = c.name
         end
     end
-    if not want then want = RallyPowerCP_Settings.lockCurse end
+    if not want then want = AegisRP_Settings.lockCurse end
     for _, c in ipairs(list) do if c.name == want then return c, list end end
     return list[1], list
 end
@@ -107,13 +107,13 @@ end
 -- model, clearing any other curse duty I held (one curse at a time). The
 -- wheel and the options dropdown both come through here.
 local function SelectCurse(name)
-    RallyPowerCP_Settings.lockCurse = name
+    AegisRP_Settings.lockCurse = name
     local me = UnitName("player")
     for _, c in ipairs(CURSES) do
         if c.name == name then
-            RallyPowerCP.Assign.SetDuty(me, c.duty, true)
-        elseif RallyPowerCP.Assign.GetDuty(me, c.duty) then
-            RallyPowerCP.Assign.ClearDuty(me, c.duty)
+            AegisRP.Assign.SetDuty(me, c.duty, true)
+        elseif AegisRP.Assign.GetDuty(me, c.duty) then
+            AegisRP.Assign.ClearDuty(me, c.duty)
         end
     end
 end
@@ -133,7 +133,7 @@ end
 
 local function BuildUI()
     if strip then return end
-    strip = RallyPowerCP.NewStrip("warlock", "Warlock")
+    strip = AegisRP.NewStrip("warlock", "Warlock")
 
     -- ARMOR
     strip:AddButton{
@@ -146,9 +146,9 @@ local function BuildUI()
             end
             b:SetIcon(a._icon); b:SetLabel("|cffffd100Armor|r")
             b:SetSub(a.name .. (a._sim and " |cffff8800*|r" or ""))
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 if armorDeadline > GetTime() then
-                    b:SetState("good"); b:SetTimer(RallyPowerCP.FmtTime(armorDeadline - GetTime()))
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(armorDeadline - GetTime()))
                 else
                     b:SetState("need"); b:SetTimer("")
                 end
@@ -157,7 +157,7 @@ local function BuildUI()
             if ArmorUp(a) then
                 b:SetState("good")
                 if armorDeadline > GetTime() then
-                    b:SetTimer(RallyPowerCP.FmtTime(armorDeadline - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(armorDeadline - GetTime()))
                 else b:SetTimer("") end
             else
                 b:SetState("need"); b:SetTimer("")
@@ -166,7 +166,7 @@ local function BuildUI()
         onClick = function(b)
             local a = BestArmor()
             if not a then return end
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would cast " .. a.name)
                 armorDeadline = GetTime() + a.dur
                 return
@@ -186,14 +186,14 @@ local function BuildUI()
         key = "soulstone",
         refresh = function(b)
             b:SetLabel("|cffffd100Soulstone|r")
-            local bag, slot, name = RallyPowerCP.FindBagItem("Soulstone")
+            local bag, slot, name = AegisRP.FindBagItem("Soulstone")
             if bag then
                 b:SetIcon(GetContainerItemInfo(bag, slot))
                 b:SetSub(name)
                 local start, dur = GetContainerItemCooldown(bag, slot)
                 if start and dur and dur > 1.5 and (start + dur) > GetTime() then
                     b:SetState("need")
-                    b:SetTimer(RallyPowerCP.FmtTime(start + dur - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(start + dur - GetTime()))
                 else
                     b:SetState("good"); b:SetTimer("")
                 end
@@ -204,7 +204,7 @@ local function BuildUI()
             end
         end,
         onClick = function(b)
-            local bag, slot = RallyPowerCP.FindBagItem("Soulstone")
+            local bag, slot = AegisRP.FindBagItem("Soulstone")
             if not bag then
                 local ci = CreateSpell()
                 if ci then CastSpell(ci, "spell") end
@@ -223,7 +223,7 @@ local function BuildUI()
         end,
         tooltip = function(b, tt)
             tt:AddLine("Soulstone")
-            local bag, slot, name = RallyPowerCP.FindBagItem("Soulstone")
+            local bag, slot, name = AegisRP.FindBagItem("Soulstone")
             if bag then
                 tt:AddLine(name, 1, 1, 1)
                 tt:AddLine("Click: use on friendly target (or yourself).", 0.6, 0.6, 0.6)
@@ -244,10 +244,10 @@ local function BuildUI()
             end
             b:SetIcon(c._icon); b:SetLabel("|cffffd100Curse|r")
             b:SetSub(string.gsub(c.name, "^Curse of ", "") .. (c._sim and " |cffff8800*|r" or ""))
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 local a = curseApplied[c.name]
                 if a and a.deadline > GetTime() then
-                    b:SetState("good"); b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
                 else
                     b:SetState("need"); b:SetTimer("")
                 end
@@ -256,11 +256,11 @@ local function BuildUI()
             if not UnitExists("target") or UnitIsFriend("player", "target") then
                 b:SetTimer(""); b:SetState("off"); return
             end
-            if RallyPowerCP.UnitHasDebuffEntry("target", c) then
+            if AegisRP.UnitHasDebuffEntry("target", c) then
                 b:SetState("good")
                 local a = curseApplied[c.name]
                 if a and a.target == UnitName("target") and a.deadline > GetTime() then
-                    b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
                 else b:SetTimer("") end
             else
                 b:SetState("need"); b:SetTimer("")
@@ -269,13 +269,13 @@ local function BuildUI()
         onClick = function(b)
             local c = SelectedCurse()
             if not c then return end
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would apply " .. c.name)
                 curseApplied[c.name] = { target = "(test)", deadline = GetTime() + c.dur }
                 return
             end
             if not UnitExists("target") or UnitIsFriend("player", "target") then return end
-            if RallyPowerCP.CastAtTarget(c.name) then
+            if AegisRP.CastAtTarget(c.name) then
                 curseApplied[c.name] = { target = UnitName("target"), deadline = GetTime() + c.dur }
             end
         end,
@@ -317,11 +317,11 @@ end
 M.optionsInfo = {
     { type = "header", label = "Strip buttons" },
     { type = "check", key = "btn_armor", label = "Armor button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "check", key = "btn_soulstone", label = "Soulstone button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "check", key = "btn_curse", label = "Curse button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "header", label = "Curse duty" },
     { type = "select", key = "lockCurse", label = "Curse",
       values = function()
@@ -343,8 +343,8 @@ M.optionsInfo = {
 
 -- Assignment model: Warlock duties (curses + soulstone). Wids are stable and
 -- append-only (21-25 were added after the first catalog batch - never renumber).
-if RallyPowerCP.Assign then
-    local D = RallyPowerCP.Assign.RegisterDuty
+if AegisRP.Assign then
+    local D = AegisRP.Assign.RegisterDuty
     D{ key="CURSE_ELEMENTS",     wid=11, class="WARLOCK", tab="debuff",  spell="Curse of the Elements",  target="none",   multi=false, dur=5*60 }
     D{ key="CURSE_SHADOW",       wid=12, class="WARLOCK", tab="debuff",  spell="Curse of Shadow",        target="none",   multi=false, dur=5*60 }
     D{ key="SOULSTONE",          wid=17, class="WARLOCK", tab="utility", spell="Soulstone Resurrection", target="player", multi=true,  dur=0 }

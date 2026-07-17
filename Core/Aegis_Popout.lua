@@ -1,5 +1,5 @@
 --=============================================================================
--- RallyPowerCP_Popout.lua
+-- Aegis_Popout.lua
 --
 -- The hover player pop-out for the PallyPower buff bar, rebuilt as an exact
 -- replica of **PallyPower 3.3.5's `PallyPowerPopupTemplate`** (from the official
@@ -43,7 +43,7 @@ local ROW_H = 34
 
 -- ApplySkin() equivalent: default skin "Smooth" + "Blizzard Tooltip" border.
 local SKIN_BACKDROP = {
-    bgFile   = "Interface\\AddOns\\RallyPowerCP\\Skins\\Smooth",
+    bgFile   = "Interface\\AddOns\\Aegis_RallyPower\\Skins\\Smooth",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = false, tileSize = 8, edgeSize = 8,
     insets = { left = 0, right = 0, top = 0, bottom = 0 },
@@ -80,7 +80,7 @@ end
 
 -- Combat tracking (PLAYER_REGEN events; UnitAffectingCombat is unreliable here).
 local inCombat = false
-local combatWatch = CreateFrame("Frame", "RallyPowerCP_PopCombatWatch")
+local combatWatch = CreateFrame("Frame", "AegisRP_PopCombatWatch")
 combatWatch:RegisterEvent("PLAYER_REGEN_DISABLED")
 combatWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
 combatWatch:SetScript("OnEvent", function()
@@ -224,7 +224,7 @@ end
 -- Build one popup button, laid out exactly like PallyPowerPopupTemplate.
 local function GetRow(i)
     if rows[i] then return rows[i] end
-    local r = CreateFrame("Button", "RallyPowerCP_Pop" .. i, popout)
+    local r = CreateFrame("Button", "AegisRP_Pop" .. i, popout)
     r:SetWidth(ROW_W); r:SetHeight(ROW_H)
     r:SetFrameStrata("DIALOG")
     r:SetBackdrop(SKIN_BACKDROP)
@@ -343,7 +343,7 @@ end
 local function CreatePopout()
     -- Invisible container: the official popup buttons float bare, so the
     -- container exists only for layout and the keep-open hit-test.
-    local p = CreateFrame("Frame", "RallyPowerCP_BlessingPopout", UIParent)
+    local p = CreateFrame("Frame", "AegisRP_BlessingPopout", UIParent)
     p:SetWidth(ROW_W); p:SetHeight(ROW_H)
     p:SetFrameStrata("DIALOG")
     p:EnableMouse(false)
@@ -352,7 +352,7 @@ local function CreatePopout()
     popout = p
 end
 
-function RallyPowerCP_BlessingPopout_Show(btn)
+function AegisRP_BlessingPopout_Show(btn)
     if not btn or not btn.classID then return end
     if table.getn(Collect(btn)) == 0 then HidePopout(); return end
     if not popout then CreatePopout() end
@@ -368,7 +368,7 @@ end
 -- version of the text tooltip it used to show. (Only the buff-bar XML calls
 -- this handler, so nothing else is affected.)
 function PallyPowerBuffButton_OnEnter(btn)
-    RallyPowerCP_BlessingPopout_Show(btn)
+    AegisRP_BlessingPopout_Show(btn)
 end
 
 --=============================================================================
@@ -389,7 +389,7 @@ local BLESS_DEMO = 1     -- Might icon as the placeholder art for empty cells
 local orig_PallyPower_UpdateUI = PallyPower_UpdateUI
 function PallyPower_UpdateUI()
     if orig_PallyPower_UpdateUI then orig_PallyPower_UpdateUI() end
-    if not (RallyPowerCP and RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode()) then return end
+    if not (AegisRP and AegisRP.IsTestMode and AegisRP.IsTestMode()) then return end
     local _, eclass = UnitClass("player")
     if eclass ~= "PALADIN" then return end
     if not PallyPowerBuffBar then return end
@@ -456,7 +456,7 @@ end
 -- panel's grid uses); live mode is untouched.
 local orig_BarWheel = PallyPowerBuffBarButton_OnMouseWheel
 function PallyPowerBuffBarButton_OnMouseWheel(btn, delta)
-    if RallyPowerCP and RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode()
+    if AegisRP and AegisRP.IsTestMode and AegisRP.IsTestMode()
        and btn and type(btn.classID) == "number" then
         local me = UnitName("player")
         if not (PallyPower_CanControl and PallyPower_CanControl(me)) then return end

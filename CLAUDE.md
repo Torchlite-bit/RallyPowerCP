@@ -1,13 +1,17 @@
-# CLAUDE.md — Aegis: RallyPower (folder: RallyPowerCP)
+# CLAUDE.md — Aegis: RallyPower (folder: Aegis_RallyPower)
 
 Project brief for Claude Code. Read this fully before editing anything.
 
 ## What this is
 
-**Aegis: RallyPower** — display/brand name; the addon folder, TOC filename,
-saved variables, globals/frame names, and the `PLPWR`/`RPCX` wire prefixes all
-STAY `RallyPowerCP`-based (renaming any of them breaks installs, orphans saved
-settings, or breaks sync — brand changes are display-string-only). It extends
+**Aegis: RallyPower** (part of the Aegis addon series, like Aegis_SBR).
+Naming rules: the install folder and TOC are **`Aegis_RallyPower`**; our code
+namespace, globals, frame names, and saved variables use the **`AegisRP`**
+prefix (`AegisRP_Settings`, `AegisRP.Assign`, …); Core files are
+`Core/Aegis_*.lua`. The embedded PallyPower engine keeps its own
+`PallyPower_*`/`PP_*` names and the `PLPWR` addon-message prefix (locked
+byte-compat with stock PallyPower); our sync channel prefix stays `RPCX`.
+It extends
 the PallyPower paladin buff addon to **all nine
 classes** — a unified raid buff/utility coordinator for **Turtle WoW 1.18.1**,
 which is a **1.12.1 client (Lua 5.0)** with the **SuperWoW** and **VanillaFixes**
@@ -60,35 +64,35 @@ python3 scripts/verify.py
 
 Checks structural balance and Lua 5.1-isms across `Core/` + `Classes/`. There
 is no standalone Lua here; the real test is in-game — errors print to chat
-(the Core wraps risky paths in `pcall` and prints `RallyPowerCP error: …`).
+(the Core wraps risky paths in `pcall` and prints `AegisRP error: …`).
 Use `/rpc test` (test mode) to exercise everything on an under-levelled
 character: all options appear (unlearned marked `*`), clicks simulate casts
 and start real timers.
 
 ## Architecture map
 
-Load order (`RallyPowerCP.toc`):
+Load order (`Aegis_RallyPower.toc`):
 ```
 Locale\*                       localization
 PallyPower\*                   the ORIGINAL PallyPower engine (see below)
-Core\RallyPowerCP_Core.lua     class-independent coverage engine + class-buff strip
-Core\RallyPowerCP_Strip.lua    shared strip engine + helpers
+Core\Aegis_Core.lua     class-independent coverage engine + class-buff strip
+Core\Aegis_Strip.lua    shared strip engine + helpers
 Classes\Class_*.lua            one module per class
-Core\RallyPowerCP_Options.lua  the tabbed options frame
-Core\RallyPowerCP_Popout.lua   loads LAST (legacy hover handler + paladin test graft)
+Core\Aegis_Options.lua  the tabbed options frame
+Core\Aegis_Popout.lua   loads LAST (legacy hover handler + paladin test graft)
 ```
 
 **Every non-paladin class is now a strip.** There is one visual family: the
 100×34 paladin-template button, stacked in a movable titled strip (drag dot,
 scale grip, saved position). Priest/Mage/Druid render the **class-buff strip**
-(`RallyPowerCP.BuildClassBuffs`, one button per raid class, with the player
+(`AegisRP.BuildClassBuffs`, one button per raid class, with the player
 pop-out on hover); Warrior/Shaman/Hunter/Warlock/Rogue render their own
 self-contained strips. No bespoke grid bar exists anymore.
 
 **Paladin = the legacy engine, wrapped not rewritten (locked decision).**
 `PallyPower\PallyPower.lua/.xml` run unmodified; `PallyPower.xml` loads its lua
 via a relative `<Script>` (they must stay in the same folder). The player
-pop-out (`Core\RallyPowerCP_Popout.lua`) grafts onto its buff bar by replacing
+pop-out (`Core\Aegis_Popout.lua`) grafts onto its buff bar by replacing
 `PallyPowerBuffButton_OnEnter`, reading the engine's own per-button data
 (`btn.have/need/range/dead`, `LastCastPlayer`) and casting through its
 spellbook tables (`AllPallys`, `GetNormalBlessings`). The pop-out rows are an
@@ -97,10 +101,10 @@ Blizzard Tooltip border, official colors: Good `0,0.7,0` / NeedAll `1,0,0` /
 Special `0,0,1`, all 0.5 alpha).
 
 **Class-buff classes** (Priest, Mage, Druid): declare
-`M = RallyPowerCP:NewClass("TOKEN"); M.buffs = { {name, group, icons, ids?,
+`M = AegisRP:NewClass("TOKEN"); M.buffs = { {name, group, icons, ids?,
 pet, dur, gdur, selfcast}, ... }` (+ optional `M.utility`), plus
-`M:OnActivate()` = `RallyPowerCP.BuildClassBuffs()` and `M:Toggle()` =
-`RallyPowerCP.BuildClassBuffs():Toggle()`. The Core scans the roster, detects
+`M:OnActivate()` = `AegisRP.BuildClassBuffs()` and `M:Toggle()` =
+`AegisRP.BuildClassBuffs():Toggle()`. The Core scans the roster, detects
 by SuperWoW spell-id (learned from the icon seed) with icon fallback, casts via
 `CastBuffOn`, and renders one strip button per raid class (wheel = which buff
 for that class, L = group cast, R = smart single, hover = player pop-out).
@@ -108,20 +112,20 @@ for that class, L = group cast, R = smart single, hover = player pop-out).
 **Strip classes** (Warrior, Shaman, Hunter, Warlock, Rogue): declare
 `M:OnActivate()` (build UI) and `M:Toggle()`. Build UI with the strip engine:
 ```
-strip = RallyPowerCP.NewStrip(key, title)
+strip = AegisRP.NewStrip(key, title)
 strip:AddButton{ refresh=fn(b), onClick=fn(b,btn), onWheel=fn(b,delta), tooltip=fn(b,tt) }
 strip:Finish()
 ```
 Button helpers inside `refresh`: `b:SetIcon/SetLabel/SetSub/SetTimer` and
 `b:SetState("good"|"need"|"off")`. Engine helpers (all cached where hot):
-`RallyPowerCP.FindSpell(name)` (spellbook, invalidated on SPELLS_CHANGED),
+`AegisRP.FindSpell(name)` (spellbook, invalidated on SPELLS_CHANGED),
 `FindBagItem(pattern)` (bags, invalidated on BAG_UPDATE),
 `UnitHasDebuffEntry(unit, entry)` (icon-seed id-learning),
 `CastAtTarget(name)`, `FmtTime(sec)`, `TexBase(path)`,
-`RallyPowerCP.IsTestMode()`.
+`AegisRP.IsTestMode()`.
 **Buttons are 100×34, 26px icon, 2px gap — the paladin template. Locked.**
 
-**Saved variables:** `RallyPowerCP_Settings` (per character: `testMode`,
+**Saved variables:** `AegisRP_Settings` (per character: `testMode`,
 strip positions `stripPos_*`, selections `shamanSel`/`hunterSting`/
 `lockCurse`/`roguePoison`, hidden flags) + the legacy `PallyPower_*` tables.
 
@@ -149,7 +153,7 @@ strip positions `stripPos_*`, selections `shamanSel`/`hunterSting`/
    SuperWoW `UNIT_CASTEVENT` for cast-exact shared timers. Requires
    two-client testing.
 3. **Assignment panel** — the five-tab frame from
-   `docs/RallyPowerCP_assignment_concept.html` (Blessings live; Totems, Raid
+   `docs/AegisRP_assignment_concept.html` (Blessings live; Totems, Raid
    Buffs, Debuffs, Utility). Replicate frame specs from the 3.3.5 reference
    the same way the pop-out was done.
 
@@ -168,7 +172,7 @@ every class.
 
 ## Working style
 
-- Version-bump `RallyPowerCP.toc` + README, and write a `CHANGELOG.md` entry
+- Version-bump `Aegis_RallyPower.toc` + README, and write a `CHANGELOG.md` entry
   for every release; be explicit about limitations and Turtle-unverified
   values.
 - When behavior must match PallyPower, **read its source and reuse its data**

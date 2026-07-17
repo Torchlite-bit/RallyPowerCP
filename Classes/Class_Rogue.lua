@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Rogue.lua  -  Rogue module for RallyPowerCP
+-- Class_Rogue.lua  -  Rogue module for AegisRP
 --
 -- Three buttons on the shared strip:
 --
@@ -16,7 +16,7 @@
 -- texture with SuperWoW id-learning on top.
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("ROGUE")
+local M = AegisRP:NewClass("ROGUE")
 
 local EXPOSE = { name = "Expose Armor", dur = 30 }
 local POISONS = { "Instant Poison", "Deadly Poison", "Crippling Poison",
@@ -29,9 +29,9 @@ local exposeApplied = nil    -- { target, deadline }
 -- Test mode lists every type so the cycle can be previewed with empty bags.
 local function BagPoisons()
     local out = {}
-    local test = RallyPowerCP.IsTestMode()
+    local test = AegisRP.IsTestMode()
     for _, p in ipairs(POISONS) do
-        local bag = RallyPowerCP.FindBagItem(p)
+        local bag = AegisRP.FindBagItem(p)
         if bag or test then table.insert(out, p) end
     end
     return out
@@ -40,8 +40,8 @@ end
 local function SelectedPoison(handKey)
     local list = BagPoisons()
     if table.getn(list) == 0 then return nil, list end
-    RallyPowerCP_Settings.roguePoison = RallyPowerCP_Settings.roguePoison or {}
-    local want = RallyPowerCP_Settings.roguePoison[handKey]
+    AegisRP_Settings.roguePoison = AegisRP_Settings.roguePoison or {}
+    local want = AegisRP_Settings.roguePoison[handKey]
     for _, p in ipairs(list) do if p == want then return p, list end end
     return list[1], list
 end
@@ -54,14 +54,14 @@ local function CyclePoison(handKey, delta)
     for i, p in ipairs(list) do if p == sel then idx = i end end
     idx = idx + (delta > 0 and -1 or 1)
     if idx < 1 then idx = n elseif idx > n then idx = 1 end
-    RallyPowerCP_Settings.roguePoison = RallyPowerCP_Settings.roguePoison or {}
-    RallyPowerCP_Settings.roguePoison[handKey] = list[idx]
+    AegisRP_Settings.roguePoison = AegisRP_Settings.roguePoison or {}
+    AegisRP_Settings.roguePoison[handKey] = list[idx]
 end
 
 local function ApplyPoison(handKey)
     local sel = SelectedPoison(handKey)
     if not sel then return end
-    local bag, slot = RallyPowerCP.FindBagItem(sel)
+    local bag, slot = AegisRP.FindBagItem(sel)
     if not bag then return end
     UseContainerItem(bag, slot)                 -- pick up the "apply" cursor
     PickupInventoryItem(handKey == "mh" and 16 or 17)  -- drop it on the weapon
@@ -75,7 +75,7 @@ local function PoisonButton(handKey, label)
             b:SetLabel("|cffffd100" .. label .. "|r")
             local sel = SelectedPoison(handKey)
             if sel then
-                local bag, slot = RallyPowerCP.FindBagItem(sel)
+                local bag, slot = AegisRP.FindBagItem(sel)
                 b:SetIcon(bag and GetContainerItemInfo(bag, slot) or nil)
                 b:SetSub(string.gsub(sel, " Poison$", ""))
             else
@@ -88,7 +88,7 @@ local function PoisonButton(handKey, label)
             if has then
                 b:SetState("good")
                 local t = (exp or 0) / 1000
-                local txt = RallyPowerCP.FmtTime(t)
+                local txt = AegisRP.FmtTime(t)
                 if ch and ch > 0 then txt = txt .. " |cffaaaaaa(" .. ch .. ")|r" end
                 b:SetTimer(txt)
             else
@@ -112,26 +112,26 @@ end
 
 local function BuildUI()
     if strip then return end
-    strip = RallyPowerCP.NewStrip("rogue", "Rogue")
+    strip = AegisRP.NewStrip("rogue", "Rogue")
 
     -- EXPOSE ARMOR
     strip:AddButton{
         key = "expose",
         refresh = function(b)
-            local sp = RallyPowerCP.FindSpell(EXPOSE.name)
-            local test = RallyPowerCP.IsTestMode()
+            local sp = AegisRP.FindSpell(EXPOSE.name)
+            local test = AegisRP.IsTestMode()
             if not sp and not test then
                 b:SetIcon(nil); b:SetLabel("|cffffd100Expose|r")
                 b:SetSub("|cff888888not learned|r"); b:SetTimer(""); b:SetState("off"); return
             end
-            if sp then EXPOSE._tex = RallyPowerCP.TexBase(sp.texture) end
+            if sp then EXPOSE._tex = AegisRP.TexBase(sp.texture) end
             b:SetIcon(sp and sp.texture or nil)
             b:SetLabel("|cffffd100Expose|r")
             b:SetSub("Armor" .. ((not sp) and " |cffff8800*|r" or ""))
             if test then
                 local a = exposeApplied
                 if a and a.deadline > GetTime() then
-                    b:SetState("good"); b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
                 else
                     b:SetState("need"); b:SetTimer("")
                 end
@@ -140,24 +140,24 @@ local function BuildUI()
             if not UnitExists("target") or UnitIsFriend("player", "target") then
                 b:SetTimer(""); b:SetState("off"); return
             end
-            if RallyPowerCP.UnitHasDebuffEntry("target", EXPOSE) then
+            if AegisRP.UnitHasDebuffEntry("target", EXPOSE) then
                 b:SetState("good")
                 local a = exposeApplied
                 if a and a.target == UnitName("target") and a.deadline > GetTime() then
-                    b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
                 else b:SetTimer("") end
             else
                 b:SetState("need"); b:SetTimer("")
             end
         end,
         onClick = function(b)
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would apply Expose Armor")
                 exposeApplied = { target = "(test)", deadline = GetTime() + EXPOSE.dur }
                 return
             end
             if not UnitExists("target") or UnitIsFriend("player", "target") then return end
-            if RallyPowerCP.CastAtTarget(EXPOSE.name) then
+            if AegisRP.CastAtTarget(EXPOSE.name) then
                 exposeApplied = { target = UnitName("target"), deadline = GetTime() + EXPOSE.dur }
             end
         end,
@@ -204,18 +204,18 @@ end
 M.optionsInfo = {
     { type = "header", label = "Strip buttons" },
     { type = "check", key = "btn_expose", label = "Expose Armor button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "check", key = "btn_poison_mh", label = "Main-hand button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "check", key = "btn_poison_oh", label = "Off-hand button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "header", label = "Poisons" },
     PoisonSelectEntry("mh", "Main hand"),
     PoisonSelectEntry("oh", "Off hand"),
 }
 
 -- Assignment model: Rogue debuff duty. Wid is stable.
-if RallyPowerCP.Assign then
-    RallyPowerCP.Assign.RegisterDuty{ key="EXPOSE", wid=10, class="ROGUE", tab="debuff",
+if AegisRP.Assign then
+    AegisRP.Assign.RegisterDuty{ key="EXPOSE", wid=10, class="ROGUE", tab="debuff",
         spell="Expose Armor", target="none", multi=false, dur=30 }
 end

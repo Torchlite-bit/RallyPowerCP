@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Priest.lua  -  Priest module for RallyPowerCP
+-- Class_Priest.lua  -  Priest module for AegisRP
 --
 -- A class-buff strip (like Mage/Druid): one button per raid class showing the
 -- buff assigned to that class (Fortitude / Divine Spirit / Shadow Protection,
@@ -9,7 +9,7 @@
 -- the strip) lives in the core; the module supplies the data.
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("PRIEST")
+local M = AegisRP:NewClass("PRIEST")
 
 -- Maintained group buffs (single-target name + group/greater version).
 M.buffs = {
@@ -35,16 +35,16 @@ M.utility = {
 }
 
 function M:OnActivate()
-    RallyPowerCP.BuildClassBuffs()
+    AegisRP.BuildClassBuffs()
 end
 
 function M:Toggle()
-    RallyPowerCP.BuildClassBuffs():Toggle()
+    AegisRP.BuildClassBuffs():Toggle()
 end
 
 -- Assignment model: Priest duties (raid buffs + utility). Wids are stable.
-if RallyPowerCP.Assign then
-    local D = RallyPowerCP.Assign.RegisterDuty
+if AegisRP.Assign then
+    local D = AegisRP.Assign.RegisterDuty
     D{ key="FORTITUDE",  wid=1,  class="PRIEST", tab="raidbuff", spell="Power Word: Fortitude", target="none",   multi=false, dur=30*60 }
     D{ key="SPIRIT",     wid=2,  class="PRIEST", tab="raidbuff", spell="Divine Spirit",          target="none",   multi=false, dur=30*60 }
     D{ key="SHADOWPROT", wid=3,  class="PRIEST", tab="raidbuff", spell="Shadow Protection",      target="none",   multi=false, dur=10*60 }
