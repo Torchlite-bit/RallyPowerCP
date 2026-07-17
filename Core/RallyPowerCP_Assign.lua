@@ -78,7 +78,7 @@ local function Notify(domain, caster)
     for _, fn in ipairs(listeners) do
         local ok, err = pcall(fn, domain, caster)
         if not ok then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
                 .. tostring(err) .. " |cffaaaaaa(assignment listener)|r")
         end
     end

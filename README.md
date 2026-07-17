@@ -1,11 +1,11 @@
-# RallyPowerCP
+# Aegis: RallyPower
 
 **All-class buff management for Turtle WoW 1.18.1 (1.12 client).**
 By **Subtilizer (Torchlite)** · version **0.14.0** · see [CHANGELOG.md](CHANGELOG.md).
 
 Built on **PallyPowerTW** (by ivanovlk) and the original **PallyPower** team.
 
-RallyPowerCP keeps PallyPower's Paladin blessing/seal/aura bar and grid, and
+**Aegis: RallyPower** (formerly RallyPowerCP) keeps PallyPower's Paladin blessing/seal/aura bar and grid, and
 adds the hover **player pop-out** to it: hover a blessing button on the buff bar
 and a colour-coded list of that class's players (Have / Need / Not Here / Dead,
 with names and timers) expands to its left. It also adds an auto-detecting buff
@@ -55,7 +55,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
   for topping off the one person who missed it.
 - **CTRL+click a player** in the pop-out to set their role: Main Tank (gold) →
   Main Assist (cyan) → none. Roles are saved per character. *(For now they're
-  local — not yet shared with other RallyPowerCP users or used by smart
+  local — not yet shared with other Aegis: RallyPower users or used by smart
   targeting; that's coming in the role/sync update.)*
 - **Countdown timers** turn the row yellow and play a **ding** at 60 seconds
   left — for every tracked buff, even one scrolled off the rows. Times are exact
@@ -73,7 +73,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
 | Command | Description |
 |---------|-------------|
 | `/pp`, `/pallypower`, `/rp`, `/rallypower` | Paladin grid / buff bar (PallyPower) |
-| `/rpc` | Toggle the all-class buff bar (non-Paladins) |
+| `/rpc` (alias `/aegis`) | Toggle the all-class buff bar (non-Paladins); all subcommands work on either |
 | `/rpc test` | **Test mode** — show every option (unlearned marked `*`) and simulate casts with real timers, for previewing on low-level characters |
 | `/rpc options` | **Options frame** (any class; or **right-click** the minimap icon) — Settings tab (show rules, tooltips, test mode, UI scale, minimap skin/button, lock/reset frames) and a per-class Buttons tab; Paladins get the merged classic PallyPower settings |
 | `/rpc assign` | **Assignment panel** ("Who Covers What"; any class; or **right-click** a strip's title / the paladin buff bar) — Blessings tab drives the classic PallyPower assignments **with Aura and Seal columns first**, each paladin's **blessing/aura ranks+talents and Symbol of Kings count** under their name (byte-compatible with stock PallyPower users); the **Raid Buffs tab is a caster × class grid** (priests/mages/druids — their strips follow their rows); plus Totems (auto group, totem icons) / Debuffs / Utility over the shared assignment model. Scale grip bottom-right; real spell tooltips for spells in your spellbook. In test mode it seats a full 40-man preview raid of lore characters for solo testing |
@@ -83,7 +83,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
 | `/rpc icon` | Cycle the minimap icon skin (any class; or **shift-click** the icon) |
 | `/rpc icon <name>` | Set a skin directly: `blue`, `ivory`, `white`, `gold`, `pearl` |
 
-Bind **"Smart buff: next member missing any buff"** under RallyPowerCP in the
+Bind **"Smart buff: next member missing any buff"** under Aegis: RallyPower in the
 Key Bindings menu to top off the group hands-free — each press buffs the next
 member missing anything.
 
@@ -96,14 +96,16 @@ skins ship (Blue & Gold default, Ivory, White, Gold, Pearl).
 
 ## Installation
 
-1. Put the `RallyPowerCP` folder in `Interface/AddOns/` (the folder name must
+1. Put the `RallyPowerCP` folder in `Interface/AddOns/` (the folder name stays
+   `RallyPowerCP` — a technical requirement; only the display name is
+   "Aegis: RallyPower" — and it must
    match `RallyPowerCP.toc`).
 2. That's it — all art, sounds, and textures are bundled, and every path is
    verified against a real file.
 
 ### Client requirements (Turtle WoW 1.18.1 / 1.12 client)
 
-- **SuperWoW** — strongly recommended. RallyPowerCP uses it for exact,
+- **SuperWoW** — strongly recommended. Aegis: RallyPower uses it for exact,
   spell-id-based buff detection and clean one-call targeted casting. Without it
   the addon still works, falling back to icon-based detection and the classic
   target-juggling cast (you'll get a one-time notice at login).
@@ -113,7 +115,7 @@ skins ship (Blue & Gold default, Ivory, White, Gold, Pearl).
 
 ## Architecture (for tinkering)
 
-RallyPowerCP follows an AutoRota-style layout — a class-independent core, one
+Aegis: RallyPower follows an AutoRota-style layout — a class-independent core, one
 module per class, and the legacy engine quarantined in its own folder:
 
 ```
@@ -161,8 +163,8 @@ player's buffs on the 1.12 client.
 
 ## Compatibility
 
-- **Paladin sync works.** RallyPowerCP keeps PallyPower's sync channel (prefix
-  `PLPWR`) and message format, so a RallyPowerCP Paladin coordinates blessings
+- **Paladin sync works.** Aegis: RallyPower keeps PallyPower's sync channel (prefix
+  `PLPWR`) and message format, so an Aegis: RallyPower Paladin coordinates blessings
   with players running original PallyPower / PallyPowerTW in both directions.
 - **The class bar is local-only** — it sends nothing over the network, so it
   can't conflict with anyone, but it also doesn't coordinate between two casters
@@ -177,7 +179,7 @@ player's buffs on the 1.12 client.
 
 ## Credits
 
-- RallyPowerCP by **Subtilizer (Torchlite)**.
+- Aegis: RallyPower by **Subtilizer (Torchlite)**.
 - Based on **PallyPowerTW** by ivanovlk.
 - Original PallyPower by Hjorim / Sneakyfoot / Rake / Xerron / Azgaardian /
   Aznamir. Spanish localization by Nuevemasnueve.

@@ -253,7 +253,7 @@ local DUTY_TAB = { [4] = "debuff", [5] = "utility" }
 local function Me() return UnitName("player") end
 
 local function Msg(t)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. t)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r " .. t)
 end
 
 local function TitleCase(s)
@@ -356,7 +356,7 @@ local function SafeTip(fn)
     return function()
         local ok, err = pcall(fn)
         if not ok then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
                 .. tostring(err) .. " |cffaaaaaa(tooltip)|r")
         end
     end
@@ -1746,7 +1746,7 @@ RefreshCurrent = function()
     if not frame or not frame:IsShown() then return end
     local ok, err = pcall(RefreshInner)
     if not ok then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
             .. tostring(err) .. " |cffaaaaaa(assignment panel)|r")
     end
 end
@@ -1832,7 +1832,7 @@ local function CreatePanel()
     -- header: eyebrow + title (concept), close button, status pills
     local eyebrow = Fnt(f, 9, GOLD_DIM)
     eyebrow:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -12)
-    eyebrow:SetText("RALLYPOWERCP  \194\183  ASSIGNMENTS")
+    eyebrow:SetText("AEGIS: RALLYPOWER  \194\183  ASSIGNMENTS")
     local h1 = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     h1:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -24)
     h1:SetTextColor(GOLD_BRIGHT[1], GOLD_BRIGHT[2], GOLD_BRIGHT[3])
@@ -1849,7 +1849,7 @@ local function CreatePanel()
         GameTooltip:SetText("Sync", 1, 1, 1)
         GameTooltip:AddLine("Blessings sync over PLPWR (stock-PallyPower compatible).", 0.6, 1, 0.6, 1)
         GameTooltip:AddLine("Totems, duties and raid buffs sync over RPCX to other", 0.6, 1, 0.6, 1)
-        GameTooltip:AddLine("RallyPowerCP users. /rpc sync forces a refresh.", 0.6, 1, 0.6, 1)
+        GameTooltip:AddLine("Aegis: RallyPower users. /rpc sync forces a refresh.", 0.6, 1, 0.6, 1)
         GameTooltip:Show()
     end)
     pills.sync:SetScript("OnLeave", function() GameTooltip:Hide() end)

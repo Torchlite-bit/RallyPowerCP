@@ -1,10 +1,14 @@
-# CLAUDE.md — RallyPowerCP
+# CLAUDE.md — Aegis: RallyPower (folder: RallyPowerCP)
 
 Project brief for Claude Code. Read this fully before editing anything.
 
 ## What this is
 
-**RallyPowerCP** extends the PallyPower paladin buff addon to **all nine
+**Aegis: RallyPower** — display/brand name; the addon folder, TOC filename,
+saved variables, globals/frame names, and the `PLPWR`/`RPCX` wire prefixes all
+STAY `RallyPowerCP`-based (renaming any of them breaks installs, orphans saved
+settings, or breaks sync — brand changes are display-string-only). It extends
+the PallyPower paladin buff addon to **all nine
 classes** — a unified raid buff/utility coordinator for **Turtle WoW 1.18.1**,
 which is a **1.12.1 client (Lua 5.0)** with the **SuperWoW** and **VanillaFixes**
 client mods. It is a fork of PallyPowerTW; the **visual and functional gold

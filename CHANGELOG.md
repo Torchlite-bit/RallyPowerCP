@@ -1,12 +1,14 @@
-# Changelog — RallyPowerCP
+# Changelog — Aegis: RallyPower
 
-All notable changes to RallyPowerCP are recorded here. The format follows
+All notable changes to **Aegis: RallyPower** (formerly RallyPowerCP; the addon
+folder and internals keep that name) are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com) and the project uses semantic
 versioning (MAJOR.MINOR.PATCH).
 
-RallyPowerCP is a fork of **PallyPowerTW** (by ivanovlk), itself based on the
-original **PallyPower** team. It targets Turtle WoW 1.18.1 on the 1.12 client.
-Author: **Subtilizer (Torchlite)**.
+Aegis: RallyPower is a fork of **PallyPowerTW** (by ivanovlk), itself based on
+the original **PallyPower** team. It targets Turtle WoW 1.18.1 on the 1.12
+client. Author: **Subtilizer (Torchlite)**. (Entries below from 0.14.0 and
+earlier predate the rebrand and say "RallyPowerCP" — same addon.)
 
 ---
 
@@ -23,6 +25,20 @@ Author: **Subtilizer (Torchlite)**.
 
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
+
+### Changed (rebrand: RallyPowerCP → Aegis: RallyPower)
+- The addon now presents as **Aegis: RallyPower** everywhere the player sees a
+  name: addon-list title, chat prefix (now `Aegis:` / `[Aegis]`), error
+  prefixes, options frame title, assignment-panel header, key-binding header,
+  credits, and the new-version notice in all three locales. `/aegis` is a new
+  alias for `/rpc` (all subcommands work on either).
+- **Deliberately unchanged** (compatibility, not oversight): the addon folder
+  and `RallyPowerCP.toc` (a `:` is illegal in folder names, and renaming the
+  TOC would orphan everyone's SavedVariables), every saved-variable name
+  (`RallyPowerCP_Settings`, `RallyPowerCP_Assign`, `PallyPower_*`, …), the
+  code namespace and frame names, the `PLPWR` channel (locked byte-compat),
+  and the `RPCX` sync prefix (existing clients keep syncing). Internal design
+  docs keep the old name where they describe those identifiers.
 
 ### Added (Warrior Sunder Armor button)
 - The Warrior strip gains a **Sunder Armor** button beside Battle Shout: it

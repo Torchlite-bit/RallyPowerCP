@@ -2,7 +2,7 @@
 
 if ( GetLocale() == "deDE" ) then
 
-    BINDING_HEADER_PALLYPOWER_HEADER = "Pally Power"
+    BINDING_HEADER_PALLYPOWER_HEADER = "Aegis: RallyPower"
     BINDING_NAME_TOGGLE = "Buff-Leiste umschalten"
     BINDING_NAME_REPORT = "Zuweisungen melden"
     BINDING_NAME_AUTOKEY1 = "Auto Normaler Segen Schlüssel"
@@ -142,7 +142,7 @@ if ( GetLocale() == "deDE" ) then
     PALLYPOWER_MESSAGE_BB_CENTERED = "PallyPowerBuffBar zentriert auf dem Bildschirm."
     PALLYPOWER_MESSAGE_BB_NOTFOUND = "Frame PallyPowerBuffBar nicht gefunden."
   
-    PALLYPOWER_MESSAGE_NEWVERSION = "Neue Version von RallyPowerCP verfügbar"
+    PALLYPOWER_MESSAGE_NEWVERSION = "Neue Version von Aegis: RallyPower verfügbar"
 
     PALLYPOWER_FREEASSIGN = "Freie Zuweisung"
     PALLYPOWER_FREEASSIGN_DESC = "Erlaube anderen, deine Segnungen zu ändern, ohne Gruppenanführer / Schlachtzugsassistent zu sein."

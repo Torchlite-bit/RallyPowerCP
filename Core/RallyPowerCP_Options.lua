@@ -339,7 +339,7 @@ local function ResetFramePositions()
         end
     end
     RallyPowerCP_ResetBarPosition()
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Frame positions reset.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Frame positions reset.")
 end
 
 --------------------------------------------------------------------------
@@ -458,7 +458,7 @@ local function SettingsTabEntries()
         ShowMinimapButtonEntry(),
         { type = "check", key = "locked", label = "Lock frame positions", default = false },
         { type = "button", label = "Reset Frames", func = ResetFramePositions,
-          tip = "Move every RallyPowerCP frame back to its default position." },
+          tip = "Move every Aegis: RallyPower frame back to its default position." },
     }
     return entries
 end
@@ -566,7 +566,7 @@ local RAID_INFO = {
       end,
       set = function(v)
           if RallyPowerCP.Assign and not RallyPowerCP.Assign.SetFreeAssign(v) then
-              DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Only the raid "
+              DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Only the raid "
                   .. "leader / assist can change Free Assignment.")
           end
       end },
@@ -751,7 +751,7 @@ local function CreateOptionsFrame()
 
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", f, "TOP", 0, -10)
-    title:SetText("|cffffd100RallyPowerCP|r Options")
+    title:SetText("|cffffd100Aegis: RallyPower|r Options")
 
     CreateFrame("Button", nil, f, "UIPanelCloseButton"):SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
 

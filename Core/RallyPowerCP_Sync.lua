@@ -222,7 +222,7 @@ local function RawSend(msg)
     -- real ones, stay off the wire so a tester can't pollute a live raid)
     if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return end
     if string.len(msg) > MAX_LEN then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP:|r assignment too large to "
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis:|r assignment too large to "
             .. "sync in one message (" .. string.len(msg) .. " chars) - some of it may not "
             .. "reach others until chunking lands.")
     end
@@ -370,7 +370,7 @@ f:SetScript("OnEvent", function()
         if arg1 == PREFIX and (arg3 == "RAID" or arg3 == "PARTY") then
             local ok, err = pcall(Receive, arg4, arg2)
             if not ok then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+                DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
                     .. tostring(err) .. " |cffaaaaaa(sync receive)|r")
             end
         end
@@ -387,7 +387,7 @@ f:SetScript("OnUpdate", function()
     flushAccum = 0
     local ok, err = pcall(Flush)
     if not ok then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
             .. tostring(err) .. " |cffaaaaaa(sync flush)|r")
     end
 end)
@@ -396,5 +396,5 @@ end)
 function RallyPowerCP_SyncNow()
     lastReq = -100
     RequestSync()
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r assignment sync requested.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r assignment sync requested.")
 end

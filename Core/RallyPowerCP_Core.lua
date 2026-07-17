@@ -484,7 +484,7 @@ end
 
 -- Announce a cast in green, exactly like the Paladin module. Reuses
 -- PallyPower_ShowFeedback so it honours the user's chat-vs-UIErrors feedback
--- setting and the [RallyPowerCP] prefix; falls back to green chat text.
+-- setting and the [Aegis] prefix; falls back to green chat text.
 local function AnnounceBuff(spell, unit, isGroup)
     local name = UnitName(unit) or "?"
     local msg
@@ -497,7 +497,7 @@ local function AnnounceBuff(spell, unit, isGroup)
     if PallyPower_ShowFeedback then
         PallyPower_ShowFeedback(msg, 0, 1, 0)
     else
-        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[RallyPowerCP] " .. msg .. "|r")
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[Aegis] " .. msg .. "|r")
     end
 end
 
@@ -688,7 +688,7 @@ local function UtilityOnClick()
     local u = ACTIVE_UTILITY and ACTIVE_UTILITY[this.utilIndex]
     if not u then return end
     if not KNOWN[u.name] then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r You haven't learned " .. u.name .. ".")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r You haven't learned " .. u.name .. ".")
         return
     end
     -- an assigned @TANK/@HEALER (or player) target wins over the default mode
@@ -853,12 +853,12 @@ local function ClassButtonOnClick(btn, mb)
 
     if mb == "RightButton" then
         if inCombat then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r auto-buff is disabled in combat.")
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r auto-buff is disabled in combat.")
             return
         end
         local unit = FindClassSmartTarget(ct, b)
         if not unit then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. ct .. ": covered (4+ min left).")
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r " .. ct .. ": covered (4+ min left).")
             return
         end
         if b.name and KNOWN[b.name] then CastBuffOn(b.name, unit, b, b.dur, false); StartThrottle(btn)
@@ -870,7 +870,7 @@ local function ClassButtonOnClick(btn, mb)
     -- left-click: group version, covering this class's subgroup
     local unit = FindClassNeedy(ct, b, true)
     if not unit then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. ct .. ": no members in range.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r " .. ct .. ": no members in range.")
         return
     end
     if b.group and KNOWN[b.group] then CastBuffOn(b.group, unit, b, b.gdur, true); StartThrottle(btn)
@@ -932,13 +932,13 @@ local function PopoutPlayerOnClick()
 
     -- left-click: group version covering this player's subgroup
     if inCombat then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r group buffs are disabled in combat (right-click for a single buff).")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r group buffs are disabled in combat (right-click for a single buff).")
         return
     end
     -- Smart buffs (default on): don't waste a group cast on someone already
     -- buffed. Turn the option off to allow re-casting on covered players.
     if RallyPowerCP_Settings.smartBuffs ~= false and UnitHasBuff(unit, b) then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r " .. (UnitName(unit) or "?") .. " already has " .. (b.name or b.group) .. ".")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r " .. (UnitName(unit) or "?") .. " already has " .. (b.name or b.group) .. ".")
         return
     end
     if b.group and KNOWN[b.group] then
@@ -1301,7 +1301,7 @@ function UpdateDisplays()
                             PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
                         end
                         local bb = ACTIVE_BUFFS[i]
-                        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r "
+                        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r "
                             .. (bb.name or bb.group) .. " is about to expire!")
                     end
                 else
@@ -1431,7 +1431,7 @@ local function Activate()
         ScanRoster()
     end)
     if not ok then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r " .. tostring(err)
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r " .. tostring(err)
             .. " |cffaaaaaa(please report this)|r")
     end
 end
@@ -1457,7 +1457,7 @@ f:SetScript("OnEvent", function()
         RallyPowerCP_ApplyMinimapSkin()   -- restore the saved icon skin
         if event == "PLAYER_LOGIN" and not HAS_SUPERWOW and not RallyPowerCP_Settings._swowNagged then
             RallyPowerCP_Settings._swowNagged = true
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r SuperWoW not detected - running in 1.12 compatibility mode (icon-based buff detection). SuperWoW is recommended on Turtle for exact tracking.")
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r SuperWoW not detected - running in 1.12 compatibility mode (icon-based buff detection). SuperWoW is recommended on Turtle for exact tracking.")
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
         inCombat = true
@@ -1513,7 +1513,7 @@ function RallyPowerCP_ToggleBar()
         RallyPowerCP.active:Toggle()
         return true
     end
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r No tracked buffs for your class yet.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r No tracked buffs for your class yet.")
     return true
 end
 
@@ -1532,9 +1532,9 @@ function RallyPowerCP_SetTestMode(on)
     if on == (RallyPowerCP_Settings.testMode and true or false) then return end
     RallyPowerCP_Settings.testMode = on
     if on then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r |cffff8800TEST MODE ON|r - all options are shown (unlearned ones marked), and clicks SIMULATE casts: timers and colours run, but nothing is actually cast. /rpc test again to turn off.")
     else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Test mode off - back to live casting and your real spellbook.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Test mode off - back to live casting and your real spellbook.")
         -- Leaving test mode drops the preview raid's totem/duty rows from the
         -- assignment store (your own block survives PruneToRoster) and the
         -- preview paladins' blessing table.
@@ -1658,11 +1658,12 @@ function RallyPowerCP_MinimapSkinCommand(arg)
         RallyPowerCP_ApplyMinimapSkin(RallyPowerCP_MinimapSkins[idx])
     end
     local cur = RallyPowerCP_Settings.minimapSkin
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Minimap icon: |cffffd700"
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Minimap icon: |cffffd700"
         .. (SKIN_LABEL[cur] or cur) .. "|r  (/rpc icon to cycle, or shift-click the icon)")
 end
 
 SLASH_RALLYPOWERCP1 = "/rpc"
+SLASH_RALLYPOWERCP2 = "/aegis"      -- rebrand alias; /rpc stays the short form
 SlashCmdList["RALLYPOWERCP"] = function(msg)
     msg = string.lower(msg or "")
 
@@ -1712,12 +1713,12 @@ SlashCmdList["RALLYPOWERCP"] = function(msg)
     end
 
     if PLAYER_CLASS == "PALADIN" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc assign opens the assignment panel; /rpc sync re-syncs assignments; /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc assign opens the assignment panel; /rpc sync re-syncs assignments; /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
         return
     end
     if msg == "reset" then
         RallyPowerCP_ResetBarPosition()
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r Bar position reset.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Bar position reset.")
         return
     end
     RallyPowerCP_ToggleBar()
