@@ -1,5 +1,5 @@
 --=============================================================================
--- RallyPowerCP_Assign.lua  -  the shared assignment data model
+-- Aegis_Assign.lua  -  the shared assignment data model
 -- (docs\DESIGN_ASSIGNMENTS.md - step 1 of the Assignment & Sync milestone)
 --
 -- One caster-major store covering the totem and duty domains, with the
@@ -10,7 +10,7 @@
 -- own row ("effective selection" = my assignment first, my local preference
 -- second).
 --
---   RallyPowerCP_Assign = {                 -- SavedVariablePerCharacter
+--   AegisRP_Assign = {                 -- SavedVariablePerCharacter
 --     v = 1,
 --     casters = {
 --       ["Stormtide"] = {
@@ -32,19 +32,19 @@
 -- for the future RPCX protocol: append-only, never renumbered, never reused.
 --
 -- Runtime status ("actually up", vs "assigned") is the separate, NEVER-saved
--- mirror RallyPowerCP.AssignStatus with the same keying; the strip modules
+-- mirror AegisRP.AssignStatus with the same keying; the strip modules
 -- write their own cast-derived timers through it today, and sync (step 2)
 -- fills other casters' entries from broadcast cast times.
 --=============================================================================
 
-RallyPowerCP_Assign = RallyPowerCP_Assign or {}
-if not RallyPowerCP_Assign.v then RallyPowerCP_Assign.v = 1 end
-RallyPowerCP_Assign.casters = RallyPowerCP_Assign.casters or {}
+AegisRP_Assign = AegisRP_Assign or {}
+if not AegisRP_Assign.v then AegisRP_Assign.v = 1 end
+AegisRP_Assign.casters = AegisRP_Assign.casters or {}
 
-RallyPowerCP.AssignStatus = {}   -- [caster][domain][slot] = { expires=, ... }
+AegisRP.AssignStatus = {}   -- [caster][domain][slot] = { expires=, ... }
 
 local A = {}
-RallyPowerCP.Assign = A
+AegisRP.Assign = A
 
 --------------------------------------------------------------------------
 -- catalogs (registered by the class modules at load; pure static data)
@@ -78,7 +78,7 @@ local function Notify(domain, caster)
     for _, fn in ipairs(listeners) do
         local ok, err = pcall(fn, domain, caster)
         if not ok then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
                 .. tostring(err) .. " |cffaaaaaa(assignment listener)|r")
         end
     end
@@ -114,10 +114,10 @@ local function ClassOf(name)
 end
 
 local function Block(name, create)
-    local c = RallyPowerCP_Assign.casters[name]
+    local c = AegisRP_Assign.casters[name]
     if not c and create then
         c = { seq = 0 }
-        RallyPowerCP_Assign.casters[name] = c
+        AegisRP_Assign.casters[name] = c
     end
     return c
 end
@@ -154,11 +154,11 @@ end
 -- Best-effort English class token for a caster (block cache -> roster ->
 -- preview raid). nil when we genuinely can't tell (offline/out-of-range).
 local function ClassKnown(name)
-    local c = RallyPowerCP_Assign.casters[name]
+    local c = AegisRP_Assign.casters[name]
     if c and c.class then return c.class end
     local cls = ClassOf(name)
     if cls then return cls end
-    if RallyPowerCP.PreviewNames then return RallyPowerCP.PreviewNames[name] end
+    if AegisRP.PreviewNames then return AegisRP.PreviewNames[name] end
     return nil
 end
 
@@ -166,20 +166,20 @@ end
 -- When on, any member may edit any row - so the leader can let people spread
 -- the assignments out themselves. Mirrors PallyPower's free-assign intent.
 function A.GetFreeAssign()
-    return RallyPowerCP_Assign.freeAssign and true or false
+    return AegisRP_Assign.freeAssign and true or false
 end
 
 -- Only a leader may flip it locally; the sync layer relays a remote leader's
 -- flip through A.ApplyFreeAssign (no gate - the sender was already checked).
 function A.SetFreeAssign(on)
     if not A.IAmLead() then return false end
-    RallyPowerCP_Assign.freeAssign = on and true or false
+    AegisRP_Assign.freeAssign = on and true or false
     Notify("free", nil)
     return true
 end
 
 function A.ApplyFreeAssign(on)
-    RallyPowerCP_Assign.freeAssign = on and true or false
+    AegisRP_Assign.freeAssign = on and true or false
     Notify("free", nil)
 end
 
@@ -261,7 +261,7 @@ end
 --------------------------------------------------------------------------
 -- class-buff domain (blessing-shaped): caster x legacy class id 0-9 ->
 -- buff spell name. The catalog is the caster class's own M.buffs list
--- (RallyPowerCP.classes[token].buffs); the class-buff strips read their
+-- (AegisRP.classes[token].buffs); the class-buff strips read their
 -- own row through this, exactly like blessings drive the paladin bar.
 --------------------------------------------------------------------------
 
@@ -298,7 +298,7 @@ end
 -- duty-major view: who holds a duty -> array of { caster =, target = }
 function A.GetDutyCasters(dutyKey)
     local out = {}
-    for name, c in pairs(RallyPowerCP_Assign.casters) do
+    for name, c in pairs(AegisRP_Assign.casters) do
         local v = c.duty and c.duty[dutyKey]
         if v then table.insert(out, { caster = name, target = v }) end
     end
@@ -321,7 +321,7 @@ end
 -- assignment wins, otherwise the shaman covers their own subgroup.
 function A.GetTotemCoverage()
     local cov = {}
-    for name, c in pairs(RallyPowerCP_Assign.casters) do
+    for name, c in pairs(AegisRP_Assign.casters) do
         if c.totem then
             local party = c.totem.party or SubgroupOf(name)
             for i = 1, table.getn(A.elements) do
@@ -360,22 +360,22 @@ function A.PruneToRoster()
     end
     -- while test mode is on, the preview raid's rows survive a roster change
     -- so the panel stays usable in a party (they never touch the wire either)
-    local testing = RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode()
-    local preview = RallyPowerCP.PreviewNames
+    local testing = AegisRP.IsTestMode and AegisRP.IsTestMode()
+    local preview = AegisRP.PreviewNames
     local kill = {}
-    for name in pairs(RallyPowerCP_Assign.casters) do
+    for name in pairs(AegisRP_Assign.casters) do
         if not present[name] and not (testing and preview and preview[name]) then
             table.insert(kill, name)
         end
     end
     for _, name in ipairs(kill) do
-        RallyPowerCP_Assign.casters[name] = nil
-        RallyPowerCP.AssignStatus[name] = nil
+        AegisRP_Assign.casters[name] = nil
+        AegisRP.AssignStatus[name] = nil
     end
     -- heal duties held by a caster of the wrong class (stale data from before
     -- class-matching was enforced), where the class is known
     local healed = false
-    for name, c in pairs(RallyPowerCP_Assign.casters) do
+    for name, c in pairs(AegisRP_Assign.casters) do
         if c.duty then
             local cls = ClassKnown(name)
             if cls then
@@ -451,7 +451,7 @@ local previewRoles = {}          -- [name] = "TANK" | "HEALER"
 local previewTankBless = {}      -- [name][classID] = bid
 
 local function IsPreview(name)
-    return RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[name]
+    return AegisRP.PreviewNames and AegisRP.PreviewNames[name]
 end
 
 function A.GetRole(name)
@@ -470,7 +470,7 @@ function A.SetRole(name, role)
     -- their class blessing
     if role ~= "TANK" and A.GetRole(name) == "TANK" then
         local tok = ClassKnown(name)
-        local cid = tok and RallyPowerCP.Token2ClassID and RallyPowerCP.Token2ClassID[tok]
+        local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
         if cid then A.SetTankBlessing(name, cid, -1) end
     end
     if IsPreview(name) then
@@ -560,14 +560,14 @@ end
 function A.ApplyRemoteBlock(caster, block)
     if not caster or not block then return end
     block.class = block.class or ClassOf(caster)
-    RallyPowerCP_Assign.casters[caster] = block
+    AegisRP_Assign.casters[caster] = block
     Notify("sync", caster)
 end
 
 function A.RemoveRemoteBlock(caster)
     if not caster then return end
-    RallyPowerCP_Assign.casters[caster] = nil
-    RallyPowerCP.AssignStatus[caster] = nil
+    AegisRP_Assign.casters[caster] = nil
+    AegisRP.AssignStatus[caster] = nil
     Notify("sync", caster)
 end
 
@@ -577,7 +577,7 @@ end
 --------------------------------------------------------------------------
 
 function A.SetStatus(caster, domain, slot, info)
-    local S = RallyPowerCP.AssignStatus
+    local S = AegisRP.AssignStatus
     if info == nil then
         local c = S[caster]
         if c and c[domain] then c[domain][slot] = nil end
@@ -589,7 +589,7 @@ function A.SetStatus(caster, domain, slot, info)
 end
 
 function A.GetStatus(caster, domain, slot)
-    local c = RallyPowerCP.AssignStatus[caster]
+    local c = AegisRP.AssignStatus[caster]
     local d = c and c[domain]
     return d and d[slot]
 end

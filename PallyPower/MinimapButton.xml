@@ -23,8 +23,8 @@
 						</Offset>
 					</Anchor>
 				</Anchors>
-				<NormalTexture file="Interface\AddOns\RallyPowerCP\Icons\Minimap"/>
-				<PushedTexture file="Interface\AddOns\RallyPowerCP\Icons\Minimap_Down"/>
+				<NormalTexture file="Interface\AddOns\Aegis_RallyPower\Icons\Minimap"/>
+				<PushedTexture file="Interface\AddOns\Aegis_RallyPower\Icons\Minimap_Down"/>
 				<HighlightTexture alphaMode="ADD" file="Interface\Minimap\UI-Minimap-ZoomButton-Highlight"/>
 				<Scripts>
 					<OnLoad>

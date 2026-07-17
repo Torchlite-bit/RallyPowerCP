@@ -1,10 +1,10 @@
-PallyPower_Version = GetAddOnMetadata("RallyPowerCP", "Version")
+PallyPower_Version = GetAddOnMetadata("Aegis_RallyPower", "Version")
 SLASH_PALLYPOWER1 = "/pp"
 SLASH_PALLYPOWER2 = "/pallypower"
 SLASH_PALLYPOWER3 = "/rp"
 SLASH_PALLYPOWER4 = "/rallypower"
 
-BINDING_HEADER_PALLYPOWER_HEADER = "RallyPowerCP"
+BINDING_HEADER_PALLYPOWER_HEADER = "Aegis: RallyPower"
 BINDING_NAME_TOGGLE = "Toggle Buff Bar"
 BINDING_NAME_REPORT = "Report Assignments"
 BINDING_NAME_AUTOKEY1 = "Auto Normal Blessing Key"
@@ -69,7 +69,7 @@ PallyPower_BuffBarTitle = "Rally Buffs (%d)"
 
 --- By Lines... Keep People the same, feel free to add yourself in the _Credits3 line if your localizing
 --- And feel free to add a friend or two to special thanks
-PallyPower_Credits1 = "RallyPowerCP - by Subtilizer (Torchlite)"
+PallyPower_Credits1 = "Aegis: RallyPower - by Subtilizer (Torchlite)"
 PallyPower_Credits2 = "Version "..PallyPower_Version
 PallyPower_Credits3 = "All-class buff management for Turtle WoW 1.18.1 (1.12 client)"
 PallyPower_Credits4 = "Original PallyPower by Hjorim / Sneakyfoot / Rake / Xerron / Azgaardian / Aznamir"
@@ -103,7 +103,7 @@ PALLYPOWER_REFRESH = "Refresh";
 PALLYPOWER_RESETPOSITION = "Reset Position";
 PALLYPOWER_PRESETS = "Presets";
 PALLYPOWER_OPTIONS = "Options";
-PALLYPOWER_OPTIONS_TITLE = "RallyPowerCP Options";
+PALLYPOWER_OPTIONS_TITLE = "Aegis: RallyPower Options";
 PALLYPOWER_OPTIONS_SCAN = "UI Refresh Rate (seconds):";
 PALLYPOWER_OPTIONS_SCAN2 = "";
 PALLYPOWER_OPTIONS_FEEDBACK_CHAT = "Show feedback in chat";
@@ -144,12 +144,12 @@ PALLYPOWER_TEXT_WARNING_SAVE = "You are about to save changes to set '|cffffffff
 PALLYPOWER_MESSAGE_BB_CENTERED = "PallyPowerBuffBar centered on the screen."
 PALLYPOWER_MESSAGE_BB_NOTFOUND = "Frame PallyPowerBuffBar not found."
 
-PALLYPOWER_MESSAGE_NEWVERSION = "New version of RallyPowerCP available"
+PALLYPOWER_MESSAGE_NEWVERSION = "New version of Aegis: RallyPower available"
 
 PALLYPOWER_FREEASSIGN = "Free Assignment"
 PALLYPOWER_FREEASSIGN_DESC = "Allow others to change your blessings without being Party Leader / Raid Assistant."
 
-PALLYPOWER_MSG_PREFIX = "[RallyPowerCP] "
+PALLYPOWER_MSG_PREFIX = "[Aegis] "
 PALLYPOWER_MSG_NOTPALLYORRAID = "Not in raid or not a paladin"
 PALLYPOWER_MSG_BARHIDDEN = "Bar hidden"
 PALLYPOWER_MSG_BARVISIBLE = "Bar visible"

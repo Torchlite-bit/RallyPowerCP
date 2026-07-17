@@ -1,12 +1,14 @@
-# Changelog — RallyPowerCP
+# Changelog — Aegis: RallyPower
 
-All notable changes to RallyPowerCP are recorded here. The format follows
+All notable changes to **Aegis: RallyPower** (formerly RallyPowerCP; the addon
+folder and internals keep that name) are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com) and the project uses semantic
 versioning (MAJOR.MINOR.PATCH).
 
-RallyPowerCP is a fork of **PallyPowerTW** (by ivanovlk), itself based on the
-original **PallyPower** team. It targets Turtle WoW 1.18.1 on the 1.12 client.
-Author: **Subtilizer (Torchlite)**.
+Aegis: RallyPower is a fork of **PallyPowerTW** (by ivanovlk), itself based on
+the original **PallyPower** team. It targets Turtle WoW 1.18.1 on the 1.12
+client. Author: **Subtilizer (Torchlite)**. (Entries below from 0.14.0 and
+earlier predate the rebrand and say "RallyPowerCP" — same addon.)
 
 ---
 
@@ -23,6 +25,25 @@ Author: **Subtilizer (Torchlite)**.
 
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
+
+### Changed (rebrand: RallyPowerCP → Aegis: RallyPower, the FULL rename)
+Joins the Aegis addon series (like Aegis_SBR). Pre-release, so the rename goes
+all the way down — **delete any old `RallyPowerCP` folder and install fresh as
+`Aegis_RallyPower`; old SavedVariables are not carried over.**
+- **Display**: the addon presents as **Aegis: RallyPower** everywhere — addon
+  list, chat prefix (`Aegis:` / `[Aegis]`), errors, options title, panel
+  header, key-binding header, credits, new-version notice (all locales).
+  `/aegis` joins `/rpc` as a slash alias.
+- **Folder + TOC**: the addon installs as `Aegis_RallyPower/` with
+  `Aegis_RallyPower.toc`; all bundled art/sound paths and the engine's
+  `icons_prefix` / `ADDON_LOADED` check follow the new folder.
+- **Files**: `Core/RallyPowerCP_*.lua` → `Core/Aegis_*.lua`.
+- **Code + saved variables**: the `RallyPowerCP` namespace and every
+  `RallyPowerCP_*` global/frame/saved-variable renamed to `AegisRP` /
+  `AegisRP_*` (`AegisRP_Settings`, `AegisRP_Assign`, `AegisRP_Roles`, …).
+- **Unchanged**: the embedded PallyPower engine keeps its own names
+  (`PallyPower_*`, `PP_*`) and the `PLPWR` channel — locked byte-compat with
+  stock PallyPower — and the `RPCX` sync prefix stays (it's brand-neutral).
 
 ### Added (Warrior Sunder Armor button)
 - The Warrior strip gains a **Sunder Armor** button beside Battle Shout: it

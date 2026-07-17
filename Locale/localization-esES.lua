@@ -2,7 +2,7 @@
 
 if ( GetLocale() == "esES" ) then
 
-    BINDING_HEADER_PALLYPOWER_HEADER = "Pally Power"
+    BINDING_HEADER_PALLYPOWER_HEADER = "Aegis: RallyPower"
     BINDING_NAME_TOGGLE = "Mostrar/Ocultar Barra de Buffs"
     BINDING_NAME_REPORT = "Reportar Asignaciones"
     BINDING_NAME_AUTOKEY1 = "Tecla de Bendición Normal Automática"
@@ -141,7 +141,7 @@ if ( GetLocale() == "esES" ) then
     PALLYPOWER_MESSAGE_BB_CENTERED = "PallyPowerBuffBar centrada en la pantalla."
     PALLYPOWER_MESSAGE_BB_NOTFOUND = "No se encuentra el cuadro PallyPowerBuffBar."
 
-    PALLYPOWER_MESSAGE_NEWVERSION = "Nueva versión de RallyPowerCP disponible"
+    PALLYPOWER_MESSAGE_NEWVERSION = "Nueva versión de Aegis: RallyPower disponible"
 
     PALLYPOWER_FREEASSIGN = "Asignación libre"
     PALLYPOWER_FREEASSIGN_DESC = "Permite a otros cambiar tus bendiciones sin ser líder de party/raid"

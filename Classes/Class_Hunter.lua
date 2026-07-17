@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Hunter.lua  -  Hunter sting module for RallyPowerCP
+-- Class_Hunter.lua  -  Hunter sting module for AegisRP
 --
 -- One cycle button: which sting you maintain on the target.
 --   Mouse-wheel = pick the sting (only ones you know)
@@ -12,7 +12,7 @@
 -- and matching becomes exact. Timers are cast-derived per target.
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("HUNTER")
+local M = AegisRP:NewClass("HUNTER")
 
 -- duty = the sting's key in the shared assignment model (each sting is its
 -- own duty key; the wheel holds exactly one at a time).
@@ -27,11 +27,11 @@ local applied = {}   -- [stingName] = { target = name, deadline = t }
 
 local function Known()
     local out = {}
-    local test = RallyPowerCP.IsTestMode()
+    local test = AegisRP.IsTestMode()
     for _, s in ipairs(STINGS) do
-        local sp = RallyPowerCP.FindSpell(s.name)
+        local sp = AegisRP.FindSpell(s.name)
         if sp then
-            s._tex = RallyPowerCP.TexBase(sp.texture)
+            s._tex = AegisRP.TexBase(sp.texture)
             s._icon = sp.texture
             s._sim = nil
             table.insert(out, s)
@@ -51,11 +51,11 @@ local function Selected()
     if table.getn(list) == 0 then return nil, list end
     local want
     for _, s in ipairs(STINGS) do
-        if not want and RallyPowerCP.Assign.GetDuty(UnitName("player"), s.duty) then
+        if not want and AegisRP.Assign.GetDuty(UnitName("player"), s.duty) then
             want = s.name
         end
     end
-    if not want then want = RallyPowerCP_Settings.hunterSting end
+    if not want then want = AegisRP_Settings.hunterSting end
     for _, s in ipairs(list) do
         if s.name == want then return s, list end
     end
@@ -66,20 +66,20 @@ end
 -- model, clearing any other sting duty I held (one sting at a time). The
 -- wheel and the options dropdown both come through here.
 local function SelectSting(name)
-    RallyPowerCP_Settings.hunterSting = name
+    AegisRP_Settings.hunterSting = name
     local me = UnitName("player")
     for _, s in ipairs(STINGS) do
         if s.name == name then
-            RallyPowerCP.Assign.SetDuty(me, s.duty, true)
-        elseif RallyPowerCP.Assign.GetDuty(me, s.duty) then
-            RallyPowerCP.Assign.ClearDuty(me, s.duty)
+            AegisRP.Assign.SetDuty(me, s.duty, true)
+        elseif AegisRP.Assign.GetDuty(me, s.duty) then
+            AegisRP.Assign.ClearDuty(me, s.duty)
         end
     end
 end
 
 local function BuildUI()
     if strip then return end
-    strip = RallyPowerCP.NewStrip("hunter", "Stings")
+    strip = AegisRP.NewStrip("hunter", "Stings")
     strip:AddButton{
         key = "sting",
         refresh = function(b)
@@ -95,10 +95,10 @@ local function BuildUI()
             if s._sim then nm = nm .. " |cffff8800*|r" end
             b:SetSub(nm)
             -- Test mode: state runs purely off the simulated timer.
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 local a = applied[s.name]
                 if a and a.deadline > GetTime() then
-                    b:SetState("good"); b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
                 else
                     b:SetState("need"); b:SetTimer("")
                 end
@@ -108,11 +108,11 @@ local function BuildUI()
                 b:SetTimer(""); b:SetState("off")
                 return
             end
-            if RallyPowerCP.UnitHasDebuffEntry("target", s) then
+            if AegisRP.UnitHasDebuffEntry("target", s) then
                 b:SetState("good")
                 local a = applied[s.name]
                 if a and a.target == UnitName("target") and a.deadline > GetTime() then
-                    b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                    b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
                 else
                     b:SetTimer("")
                 end
@@ -123,13 +123,13 @@ local function BuildUI()
         onClick = function(b, btn)
             local s = Selected()
             if not s then return end
-            if RallyPowerCP.IsTestMode() then
+            if AegisRP.IsTestMode() then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would apply " .. s.name)
                 applied[s.name] = { target = "(test)", deadline = GetTime() + s.dur }
                 return
             end
             if not UnitExists("target") or UnitIsFriend("player", "target") then return end
-            if RallyPowerCP.CastAtTarget(s.name) then
+            if AegisRP.CastAtTarget(s.name) then
                 applied[s.name] = { target = UnitName("target"), deadline = GetTime() + s.dur }
             end
         end,
@@ -172,7 +172,7 @@ end
 M.optionsInfo = {
     { type = "header", label = "Sting duty" },
     { type = "check", key = "btn_sting", label = "Sting button", default = true,
-      onChange = function() RallyPowerCP.ReflowStrips() end },
+      onChange = function() AegisRP.ReflowStrips() end },
     { type = "select", key = "hunterSting", label = "Sting",
       values = function()
           local out = {}
@@ -192,8 +192,8 @@ M.optionsInfo = {
 }
 
 -- Assignment model: Hunter sting duties (each sting is its own key). Wids stable.
-if RallyPowerCP.Assign then
-    local D = RallyPowerCP.Assign.RegisterDuty
+if AegisRP.Assign then
+    local D = AegisRP.Assign.RegisterDuty
     -- Serpent Sting is a personal DPS DoT, not a raid-maintained utility
     -- debuff; hidden from the Debuffs tab (the sting wheel still uses it)
     D{ key="STING_SERPENT", wid=14, class="HUNTER", tab="debuff", spell="Serpent Sting", target="none", multi=false, dur=15, hidden=true }

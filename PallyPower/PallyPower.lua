@@ -1,6 +1,6 @@
 local initialized = false
 
--- RallyPowerCP: Turtle WoW durations are forced on regardless of realm.
+-- AegisRP: Turtle WoW durations are forced on regardless of realm.
 -- Turtle WoW uses 10-minute regular blessings and 30-minute Greater Blessings.
 -- (Original realm-autodetect kept below for reference; FORCE_TURTLE_DURATIONS
 --  overrides it so the correct 10/30-min timers apply on every realm.)
@@ -341,7 +341,7 @@ function PallyPower_OnUpdate(tdiff)
         LastCast[i] = k - tdiff
         if LastCast[i] <= 0 then
             if PP_PerUser.playsoundwhen0 == true then
-                PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                PlaySoundFile("Interface\\Addons\\Aegis_RallyPower\\Sounds\\ding.mp3")
             end
             LastCast[i] = nil
         end
@@ -352,7 +352,7 @@ function PallyPower_OnUpdate(tdiff)
         LastCastPlayer[i] = k - tdiff
         if LastCastPlayer[i] <= 0 then
             if PP_PerUser.playsoundwhen0 == true then
-                PlaySoundFile("Interface\\Addons\\RallyPowerCP\\Sounds\\ding.mp3")
+                PlaySoundFile("Interface\\Addons\\Aegis_RallyPower\\Sounds\\ding.mp3")
             end
             LastCastPlayer[i] = nil
         end
@@ -390,9 +390,9 @@ end
 function PallyPower_AdjustIcons()
     local icons_prefix
     if PP_PerUser.usehdicons == true then
-        icons_prefix = "AddOns\\RallyPowerCP\\HD"
+        icons_prefix = "AddOns\\Aegis_RallyPower\\HD"
     else
-        icons_prefix = "AddOns\\RallyPowerCP\\"
+        icons_prefix = "AddOns\\Aegis_RallyPower\\"
     end
 
     AuraIcons[0] = "Interface\\"..icons_prefix.."Icons\\Spell_Holy_DevotionAura"
@@ -578,7 +578,7 @@ function PallyPower_OnEvent(event,arg1)
         uiDirty = true
     end
 
-    if event == "ADDON_LOADED" and arg1 == "RallyPowerCP" then
+    if event == "ADDON_LOADED" and arg1 == "Aegis_RallyPower" then
         PallyPower_AdjustIcons()
         PallyPower_MinimapButton_Init();
         PallyPower_InitConfig();   
@@ -1317,9 +1317,9 @@ function PallyPower_UpdateUI()
 
         local icons_prefix
         if PP_PerUser.usehdicons == true then
-            icons_prefix = "AddOns\\RallyPowerCP\\HD"
+            icons_prefix = "AddOns\\Aegis_RallyPower\\HD"
         else
-            icons_prefix = "AddOns\\RallyPowerCP\\"
+            icons_prefix = "AddOns\\Aegis_RallyPower\\"
         end
         
         local hasRF = false
@@ -1570,9 +1570,9 @@ function PallyPower_ScanSpells()
 
     local icons_prefix
     if PP_PerUser.usehdicons == true then
-        icons_prefix = "AddOns\\RallyPowerCP\\HD"
+        icons_prefix = "AddOns\\Aegis_RallyPower\\HD"
     else
-        icons_prefix = "AddOns\\RallyPowerCP\\"
+        icons_prefix = "AddOns\\Aegis_RallyPower\\"
     end
 
     while true do
@@ -2281,11 +2281,11 @@ function PallyPower_ParseMessage(sender, msg)
         end
         if string.find(msg, "^VERSION") then
             local  _, _, msgVer = string.find(msg, "^VERSION (.*)")
-            -- RallyPowerCP: PallyPower / PallyPowerTW users share this same sync
+            -- AegisRP: PallyPower / PallyPowerTW users share this same sync
             -- prefix and broadcast their own (higher) version numbers (e.g. 1.40),
             -- which would otherwise trigger a misleading "new version of
-            -- RallyPowerCP available" message. Suppressed for this fork. Flip the
-            -- "if false" back to "if" if you set up a real RallyPowerCP version feed.
+            -- AegisRP available" message. Suppressed for this fork. Flip the
+            -- "if false" back to "if" if you set up a real AegisRP version feed.
             if false and msgVer > PallyPower_Version and not(versionBumpDisplayed) then
                 versionBumpDisplayed = true
                 DEFAULT_CHAT_FRAME:AddMessage(PALLYPOWER_MESSAGE_NEWVERSION.." ("..msgVer..")")
@@ -3082,9 +3082,9 @@ end
 function PallyPower_GetBuffTextureID(text)
     local icons_prefix
     if PP_PerUser.usehdicons == true then
-        icons_prefix = "AddOns\\RallyPowerCP\\HD"
+        icons_prefix = "AddOns\\Aegis_RallyPower\\HD"
     else
-        icons_prefix = "AddOns\\RallyPowerCP\\"
+        icons_prefix = "AddOns\\Aegis_RallyPower\\"
     end
 
     for id, name in BuffIcon do
@@ -3142,7 +3142,7 @@ function PallyPowerBuffButton_OnClick(btn, mousebtn)
         SetCVar("autoSelfCast", "0")
     end
 
-    -- RallyPowerCP: removed forced STAND emote (caused "You can't do that while moving!"); casting auto-stands anyway
+    -- AegisRP: removed forced STAND emote (caused "You can't do that while moving!"); casting auto-stands anyway
     -- DoEmote("STAND")
 
     ClearTarget()
@@ -3344,7 +3344,7 @@ function PallyPower_AutoBless(mousebutton)
         SetCVar("autoSelfCast", "0")
     end
 
-    -- RallyPowerCP: removed forced STAND emote (caused "You can't do that while moving!"); casting auto-stands anyway
+    -- AegisRP: removed forced STAND emote (caused "You can't do that while moving!"); casting auto-stands anyway
     -- DoEmote("STAND")
 
     classbtn = lastClassBtn
@@ -3754,9 +3754,9 @@ function PallyPower_CastSeal()
         -- Determine icon prefix (matches other checks in this file)
         local icons_prefix
         if PP_PerUser and PP_PerUser.usehdicons == true then
-            icons_prefix = "AddOns\\RallyPowerCP\\HD"
+            icons_prefix = "AddOns\\Aegis_RallyPower\\HD"
         else
-            icons_prefix = "AddOns\\RallyPowerCP\\"
+            icons_prefix = "AddOns\\Aegis_RallyPower\\"
         end
 
         -- If the player already has the seal buff active, don't re-cast

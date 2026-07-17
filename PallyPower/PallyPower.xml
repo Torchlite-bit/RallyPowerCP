@@ -12,8 +12,8 @@
 				PallyPower_StopScaling(arg1)
 			</OnMouseUp>
 		</Scripts>
-		<NormalTexture file="Interface\AddOns\RallyPowerCP\PallyPower-ResizeGrip" />
-		<HighlightTexture file="Interface\AddOns\RallyPowerCP\PallyPower-ResizeGrip" alphaMode="ADD" />
+		<NormalTexture file="Interface\AddOns\Aegis_RallyPower\PallyPower-ResizeGrip" />
+		<HighlightTexture file="Interface\AddOns\Aegis_RallyPower\PallyPower-ResizeGrip" alphaMode="ADD" />
 	</Button>
 	<Button name="BuffGridButtonTemplate" virtual="true">
 		<Size>
@@ -21,7 +21,7 @@
 		</Size>
 		<Layers>
 			<Layer level="OVERLAY">
-				<Texture name="$parentIcon" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_SealOfWisdom">
+				<Texture name="$parentIcon" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_SealOfWisdom">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -73,7 +73,7 @@
 						</Anchor>
 					</Anchors>
 				</FontString>
-				<Texture name="$parentIcon" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_SealOfWisdom">
+				<Texture name="$parentIcon" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_SealOfWisdom">
 					<Size>
 						<AbsDimension x="12" y="12" />
 					</Size>
@@ -332,7 +332,7 @@
 						</Anchor>
 					</Anchors>
 				</FontString>
-				<Texture name="$parentClassIcon" file="Interface\AddOns\RallyPowerCP\Icons\Paladin">
+				<Texture name="$parentClassIcon" file="Interface\AddOns\Aegis_RallyPower\Icons\Paladin">
 					<Size>
 						<AbsDimension x="26" y="26" />
 					</Size>
@@ -344,7 +344,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentBuffIcon" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_SealOfWisdom">
+				<Texture name="$parentBuffIcon" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_SealOfWisdom">
 					<Size>
 						<AbsDimension x="26" y="26" />
 					</Size>
@@ -394,7 +394,7 @@
 		</Backdrop>
 		<Layers>
 			<Layer level="OVERLAY">
-				<Texture name="$parentBuffIcon" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_SealOfFury">
+				<Texture name="$parentBuffIcon" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_SealOfFury">
 					<Size>
 						<AbsDimension x="26" y="26" />
 					</Size>
@@ -447,7 +447,7 @@
 						</Anchor>
 					</Anchors>
 				</FontString>
-				<Texture name="$parentIcon0" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_SealOfWisdom">
+				<Texture name="$parentIcon0" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_SealOfWisdom">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -459,7 +459,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon1" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_FistOfJustice">
+				<Texture name="$parentIcon1" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_FistOfJustice">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -471,7 +471,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon2" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_SealOfSalvation">
+				<Texture name="$parentIcon2" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_SealOfSalvation">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -483,7 +483,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon3" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_PrayerOfHealing02">
+				<Texture name="$parentIcon3" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_PrayerOfHealing02">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -495,7 +495,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon4" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Magic_MageArmor">
+				<Texture name="$parentIcon4" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Magic_MageArmor">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -507,7 +507,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon5" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Nature_LightningShield">
+				<Texture name="$parentIcon5" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Nature_LightningShield">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -519,7 +519,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon6" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_DevotionAura">
+				<Texture name="$parentIcon6" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_DevotionAura">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -531,7 +531,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon7" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_AuraOfLight">
+				<Texture name="$parentIcon7" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_AuraOfLight">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -543,7 +543,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentIcon8" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_MindSooth">
+				<Texture name="$parentIcon8" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_MindSooth">
 					<Size>
 						<AbsDimension x="16" y="16" />
 					</Size>
@@ -1299,7 +1299,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClassA" file="Interface\AddOns\RallyPowerCP\Icons\Spell_Holy_AuraMastery">
+				<Texture name="$parentClassA" file="Interface\AddOns\Aegis_RallyPower\Icons\Spell_Holy_AuraMastery">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1311,7 +1311,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClassS" file="Interface\AddOns\RallyPowerCP\Icons\Ability_Thunderbolt">
+				<Texture name="$parentClassS" file="Interface\AddOns\Aegis_RallyPower\Icons\Ability_Thunderbolt">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1323,7 +1323,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass0" file="Interface\AddOns\RallyPowerCP\Icons\Warrior">
+				<Texture name="$parentClass0" file="Interface\AddOns\Aegis_RallyPower\Icons\Warrior">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1335,7 +1335,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass1" file="Interface\AddOns\RallyPowerCP\Icons\Rogue">
+				<Texture name="$parentClass1" file="Interface\AddOns\Aegis_RallyPower\Icons\Rogue">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1347,7 +1347,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass2" file="Interface\AddOns\RallyPowerCP\Icons\Priest">
+				<Texture name="$parentClass2" file="Interface\AddOns\Aegis_RallyPower\Icons\Priest">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1359,7 +1359,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass3" file="Interface\AddOns\RallyPowerCP\Icons\Druid">
+				<Texture name="$parentClass3" file="Interface\AddOns\Aegis_RallyPower\Icons\Druid">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1371,7 +1371,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass4" file="Interface\AddOns\RallyPowerCP\Icons\Paladin">
+				<Texture name="$parentClass4" file="Interface\AddOns\Aegis_RallyPower\Icons\Paladin">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1383,7 +1383,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass5" file="Interface\AddOns\RallyPowerCP\Icons\Hunter">
+				<Texture name="$parentClass5" file="Interface\AddOns\Aegis_RallyPower\Icons\Hunter">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1395,7 +1395,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass6" file="Interface\AddOns\RallyPowerCP\Icons\Mage">
+				<Texture name="$parentClass6" file="Interface\AddOns\Aegis_RallyPower\Icons\Mage">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1407,7 +1407,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass7" file="Interface\AddOns\RallyPowerCP\Icons\Warlock">
+				<Texture name="$parentClass7" file="Interface\AddOns\Aegis_RallyPower\Icons\Warlock">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1419,7 +1419,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass8" file="Interface\AddOns\RallyPowerCP\Icons\Shaman">
+				<Texture name="$parentClass8" file="Interface\AddOns\Aegis_RallyPower\Icons\Shaman">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1431,7 +1431,7 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<Texture name="$parentClass9" file="Interface\AddOns\RallyPowerCP\Icons\Pet">
+				<Texture name="$parentClass9" file="Interface\AddOns\Aegis_RallyPower\Icons\Pet">
 					<Size>
 						<AbsDimension x="32" y="32" />
 					</Size>
@@ -1459,7 +1459,7 @@
 				</Anchors>
 				<Layers>
 					<Layer level="OVERLAY">
-						<FontString name="$parentText" inherits="GameFontNormal" text="RallyPowerCP">
+						<FontString name="$parentText" inherits="GameFontNormal" text="AegisRP">
 							<Size>
 								<AbsDimension x="200" y="12" />
 							</Size>

@@ -1,8 +1,8 @@
 --=============================================================================
--- RallyPowerCP_Sync.lua  -  the RPCX sync protocol (Assignment & Sync step 2)
+-- Aegis_Sync.lua  -  the RPCX sync protocol (Assignment & Sync step 2)
 --
 -- Broadcasts the totem / duty / raid-buff-grid assignments the model stores
--- (RallyPowerCP_Assign) to the raid, receives and stores others', and gates
+-- (AegisRP_Assign) to the raid, receives and stores others', and gates
 -- edits by permission. BLESSINGS ARE UNTOUCHED - they keep riding the legacy
 -- PLPWR channel through the engine's own SELF/ASSIGN/AASSIGN/... messages;
 -- RPCX carries only what PallyPower never knew about.
@@ -21,7 +21,7 @@
 -- (table.getn/concat, string.gfind not gmatch, no #/select/%).
 --=============================================================================
 
-local A = RallyPowerCP.Assign
+local A = AegisRP.Assign
 if not A then return end        -- Assign.lua loads first; defensive
 
 local PREFIX      = "RPCX"
@@ -86,7 +86,7 @@ local function TotemWid(element, name)
 end
 
 local function BuffCatalog(token)
-    local m = RallyPowerCP.classes and RallyPowerCP.classes[token]
+    local m = AegisRP.classes and AegisRP.classes[token]
     return (m and m.buffs) or {}
 end
 
@@ -118,7 +118,7 @@ end
 -- which never matches the player's own party leadership). Preview-raid rows
 -- never hit the wire.
 local function MayAssert(caster)
-    if RallyPowerCP.PreviewNames and RallyPowerCP.PreviewNames[caster] then return false end
+    if AegisRP.PreviewNames and AegisRP.PreviewNames[caster] then return false end
     return caster == Me() or A.IAmLead()
 end
 
@@ -220,9 +220,9 @@ end
 local function RawSend(msg)
     -- test mode is a local sandbox: never broadcast (preview edits, and even
     -- real ones, stay off the wire so a tester can't pollute a live raid)
-    if RallyPowerCP.IsTestMode and RallyPowerCP.IsTestMode() then return end
+    if AegisRP.IsTestMode and AegisRP.IsTestMode() then return end
     if string.len(msg) > MAX_LEN then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP:|r assignment too large to "
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis:|r assignment too large to "
             .. "sync in one message (" .. string.len(msg) .. " chars) - some of it may not "
             .. "reach others until chunking lands.")
     end
@@ -260,7 +260,7 @@ end
 -- login, roster change, and as the reply to a REQ
 local function MarkAuthoritativeDirty()
     local iLead = A.IAmLead()
-    for name in pairs(RallyPowerCP_Assign.casters) do
+    for name in pairs(AegisRP_Assign.casters) do
         if name == Me() or iLead then dirty[name] = true end
     end
     dirty[Me()] = true          -- always assert myself, even with an empty block skipped later
@@ -370,7 +370,7 @@ f:SetScript("OnEvent", function()
         if arg1 == PREFIX and (arg3 == "RAID" or arg3 == "PARTY") then
             local ok, err = pcall(Receive, arg4, arg2)
             if not ok then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+                DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
                     .. tostring(err) .. " |cffaaaaaa(sync receive)|r")
             end
         end
@@ -387,14 +387,14 @@ f:SetScript("OnUpdate", function()
     flushAccum = 0
     local ok, err = pcall(Flush)
     if not ok then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555RallyPowerCP error:|r "
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
             .. tostring(err) .. " |cffaaaaaa(sync flush)|r")
     end
 end)
 
 -- Exposed for /rpc sync debugging (force a full re-broadcast + request).
-function RallyPowerCP_SyncNow()
+function AegisRP_SyncNow()
     lastReq = -100
     RequestSync()
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00RallyPowerCP:|r assignment sync requested.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r assignment sync requested.")
 end

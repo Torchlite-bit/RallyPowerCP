@@ -1,5 +1,5 @@
 --=============================================================================
--- Class_Shaman.lua  -  Shaman totem module for RallyPowerCP
+-- Class_Shaman.lua  -  Shaman totem module for AegisRP
 --
 -- Four cycle buttons on the shared strip engine (paladin-template 100x34
 -- buttons): Earth / Fire / Water / Air.
@@ -17,7 +17,7 @@
 -- milestone.
 --=============================================================================
 
-local M = RallyPowerCP:NewClass("SHAMAN")
+local M = AegisRP:NewClass("SHAMAN")
 
 local HAS_SUPERWOW = (SUPERWOW_VERSION ~= nil)
 
@@ -64,9 +64,9 @@ local active = {}   -- [elementKey] = { name, deadline }
 -- Test mode lists EVERY totem; unlearned ones carry _sim = true.
 local function KnownList(el)
     local out = {}
-    local test = RallyPowerCP.IsTestMode()
+    local test = AegisRP.IsTestMode()
     for _, t in ipairs(el.totems) do
-        local sp = RallyPowerCP.FindSpell(t.name)
+        local sp = AegisRP.FindSpell(t.name)
         if sp then
             t._icon = sp.texture
             t._index = sp.index
@@ -88,12 +88,12 @@ end
 local function Selected(el)
     local list = KnownList(el)
     if table.getn(list) == 0 then return nil, list end
-    RallyPowerCP_Settings.shamanSel = RallyPowerCP_Settings.shamanSel or {}
-    local want = RallyPowerCP.Assign.GetTotem(UnitName("player"), el.key)
+    AegisRP_Settings.shamanSel = AegisRP_Settings.shamanSel or {}
+    local want = AegisRP.Assign.GetTotem(UnitName("player"), el.key)
     if want then
         for _, t in ipairs(list) do if t.name == want then return t, list end end
     end
-    want = RallyPowerCP_Settings.shamanSel[el.key]
+    want = AegisRP_Settings.shamanSel[el.key]
     if want then
         for _, t in ipairs(list) do if t.name == want then return t, list end end
     end
@@ -104,16 +104,16 @@ end
 -- the shared model (wheeling = editing my own row, PallyPower free-assign
 -- style). The wheel and the options dropdown both come through here.
 local function SelectTotem(el, name)
-    RallyPowerCP_Settings.shamanSel = RallyPowerCP_Settings.shamanSel or {}
-    RallyPowerCP_Settings.shamanSel[el.key] = name
-    RallyPowerCP.Assign.SetTotem(UnitName("player"), el.key, name)
+    AegisRP_Settings.shamanSel = AegisRP_Settings.shamanSel or {}
+    AegisRP_Settings.shamanSel[el.key] = name
+    AegisRP.Assign.SetTotem(UnitName("player"), el.key, name)
 end
 
 local function DropTotem(el)
     local t = Selected(el)
     if not t then return end
     -- Test mode / unlearned: SIMULATE - start the timer, cast nothing.
-    if RallyPowerCP.IsTestMode() or t._sim then
+    if AegisRP.IsTestMode() or t._sim then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would drop " .. t.name)
         active[el.key] = { name = t.name, deadline = GetTime() + t.dur }
         return
@@ -147,7 +147,7 @@ local function ElementButton(el)
             local a = active[el.key]
             if a and a.deadline > GetTime() then
                 b:SetState("good")
-                b:SetTimer(RallyPowerCP.FmtTime(a.deadline - GetTime()))
+                b:SetTimer(AegisRP.FmtTime(a.deadline - GetTime()))
             else
                 if a then active[el.key] = nil end
                 b:SetState(sel and "need" or "off")
@@ -186,7 +186,7 @@ end
 
 local function BuildUI()
     if strip then return end
-    strip = RallyPowerCP.NewStrip("shaman", "Totems")
+    strip = AegisRP.NewStrip("shaman", "Totems")
     for _, el in ipairs(ELEMENTS) do
         strip:AddButton(ElementButton(el))
     end
@@ -215,7 +215,7 @@ for _, el in ipairs(ELEMENTS) do
     table.insert(M.optionsInfo, {
         type = "check", key = "btn_" .. string.lower(elc.key),
         label = elc.key .. " totem button", default = true,
-        onChange = function() RallyPowerCP.ReflowStrips() end,
+        onChange = function() AegisRP.ReflowStrips() end,
     })
 end
 table.insert(M.optionsInfo, { type = "header", label = "Selected totems" })
@@ -246,7 +246,7 @@ end
 -- Wids are positional over these fixed lists - append new totems at the END
 -- of an element, never reorder (wids must stay stable for the wire).
 --------------------------------------------------------------------------
-if RallyPowerCP.Assign then
+if AegisRP.Assign then
     local twid = 0
     for _, el in ipairs(ELEMENTS) do
         local list = {}
@@ -254,6 +254,6 @@ if RallyPowerCP.Assign then
             twid = twid + 1
             table.insert(list, { name = t.name, wid = twid, dur = t.dur })
         end
-        RallyPowerCP.Assign.RegisterTotems(el.key, list)
+        AegisRP.Assign.RegisterTotems(el.key, list)
     end
 end
