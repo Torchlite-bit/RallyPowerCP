@@ -1,7 +1,7 @@
 # Changelog — Aegis: RallyPower
 
-All notable changes to **Aegis: RallyPower** (formerly RallyPowerCP; the addon
-folder and internals keep that name) are recorded here. The format follows
+All notable changes to **Aegis: RallyPower** (formerly RallyPowerCP) are
+recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com) and the project uses semantic
 versioning (MAJOR.MINOR.PATCH).
 
@@ -44,6 +44,21 @@ all the way down — **delete any old `RallyPowerCP` folder and install fresh as
 - **Unchanged**: the embedded PallyPower engine keeps its own names
   (`PallyPower_*`, `PP_*`) and the `PLPWR` channel — locked byte-compat with
   stock PallyPower — and the `RPCX` sync prefix stays (it's brand-neutral).
+
+### Added (Shaman "All Totems" button)
+- The shaman strip gains an **All Totems** button ahead of the four element
+  buttons: one click drops the selected totem of every element in order
+  (Earth → Fire → Water → Air). Totems share the global cooldown, so the
+  casts are paced automatically ~1.5s apart (an `OnUpdate` pump fires each
+  one as the GCD clears — legal from code on the 1.12 client); totems on a
+  **real** cooldown (Grounding, Mana Tide, Fire Nova…) are skipped. The
+  button shows the shaman class icon, live progress while dropping
+  ("dropping 2/4"), green with the earliest expiry timer when the full set
+  is down, red with a "drop N" count when totems are missing.
+  **Right-click** clears every totem timer (you recalled them). In test
+  mode the click simulates all four instantly. Toggle it in the Shaman
+  Buttons options ("All Totems button"). A 10-second failsafe stops the
+  queue if casting stalls (dead, feared, etc.).
 
 ### Added (Warrior Sunder Armor button)
 - The Warrior strip gains a **Sunder Armor** button beside Battle Shout: it
