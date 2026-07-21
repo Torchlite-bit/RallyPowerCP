@@ -1,8 +1,11 @@
 --=============================================================================
 -- Class_Shaman.lua  -  Shaman totem module for AegisRP
 --
--- Four cycle buttons on the shared strip engine (paladin-template 100x34
--- buttons): Earth / Fire / Water / Air.
+-- Five buttons on the shared strip engine (paladin-template 100x34
+-- buttons): All Totems, then Earth / Fire / Water / Air.
+--   All Totems   = one click drops the selected totem of every element in
+--     order, pacing the casts through the shared global cooldown and
+--     skipping totems on a real cooldown; right-click clears every timer.
 --   Mouse-wheel  = pick which totem to drop for that element (known totems only)
 --   Left-click   = drop the selected totem (self-cast; works in combat)
 --   Right-click  = clear the tracked timer (you picked the totem back up)
@@ -129,6 +132,128 @@ local function DropTotem(el)
     active[el.key] = { name = t.name, deadline = GetTime() + t.dur }
 end
 
+--------------------------------------------------------------------------
+-- "All Totems": one click drops the selected totem of every element, in
+-- ELEMENTS order (Earth > Fire > Water > Air). Totems share the global
+-- cooldown, so the casts can't all fire in one handler - an OnUpdate pump
+-- casts the next one the moment the GCD clears (~1.5s apart; casting from
+-- code is legal on the 1.12 client). Totems on a REAL cooldown (Grounding,
+-- Mana Tide, Fire Nova...) are skipped, per "all totems not on CD".
+--------------------------------------------------------------------------
+local dropQueue = {}    -- elements still waiting to cast, head first
+local dropTotal = 0     -- queue size at click time (for the x/y display)
+local dropAbort = 0     -- failsafe deadline: never pump longer than this
+local pump = CreateFrame("Frame")
+pump:Hide()
+pump.elapsed = 0
+
+local function PumpStop()
+    dropQueue = {}
+    pump:Hide()
+end
+
+pump:SetScript("OnUpdate", function()
+    this.elapsed = this.elapsed + arg1
+    if this.elapsed < 0.1 then return end
+    this.elapsed = 0
+    if GetTime() > dropAbort then PumpStop(); return end
+    local el = dropQueue[1]
+    if not el then PumpStop(); return end
+    local t = Selected(el)
+    if not t or t._sim then table.remove(dropQueue, 1); return end
+    local start, dur = GetSpellCooldown(t._index, "spell")
+    if start and dur and dur > 0 and (start + dur - GetTime()) > 0 then
+        -- longer than the GCD = a real cooldown: skip this totem entirely
+        if dur > 1.5 then table.remove(dropQueue, 1) end
+        return                       -- GCD (or just skipped): wait for next tick
+    end
+    table.remove(dropQueue, 1)
+    if HAS_SUPERWOW then
+        CastSpellByName(t.name)
+    else
+        CastSpell(t._index, "spell")
+    end
+    active[el.key] = { name = t.name, deadline = GetTime() + t.dur }
+    if strip then strip:Refresh() end
+end)
+
+local function DropAll()
+    -- Test mode: DropTotem simulates instantly, so no pacing needed.
+    if AegisRP.IsTestMode() then
+        for _, el in ipairs(ELEMENTS) do
+            if Selected(el) then DropTotem(el) end
+        end
+        return
+    end
+    dropQueue = {}
+    for _, el in ipairs(ELEMENTS) do
+        if Selected(el) then table.insert(dropQueue, el) end
+    end
+    dropTotal = table.getn(dropQueue)
+    if dropTotal == 0 then return end
+    dropAbort = GetTime() + 10
+    pump.elapsed = 0
+    pump:Show()                      -- first cast lands on the next tick
+end
+
+-- Class icon for the button face (same source as the class-buff strips:
+-- the legacy engine's texture set, our bundled art as fallback).
+local function ShamanIcon()
+    local id = AegisRP.Token2ClassID and AegisRP.Token2ClassID["SHAMAN"]
+    if PallyPower_ClassTexture and id and PallyPower_ClassTexture[id] then
+        return PallyPower_ClassTexture[id]
+    end
+    return "Interface\\AddOns\\Aegis_RallyPower\\Icons\\Shaman"
+end
+
+local function AllButton()
+    return {
+        key = "all",
+        refresh = function(b)
+            b:SetIcon(ShamanIcon())
+            b:SetLabel("|cffffd100All|r")
+            local total, down = 0, 0
+            local soonest
+            for _, el in ipairs(ELEMENTS) do
+                if Selected(el) then
+                    total = total + 1
+                    local a = active[el.key]
+                    if a and a.deadline > GetTime() then
+                        down = down + 1
+                        if not soonest or a.deadline < soonest then soonest = a.deadline end
+                    end
+                end
+            end
+            if total == 0 then
+                b:SetSub("|cff888888no totems|r"); b:SetTimer(""); b:SetState("off")
+            elseif table.getn(dropQueue) > 0 then
+                b:SetSub("dropping " .. (dropTotal - table.getn(dropQueue)) .. "/" .. dropTotal)
+                b:SetTimer(""); b:SetState("need")
+            elseif down >= total then
+                b:SetSub("all " .. total .. " down"); b:SetState("good")
+                b:SetTimer(soonest and AegisRP.FmtTime(soonest - GetTime()) or "")
+            else
+                b:SetSub("drop " .. (total - down)); b:SetTimer(""); b:SetState("need")
+            end
+        end,
+        onClick = function(b, btn)
+            if btn == "RightButton" then
+                PumpStop()
+                active = {}          -- picked everything back up
+                return
+            end
+            DropAll()
+        end,
+        tooltip = function(b, tt)
+            tt:AddLine("All Totems")
+            tt:AddLine("Click to drop your four selected totems in order,", 0.6, 0.6, 0.6)
+            tt:AddLine("pacing through the global cooldown (~1.5s apart).", 0.6, 0.6, 0.6)
+            tt:AddLine("Totems on cooldown are skipped.", 0.6, 0.6, 0.6)
+            tt:AddLine("Right-click to clear all totem timers.", 0.6, 0.6, 0.6)
+        end,
+    }
+end
+
 local function ElementButton(el)
     return {
         key = el.key,
@@ -187,6 +312,7 @@ end
 local function BuildUI()
     if strip then return end
     strip = AegisRP.NewStrip("shaman", "Totems")
+    strip:AddButton(AllButton())
     for _, el in ipairs(ELEMENTS) do
         strip:AddButton(ElementButton(el))
     end
@@ -210,6 +336,11 @@ end
 --------------------------------------------------------------------------
 M.optionsInfo = {}
 table.insert(M.optionsInfo, { type = "header", label = "Totem buttons" })
+table.insert(M.optionsInfo, {
+    type = "check", key = "btn_all",
+    label = "All Totems button (drop all four)", default = true,
+    onChange = function() AegisRP.ReflowStrips() end,
+})
 for _, el in ipairs(ELEMENTS) do
     local elc = el
     table.insert(M.optionsInfo, {

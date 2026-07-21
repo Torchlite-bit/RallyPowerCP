@@ -24,7 +24,7 @@ the party/raid.
 | **Mage** | Arcane Intellect. |
 | **Druid** | Mark of the Wild, Thorns. |
 | **Warrior** | Battle Shout (self-cast; one click refreshes nearby party) and a Sunder Armor button that tracks/applies it on your target. |
-| **Shaman** | A four-button totem strip (Earth / Fire / Water / Air). Scroll to pick a totem, click to drop it; shows its icon, green-with-timer when down. Toggle from the minimap or `/rpc`. |
+| **Shaman** | A totem strip: an **All Totems** button (one click drops your four selected totems in order, pacing the casts through the global cooldown and skipping totems on cooldown; right-click clears every timer) followed by the four element buttons (Earth / Fire / Water / Air — scroll to pick a totem, click to drop it; shows its icon, green-with-timer when down). Toggle from the minimap or `/rpc`. |
 | **Hunter** | A Sting button: scroll to pick Serpent / Scorpid / Viper, click to apply to your target; green while your sting is up. |
 | **Warlock** | Armor (self, tracked), Soulstone (green = ready in bags, red = cooldown, grey = none — click creates/uses it), and a Curse cycle for your target. |
 | **Rogue** | Expose Armor duty on your target, plus Main-hand / Off-hand poison slots — scroll picks the poison from your bags, click coats the weapon, with real remaining time and charges. |
