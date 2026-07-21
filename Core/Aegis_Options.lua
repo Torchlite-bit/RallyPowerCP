@@ -663,7 +663,7 @@ local function MyAssignmentEntries()
             })
         end
         table.insert(entries, { type = "note", height = 26, label =
-            "Your targets sync to the raid; a leader's Utility-tab plan can override them." })
+            "Your targets sync to the raid (Fear Ward etc. can go to your assigned Tank or Healer)." })
     end
     -- Paladins set alternate tank blessings on the panel's Roles tab.
     if myclass == "PALADIN" then

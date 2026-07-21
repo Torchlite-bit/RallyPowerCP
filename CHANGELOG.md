@@ -26,6 +26,29 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
 ## [0.14.0] — 2026-07-12
 **Raid roles: mark tanks & healers, and give tanks their own blessing.**
 
+### Changed (Assignment panel: Utility → Kick tab; Roles redesign)
+- **Utility tab removed.** It duplicated what each caster already sets for
+  themselves in **Options → Raid** (Fear Ward, Innervate, Soulstone — those
+  duties, their targeting, and their sync are all unchanged), so the panel tab
+  went away rather than keeping two places to set the same thing.
+- **New Kick tab** in its place — an interrupt tracker. One row per
+  interrupt-capable member present (Warrior Pummel/Shield Bash, Rogue Kick,
+  Shaman Earth Shock, Mage Counterspell, Warlock Spell Lock), showing who has
+  a kick and whether it's ready or on cooldown. **Your own** interrupt shows an
+  exact live cooldown; **others** are best-effort — with SuperWoW their kicks
+  are observed from their casts (`UNIT_CASTEVENT`) and timed locally, otherwise
+  they're shown ready. Exact raid-wide interrupt timers are a sync-milestone
+  follow-up. (Turtle-unverified cooldowns are one-line edits in the
+  `INTERRUPTS` table.)
+- **Roles tab redesigned** around named tank slots: a **Main Tank** and up to
+  **two off-tanks**, each picked from a dropdown, with a blessing box beside
+  each slot to give that tank its own blessing. Healer marking moves to the
+  grid below (left-click a name to toggle Healer). The tank *membership* still
+  rides `PallyPower_Tanks` (so the no-Salvation rule, tank blessings, and
+  stock-PallyPower interop all keep working); the MT/OT **order** is shared
+  over RPCX (new leader-gated `TS` message) so the whole raid sees one tank
+  plan.
+
 ### Changed (rebrand: RallyPowerCP → Aegis: RallyPower, the FULL rename)
 Joins the Aegis addon series (like Aegis_SBR). Pre-release, so the rename goes
 all the way down — **delete any old `RallyPowerCP` folder and install fresh as

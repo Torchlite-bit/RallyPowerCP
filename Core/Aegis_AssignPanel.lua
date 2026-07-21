@@ -243,12 +243,12 @@ local TAB_INFO = {
     { label = "Totems",     live = false },
     { label = "Raid Buffs", live = false },
     { label = "Debuffs",    live = false },
-    { label = "Utility",    live = false },
+    { label = "Kick",       live = true  },   -- interrupt tracker (live CDs)
     { label = "Roles",      live = true  },   -- tanks/healers ride PLPWR
 }
--- tabs 4/5 are duty-card lists; tab 3 is the caster x class buff grid;
--- tab 6 is the roles grid (over PallyPower's Tanks/Healers)
-local DUTY_TAB = { [4] = "debuff", [5] = "utility" }
+-- tab 4 is the debuff duty-card list; tab 3 is the caster x class buff grid;
+-- tab 5 is the interrupt (kick) tracker; tab 6 is the roles grid.
+local DUTY_TAB = { [4] = "debuff" }
 
 local function Me() return UnitName("player") end
 
@@ -1220,7 +1220,7 @@ end
 -- DUTY TABS - Debuffs / Utility as two-column cards
 --------------------------------------------------------------------------
 
-local dutyCards = { [4] = {}, [5] = {} }
+local dutyCards = { [4] = {} }
 
 local function DutyList(tabkey)
     local out = {}
@@ -1454,13 +1454,8 @@ local function RefreshDutyTab(p, tabIndex)
         p.note:SetTextColor(OK_GREEN[1], OK_GREEN[2], OK_GREEN[3])
     end
     p.cover:SetText("")
-    if DUTY_TAB[tabIndex] == "utility" then
-        p.hint:SetText("Left-click a card to cycle who's responsible; right-click a targeted "
-            .. "one (Fear Ward, Innervate, Soulstone) to send it to the Tank or Healer. Synced.")
-    else
-        p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
-            .. "others claim or unclaim themselves). Synced to the raid.")
-    end
+    p.hint:SetText("Click a card to cycle who's responsible (lead/assist cycles anyone; "
+        .. "others claim or unclaim themselves). Synced to the raid.")
 end
 
 --------------------------------------------------------------------------
@@ -1470,8 +1465,10 @@ end
 --------------------------------------------------------------------------
 
 local roleCells = {}
-local ROLE_COLS, ROLE_ROWS = 2, 18
-local ROLE_CELL_W = 344
+-- healer grid sits UNDER the three tank-slot dropdowns, so it's a 3-wide grid
+-- (fits a 40-man roster) starting lower on the panel.
+local ROLE_COLS, ROLE_ROWS = 3, 14
+local ROLE_CELL_W = 228
 
 -- every raid/party member (you first); preview raid in test mode
 local function AllMembers()
@@ -1506,10 +1503,247 @@ local function MemberClass(name)
     return nil
 end
 
-local ROLE_NEXT = { [""] = "TANK", TANK = "HEALER", HEALER = "" }
-local function CycleMemberRole(name)
-    local nxt = ROLE_NEXT[A.GetRole(name) or ""] or ""
-    if not A.SetRole(name, (nxt ~= "") and nxt or nil) then
+--------------------------------------------------------------------------
+-- KICK TAB - interrupt tracker. One cell per interrupt-capable member.
+-- YOUR own kick shows an exact live cooldown (GetSpellCooldown); others are
+-- best-effort - with SuperWoW we observe their casts (UNIT_CASTEVENT) and time
+-- the cooldown locally, otherwise they're assumed ready. Exact raid-wide
+-- timers are the sync-milestone follow-up. We can't read another player's
+-- spellbook, so capability is by CLASS, not spec.
+--------------------------------------------------------------------------
+
+-- names = interrupt spell(s) to match; cd = seconds (Vanilla defaults,
+-- Turtle-unverified - edit here if a value differs); icon = fallback texture
+-- for members whose spell we can't read.
+local INTERRUPTS = {
+    WARRIOR = { names = { "Pummel", "Shield Bash" }, cd = 10,
+                icon = "Interface\\Icons\\Ability_Warrior_PunishingBlow", label = "Pummel / Shield Bash" },
+    ROGUE   = { names = { "Kick" }, cd = 10,
+                icon = "Interface\\Icons\\Ability_Kick", label = "Kick" },
+    MAGE    = { names = { "Counterspell" }, cd = 30,
+                icon = "Interface\\Icons\\Spell_Frost_IceShock", label = "Counterspell" },
+    SHAMAN  = { names = { "Earth Shock" }, cd = 6,
+                icon = "Interface\\Icons\\Spell_Nature_EarthShock", label = "Earth Shock" },
+    WARLOCK = { names = { "Spell Lock" }, cd = 24,
+                icon = "Interface\\Icons\\Spell_Shadow_MindRot", label = "Spell Lock (pet)" },
+}
+local KICK_ORDER = { "WARRIOR", "ROGUE", "SHAMAN", "MAGE", "WARLOCK" }
+
+-- observed cooldowns for OTHER players: [name] = GetTime() when ready again.
+local kickReady = {}
+
+local function SpellNameFromId(id)
+    if not id or not SpellInfo then return nil end
+    local ok, nm = pcall(SpellInfo, id)
+    if ok then return nm end
+    return nil
+end
+
+-- SuperWoW cast observation (best-effort; guarded so a wrong signature just
+-- yields no data, degrading others to "ready"). Always-on so the timers are
+-- warm whether or not the panel is open.
+if SUPERWOW_VERSION then
+    local ke = CreateFrame("Frame")
+    ke:RegisterEvent("UNIT_CASTEVENT")
+    ke:SetScript("OnEvent", function()
+        pcall(function()
+            -- SuperWoW UNIT_CASTEVENT: arg1 casterGUID, arg2 targetGUID,
+            -- arg3 eventType, arg4 spellID
+            if arg3 ~= "CAST" and arg3 ~= "START" then return end
+            local nm = UnitName(arg1)                 -- SuperWoW accepts a GUID
+            if not nm or nm == UnitName("player") then return end
+            local _, tok = UnitClass(arg1)
+            local info = tok and INTERRUPTS[tok]
+            if not info then return end
+            local sname = SpellNameFromId(arg4)
+            if not sname then return end
+            for i = 1, table.getn(info.names) do
+                if info.names[i] == sname then
+                    kickReady[nm] = GetTime() + info.cd
+                    return
+                end
+            end
+        end)
+    end)
+end
+
+-- MY interrupt: the first of my class's interrupt spells I actually know.
+-- Returns spell record, catalog info, and the matched spell name.
+local function MyInterrupt()
+    local _, tok = UnitClass("player")
+    local info = tok and INTERRUPTS[tok]
+    if not info then return nil, nil, nil end
+    for i = 1, table.getn(info.names) do
+        local nm = info.names[i]
+        local sp = AegisRP.FindSpell and AegisRP.FindSpell(nm)
+        if sp then return sp, info, nm end
+    end
+    return nil, info, nil
+end
+
+-- remaining cooldown (seconds) for a member, or 0 when ready/unknown.
+local function KickRemaining(name)
+    if name == Me() then
+        local sp = MyInterrupt()
+        if not sp then return 0 end
+        local start, dur = GetSpellCooldown(sp.index, "spell")
+        if start and dur and dur > 1.5 then
+            local r = start + dur - GetTime()
+            if r > 0 then return r end
+        end
+        return 0
+    end
+    local r = kickReady[name]
+    if r and r > GetTime() then return r - GetTime() end
+    return 0
+end
+
+local kickCells = {}
+local KICK_COLS, KICK_ROWS = 2, 16
+local KICK_CELL_W = 344
+
+-- interrupt-capable members: you first, then everyone else in class order.
+local function KickMembers()
+    local me = Me()
+    local _, mytok = UnitClass("player")
+    local all = AllMembers()
+    local out = {}
+    if mytok and INTERRUPTS[mytok] then table.insert(out, me) end
+    for _, tok in ipairs(KICK_ORDER) do
+        for i = 1, table.getn(all) do
+            local nm = all[i]
+            if nm ~= me and MemberClass(nm) == tok then table.insert(out, nm) end
+        end
+    end
+    return out
+end
+
+local function KickCellTip()
+    if AegisRP_Settings.tooltips == false then return end
+    local name = this.member
+    local tok = MemberClass(name)
+    local info = tok and INTERRUPTS[tok]
+    local shown = false
+    if name == Me() then
+        local _, _, nm = MyInterrupt()
+        if nm then shown = SpellTip(this, nm) end
+    end
+    if not shown then
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        GameTooltip:SetText(name, 1, 1, 1)
+    end
+    if info then
+        GameTooltip:AddLine((info.label or "Interrupt") .. "  -  " .. info.cd .. "s CD", 0.7, 0.9, 0.7)
+    end
+    local rem = KickRemaining(name)
+    if rem > 0 then
+        GameTooltip:AddLine("On cooldown: " .. math.floor(rem + 0.5) .. "s", 1, 0.5, 0.4)
+    else
+        GameTooltip:AddLine("Ready", 0.4, 0.9, 0.5)
+    end
+    if name ~= Me() then
+        GameTooltip:AddLine(SUPERWOW_VERSION and "Observed from their casts (best-effort)."
+            or "Others' live cooldowns need SuperWoW.", 0.55, 0.55, 0.62)
+    end
+    GameTooltip:Show()
+end
+
+local function BuildKick(p)
+    for i = 1, KICK_COLS * KICK_ROWS do
+        local col = math.mod(i - 1, KICK_COLS)
+        local rowN = math.floor((i - 1) / KICK_COLS)
+        local b = MakeCell(p, KICK_CELL_W, 24)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", col * (KICK_CELL_W + 8), -44 - rowN * 26)
+        local ic = b:CreateTexture(nil, "ARTWORK")
+        ic:SetWidth(18); ic:SetHeight(18)
+        ic:SetPoint("LEFT", b, "LEFT", 6, 0)
+        b.icon = ic
+        b.name = Fnt(b, 11, INK)
+        b.name:SetWidth(200); b.name:SetHeight(12)
+        b.name:SetPoint("LEFT", b, "LEFT", 30, 0)
+        b.stat = Fnt(b, 11, INK_DIM, "RIGHT")
+        b.stat:SetWidth(90); b.stat:SetHeight(12)
+        b.stat:SetPoint("RIGHT", b, "RIGHT", -8, 0)
+        b:SetScript("OnEnter", SafeTip(KickCellTip))
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        b:Hide()
+        kickCells[i] = b
+    end
+end
+
+local function RefreshKick(p)
+    local members = KickMembers()
+    local cap = KICK_COLS * KICK_ROWS
+    local ready, oncd = 0, 0
+    for i = 1, cap do
+        local b = kickCells[i]
+        local name = members[i]
+        if name then
+            b.member = name
+            local tok = MemberClass(name)
+            local info = tok and INTERRUPTS[tok]
+            local cc = (tok and CLASS_RGB[tok]) or INK
+            b.name:SetText(name)
+            b.name:SetTextColor(cc[1], cc[2], cc[3])
+            local tex = info and info.icon
+            if name == Me() then
+                local sp = MyInterrupt()
+                if sp and sp.texture then tex = sp.texture end
+            end
+            if tex then b.icon:SetTexture(tex); b.icon:Show() else b.icon:Hide() end
+            local rem = KickRemaining(name)
+            if rem > 0 then
+                oncd = oncd + 1
+                b.stat:SetText("|cffff6060" .. math.floor(rem + 0.5) .. "s|r")
+                b:SetBackdropColor(0.16, 0.09, 0.08, 0.9)
+            else
+                ready = ready + 1
+                b.stat:SetText("|cff5be07aReady|r")
+                b:SetBackdropColor(0.09, 0.13, 0.09, 0.85)
+            end
+            b:Show()
+        else
+            b:Hide()
+        end
+    end
+    p.note:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    p.note:SetText(ready .. " ready, " .. oncd .. " on CD")
+    p.cover:SetText("")
+    p.hint:SetText("Who has an interrupt, and whose kick is off cooldown. Your kick is exact; "
+        .. "others are observed from their casts where SuperWoW allows, else shown ready. "
+        .. "Exact raid-wide timers arrive with the sync milestone.")
+end
+
+-- Tank slots: Main Tank + two off-tanks, chosen from dropdowns. Membership
+-- rides PallyPower_Tanks (SetRole) so blessings + the no-Salv rule + interop
+-- keep working; the MT/OT ORDER is Aegis-only and rides RPCX.
+local SLOT_LABELS = { "Main Tank", "Off-Tank 1", "Off-Tank 2" }
+local tankDD = {}          -- dropdown frames
+local tankBlessBtn = {}    -- per-slot blessing buttons
+
+-- 1.12 UIDropDownMenu_SetWidth reads the implicit `this`; set it explicitly.
+local function DDWidth(dd, w)
+    local saved = this
+    this = dd
+    UIDropDownMenu_SetWidth(w, dd)
+    this = saved
+end
+
+local function SetSlot(i, name)
+    if name == "" then name = nil end
+    if not A.SetTankSlot(i, name) then
+        Msg("Only the raid leader / assist can set tanks (or turn on Free Assign).")
+    end
+    RefreshCurrent()
+end
+
+local function ToggleHealer(name)
+    if A.TankSlotOf(name) then
+        Msg(name .. " is a tank (set in the slots above); clear that slot to change.")
+        return
+    end
+    local cur = A.GetRole(name)
+    if not A.SetRole(name, (cur == "HEALER") and nil or "HEALER") then
         Msg("Only the raid leader / assist can set roles (or turn on Free Assign).")
     end
     RefreshCurrent()
@@ -1517,7 +1751,7 @@ end
 
 local function CycleTankBless(name, dir)
     if A.GetRole(name) ~= "TANK" then
-        Msg("Left-click to mark " .. name .. " a Tank first, then set its blessing.")
+        Msg("Put " .. name .. " in a tank slot first, then set its blessing.")
         return
     end
     local tok = MemberClass(name)
@@ -1557,56 +1791,122 @@ local function CycleTankBless(name, dir)
     RefreshCurrent()
 end
 
-local function RoleCellClick()
-    if arg1 == "RightButton" then CycleTankBless(this.member, 1)
-    else CycleMemberRole(this.member) end
+-- one tank-slot dropdown, capturing its slot index `i` (proven Options-tab
+-- pattern: closure over the frame rather than the implicit `this`).
+local function MakeTankDD(p, i)
+    local nm = "AegisRP_RoleTankDD" .. i
+    local dd = CreateFrame("Frame", nm, p, "UIDropDownMenuTemplate")
+    UIDropDownMenu_Initialize(dd, function()
+        local cur = A.GetTankSlot(i)
+        local none = {}
+        none.text = "(none)"; none.value = ""
+        if not cur then none.checked = 1 end
+        none.func = function() SetSlot(i, "") end
+        UIDropDownMenu_AddButton(none)
+        local names = AllMembers()
+        for j = 1, table.getn(names) do
+            local who = names[j]
+            local it = {}
+            it.text = who; it.value = who
+            if who == cur then it.checked = 1 end
+            it.func = function() SetSlot(i, who) end
+            UIDropDownMenu_AddButton(it)
+        end
+    end)
+    DDWidth(dd, 130)
+    dd.glob = nm
+    return dd
 end
 
-local function RoleCellWheel()
-    CycleTankBless(this.member, (arg1 and arg1 > 0) and 1 or -1)
+-- small square button beside a slot showing that tank's blessing; click/wheel
+-- cycles it (reuses CycleTankBless).
+local function MakeBlessBtn(p, i)
+    local b = MakeCell(p, 24, 24)
+    b.slot = i
+    b:EnableMouseWheel(true)
+    local ic = b:CreateTexture(nil, "ARTWORK")
+    ic:SetWidth(18); ic:SetHeight(18)
+    ic:SetPoint("CENTER", b, "CENTER", 0, 0)
+    b.icon = ic
+    b:SetScript("OnClick", function()
+        local who = A.GetTankSlot(this.slot)
+        if who then CycleTankBless(who, (arg1 == "RightButton") and -1 or 1)
+        else Msg("Fill this tank slot first, then set its blessing.") end
+    end)
+    b:SetScript("OnMouseWheel", function()
+        local who = A.GetTankSlot(this.slot)
+        if who then CycleTankBless(who, (arg1 and arg1 > 0) and 1 or -1) end
+    end)
+    b:SetScript("OnEnter", SafeTip(function()
+        if AegisRP_Settings.tooltips == false then return end
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        local who = A.GetTankSlot(this.slot)
+        GameTooltip:SetText(who and (who .. "'s blessing") or "Tank blessing", 1, 1, 1)
+        if who then
+            local tok = MemberClass(who)
+            local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
+            local bid = cid and A.GetTankBlessing(who, cid) or -1
+            if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
+                GameTooltip:AddLine(PallyPower_BlessingID[bid], 0.5, 1, 0.5)
+            else
+                GameTooltip:AddLine("Class default", 0.7, 0.7, 0.7)
+            end
+        end
+        GameTooltip:AddLine("Click / wheel to give this tank its own blessing.", 0.6, 0.6, 0.6)
+        GameTooltip:Show()
+    end))
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return b
 end
 
 local function RoleCellTip()
     if AegisRP_Settings.tooltips == false then return end
     GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
     GameTooltip:SetText(this.member, 1, 1, 1)
-    local role = A.GetRole(this.member)
-    GameTooltip:AddLine(role == "TANK" and "Tank" or (role == "HEALER" and "Healer" or "No role"),
-        0.7, 0.9, 0.7)
-    if role == "TANK" then
-        local tok = MemberClass(this.member)
-        local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
-        local bid = cid and A.GetTankBlessing(this.member, cid) or -1
-        if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
-            GameTooltip:AddLine("Tank blessing: " .. PallyPower_BlessingID[bid], 0.5, 1, 0.5)
-        else
-            GameTooltip:AddLine("Tank blessing: class default", 0.7, 0.7, 0.7)
-        end
+    local slot = A.TankSlotOf(this.member)
+    if slot then
+        GameTooltip:AddLine(SLOT_LABELS[slot] .. " (set in the slots above)", 0.6, 0.9, 0.6)
+    else
+        local role = A.GetRole(this.member)
+        GameTooltip:AddLine(role == "HEALER" and "Healer" or "No role", 0.7, 0.9, 0.7)
+        GameTooltip:AddLine("Left-click: toggle Healer", 0.6, 0.6, 0.6)
     end
-    GameTooltip:AddLine("Left-click: cycle Tank / Healer", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Right-click / wheel: a tank's own blessing", 0.6, 0.6, 0.6)
     GameTooltip:AddLine("Shared with PallyPower.", 0.5, 0.6, 0.8)
     GameTooltip:Show()
 end
 
+local function RoleCellClick()
+    ToggleHealer(this.member)
+end
+
 local function BuildRoles(p)
+    -- three tank-slot dropdowns across the top, each with a blessing button
+    for i = 1, 3 do
+        local x = (i - 1) * 236
+        local capfs = Fnt(p, 11, GOLD)
+        capfs:SetWidth(150); capfs:SetHeight(12)
+        capfs:SetPoint("TOPLEFT", p, "TOPLEFT", x + 20, -46)
+        capfs:SetText(SLOT_LABELS[i])
+        local dd = MakeTankDD(p, i)
+        dd:SetPoint("TOPLEFT", p, "TOPLEFT", x, -60)
+        tankDD[i] = dd
+        local bb = MakeBlessBtn(p, i)
+        bb:SetPoint("TOPLEFT", p, "TOPLEFT", x + 190, -64)
+        tankBlessBtn[i] = bb
+    end
+    -- healer grid below (3 columns; every member, click toggles Healer)
     for i = 1, ROLE_COLS * ROLE_ROWS do
         local col = math.mod(i - 1, ROLE_COLS)
         local rowN = math.floor((i - 1) / ROLE_COLS)
         local b = MakeCell(p, ROLE_CELL_W, 24)
-        b:SetPoint("TOPLEFT", p, "TOPLEFT", col * (ROLE_CELL_W + 8), -44 - rowN * 26)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", col * (ROLE_CELL_W + 8), -112 - rowN * 26)
         b.name = Fnt(b, 11, INK)
-        b.name:SetWidth(190); b.name:SetHeight(12)
+        b.name:SetWidth(132); b.name:SetHeight(12)
         b.name:SetPoint("LEFT", b, "LEFT", 8, 0)
         b.role = Fnt(b, 10, INK_DIM, "RIGHT")
-        b.role:SetWidth(96); b.role:SetHeight(12)
-        b.role:SetPoint("RIGHT", b, "RIGHT", -28, 0)
-        local bi = b:CreateTexture(nil, "ARTWORK")
-        bi:SetWidth(18); bi:SetHeight(18)
-        bi:SetPoint("RIGHT", b, "RIGHT", -6, 0)
-        b.bicon = bi
+        b.role:SetWidth(70); b.role:SetHeight(12)
+        b.role:SetPoint("RIGHT", b, "RIGHT", -6, 0)
         b:SetScript("OnClick", RoleCellClick)
-        b:SetScript("OnMouseWheel", RoleCellWheel)
         b:SetScript("OnEnter", SafeTip(RoleCellTip))
         b:SetScript("OnLeave", function() GameTooltip:Hide() end)
         b:Hide()
@@ -1615,9 +1915,28 @@ local function BuildRoles(p)
 end
 
 local function RefreshRoles(p)
+    -- tank slots
+    for i = 1, 3 do
+        local who = A.GetTankSlot(i)
+        local txt = getglobal(tankDD[i].glob .. "Text")
+        if txt then txt:SetText(who or "(none)") end
+        local bb = tankBlessBtn[i]
+        local shown = false
+        if who then
+            local tok = MemberClass(who)
+            local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
+            local bid = cid and A.GetTankBlessing(who, cid) or -1
+            if bid >= 0 and BlessingIcon and BlessingIcon[bid] then
+                bb.icon:SetTexture(BlessingIcon[bid]); shown = true
+            end
+        end
+        if shown then bb.icon:Show() else bb.icon:Hide() end
+    end
+    -- healer grid
     local members = AllMembers()
     local cap = ROLE_COLS * ROLE_ROWS
     local ntank, nheal = 0, 0
+    for i = 1, 3 do if A.GetTankSlot(i) then ntank = ntank + 1 end end
     for i = 1, cap do
         local b = roleCells[i]
         local name = members[i]
@@ -1627,26 +1946,16 @@ local function RefreshRoles(p)
             local cc = (tok and CLASS_RGB[tok]) or INK
             b.name:SetText(name)
             b.name:SetTextColor(cc[1], cc[2], cc[3])
-            local role = A.GetRole(name)
-            if role == "TANK" then
-                ntank = ntank + 1
+            local slot = A.TankSlotOf(name)
+            if slot then
                 b.role:SetText("|cff5be07aTank|r")
-                local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
-                local bid = cid and A.GetTankBlessing(name, cid) or -1
-                if bid >= 0 and BlessingIcon and BlessingIcon[bid] then
-                    b.bicon:SetTexture(BlessingIcon[bid]); b.bicon:Show()
-                else
-                    b.bicon:Hide()
-                end
                 b:SetBackdropColor(0.10, 0.15, 0.09, 0.9)
-            elseif role == "HEALER" then
+            elseif A.GetRole(name) == "HEALER" then
                 nheal = nheal + 1
                 b.role:SetText("|cff5b8fffHealer|r")
-                b.bicon:Hide()
                 b:SetBackdropColor(0.09, 0.11, 0.16, 0.9)
             else
                 b.role:SetText("|cff777777-|r")
-                b.bicon:Hide()
                 b:SetBackdropColor(0.10, 0.088, 0.07, 0.7)
             end
             b:Show()
@@ -1658,13 +1967,9 @@ local function RefreshRoles(p)
     p.note:SetText(ntank .. (ntank == 1 and " tank, " or " tanks, ")
         .. nheal .. (nheal == 1 and " healer" or " healers"))
     p.cover:SetText("")
-    if table.getn(members) > cap then
-        p.hint:SetText("Showing the first " .. cap .. " members. Left-click a name to mark "
-            .. "Tank/Healer; right-click or wheel a tank for its blessing. Shared with PallyPower.")
-    else
-        p.hint:SetText("Left-click a name to cycle Tank / Healer (shared with PallyPower and its "
-            .. "no-Salvation-on-tanks rule). Right-click or wheel a tank to give it its own blessing.")
-    end
+    p.hint:SetText("Pick your Main Tank and off-tanks from the dropdowns; the box beside each "
+        .. "sets that tank's own blessing. Left-click a name below to mark a Healer. "
+        .. "Shared with PallyPower and its no-Salvation-on-tanks rule.")
 end
 
 --------------------------------------------------------------------------
@@ -1738,6 +2043,7 @@ local function RefreshInner()
     if currentTab == 1 then RefreshBlessings(p)
     elseif currentTab == 2 then RefreshTotems(p)
     elseif currentTab == 3 then RefreshBuffGrid(p)
+    elseif currentTab == 5 then RefreshKick(p)
     elseif currentTab == 6 then RefreshRoles(p)
     elseif DUTY_TAB[currentTab] then RefreshDutyTab(p, currentTab) end
 end
@@ -1795,7 +2101,11 @@ local function ClearCurrentTab()
             end
         end
         Msg("Assignments on this tab cleared.")
+    elseif currentTab == 5 then
+        for k in pairs(kickReady) do kickReady[k] = nil end
+        Msg("Interrupt timers reset.")
     elseif currentTab == 6 then
+        A.ClearTankSlots()
         for _, name in ipairs(AllMembers()) do
             if A.GetRole(name) then A.SetRole(name, nil) end
         end
@@ -1918,8 +2228,8 @@ local function CreatePanel()
         { "Totems", "Which totem each shaman drops per element, and which group they cover." },
         { "Raid buff coverage", "Which buff each priest, mage and druid gives every class - their strips follow their rows." },
         { "Target debuff duty", "Who maintains each debuff on the kill target." },
-        { "Utility & cooldowns", "Soulstones, tank shields, fear ward, innervate." },
-        { "Raid roles", "Mark tanks and healers (shared with PallyPower); give a tank its own blessing." },
+        { "Interrupts", "Who has a kick and whose kick is off cooldown." },
+        { "Raid roles", "Main Tank + off-tanks (dropdowns), healers, and each tank's own blessing." },
     }
     for i = 1, table.getn(TAB_INFO) do
         local p = CreateFrame("Frame", nil, box)
@@ -1949,7 +2259,7 @@ local function CreatePanel()
     BuildTotems(panels[2])
     BuildBuffGrid(panels[3])
     BuildDutyTab(panels[4], 4)
-    BuildDutyTab(panels[5], 5)
+    BuildKick(panels[5])
     BuildRoles(panels[6])
 
     -- bottom buttons: the classic PallyPower frame's row, on our panel

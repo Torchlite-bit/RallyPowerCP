@@ -551,6 +551,105 @@ function A.SetTankBlessing(tname, classID, bid)
 end
 
 --------------------------------------------------------------------------
+-- tank slots: an ordered plan (Main Tank, Off-Tank 1, Off-Tank 2) layered on
+-- top of PallyPower_Tanks. Membership (who IS a tank - for the no-Salvation
+-- rule, tank blessings, and stock-PallyPower interop) still rides SetRole /
+-- PLPWR; only the SLOT ORDER is Aegis-specific, and it rides RPCX
+-- (leader-gated) so the raid shares one MT/OT plan. Test mode keeps its own
+-- sandbox copy so a solo tester never persists or broadcasts.
+--------------------------------------------------------------------------
+local TANK_SLOTS = 3
+local previewTankSlots = {}
+
+local function SlotStore()
+    if AegisRP.IsTestMode and AegisRP.IsTestMode() then return previewTankSlots end
+    AegisRP_Roles = AegisRP_Roles or {}
+    AegisRP_Roles.tankSlots = AegisRP_Roles.tankSlots or {}
+    return AegisRP_Roles.tankSlots
+end
+
+function A.TankSlotCount() return TANK_SLOTS end
+
+function A.GetTankSlot(i) return SlotStore()[i] end
+
+function A.GetTankSlots()
+    local s, out = SlotStore(), {}
+    for i = 1, TANK_SLOTS do out[i] = s[i] end
+    return out
+end
+
+-- which slot (1..N) holds `name`, or nil
+function A.TankSlotOf(name)
+    if not name then return nil end
+    local s = SlotStore()
+    for i = 1, TANK_SLOTS do if s[i] == name then return i end end
+    return nil
+end
+
+-- leader-gated. `name` may be nil to empty the slot. A name only ever holds
+-- one slot (setting it elsewhere moves it). Clearing/replacing a slot un-tanks
+-- the previous occupant unless they still hold another slot.
+function A.SetTankSlot(i, name)
+    if i < 1 or i > TANK_SLOTS then return false end
+    if not (A.IAmLead() or A.GetFreeAssign()) then return false end
+    local s = SlotStore()
+    if name == "" then name = nil end
+    if name then
+        for j = 1, TANK_SLOTS do if s[j] == name then s[j] = nil end end
+    end
+    local old = s[i]
+    s[i] = name
+    if old and old ~= name and not A.TankSlotOf(old) then
+        if A.GetRole(old) == "TANK" then A.SetRole(old, nil) end
+    end
+    if name and A.GetRole(name) ~= "TANK" then A.SetRole(name, "TANK") end
+    Notify("tankslots", name or old)
+    return true
+end
+
+-- leader-gated bulk clear (the panel's Clear button on the Roles tab)
+function A.ClearTankSlots()
+    if not (A.IAmLead() or A.GetFreeAssign()) then return false end
+    local s = SlotStore()
+    for i = 1, TANK_SLOTS do
+        local nm = s[i]
+        s[i] = nil
+        if nm and not A.TankSlotOf(nm) and A.GetRole(nm) == "TANK" then A.SetRole(nm, nil) end
+    end
+    Notify("tankslots", nil)
+    return true
+end
+
+-- remote apply (RPCX): install a shared slot order without re-broadcasting.
+-- Membership arrives separately over PLPWR (TANK/CLTNK); here we only record
+-- the ordering. Ignored in test mode (the sandbox stays local).
+function A.ApplyTankSlots(list)
+    if AegisRP.IsTestMode and AegisRP.IsTestMode() then return end
+    AegisRP_Roles = AegisRP_Roles or {}
+    AegisRP_Roles.tankSlots = AegisRP_Roles.tankSlots or {}
+    local s = AegisRP_Roles.tankSlots
+    for i = 1, TANK_SLOTS do s[i] = list[i] end
+    Notify("tankslots", nil)
+end
+
+-- wire encode/decode: N tokens, "-" = empty (player names carry no "-"/space
+-- on a single-realm server).
+function A.EncodeTankSlots()
+    local s, out = SlotStore(), {}
+    for i = 1, TANK_SLOTS do out[i] = (s[i] and s[i] ~= "") and s[i] or "-" end
+    return out
+end
+
+function A.DecodeTankSlots(tokens, base)
+    local list = {}
+    for i = 1, TANK_SLOTS do
+        local t = tokens[base + i - 1]
+        if t and t ~= "-" then list[i] = t end
+    end
+    return list
+end
+
+--------------------------------------------------------------------------
 -- sync bridge (step 2): the RPCX layer decodes a remote caster block and
 -- installs it here. Whole-block REPLACE (the sender is authoritative for
 -- that caster), then the same Notify the panel already listens to. Kept in
