@@ -63,8 +63,8 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
   can't read other players' buff durations — the same limit PallyPower works
   around the same way).
 - **Utility row** (currently Priest): situational single-target casts. Fear Ward
-  goes to your assigned tank/healer if set (Roles + Utility tabs), else your
-  target, else you.
+  goes to your assigned tank/healer if set (Roles tab + Options → Raid), else
+  your target, else you.
 - Only buffs you've learned appear, so the bar scales with level/spec.
 - **Drag** to move; position is saved per character.
 
@@ -76,7 +76,7 @@ yellow = expiring, green = covered), a count, and that class's earliest timer.
 | `/rpc` (alias `/aegis`) | Toggle the all-class buff bar (non-Paladins); all subcommands work on either |
 | `/rpc test` | **Test mode** — show every option (unlearned marked `*`) and simulate casts with real timers, for previewing on low-level characters |
 | `/rpc options` | **Options frame** (any class; or **right-click** the minimap icon) — Settings tab (show rules, tooltips, test mode, UI scale, minimap skin/button, lock/reset frames) and a per-class Buttons tab; Paladins get the merged classic PallyPower settings |
-| `/rpc assign` | **Assignment panel** ("Who Covers What"; any class; or **right-click** a strip's title / the paladin buff bar) — Blessings tab drives the classic PallyPower assignments **with Aura and Seal columns first**, each paladin's **blessing/aura ranks+talents and Symbol of Kings count** under their name (byte-compatible with stock PallyPower users); the **Raid Buffs tab is a caster × class grid** (priests/mages/druids — their strips follow their rows); plus Totems (auto group, totem icons) / Debuffs / Utility over the shared assignment model. Scale grip bottom-right; real spell tooltips for spells in your spellbook. In test mode it seats a full 40-man preview raid of lore characters for solo testing |
+| `/rpc assign` | **Assignment panel** ("Who Covers What"; any class; or **right-click** a strip's title / the paladin buff bar) — Blessings tab drives the classic PallyPower assignments **with Aura and Seal columns first**, each paladin's **blessing/aura ranks+talents and Symbol of Kings count** under their name (byte-compatible with stock PallyPower users); the **Raid Buffs tab is a caster × class grid** (priests/mages/druids — their strips follow their rows); plus Totems (auto group, totem icons) / Debuffs over the shared assignment model; a **Kick tab** that tracks who has an interrupt and whose kick is off cooldown (your own exact, others best-effort); and a **Roles tab** with Main-Tank + off-tank dropdowns, healer marking, and per-tank blessings. Scale grip bottom-right; real spell tooltips for spells in your spellbook. In test mode it seats a full 40-man preview raid of lore characters for solo testing |
 | `/rpc sync` | Force a full assignment re-sync — request everyone's totem/duty/raid-buff assignments and re-broadcast yours over the `RPCX` channel (blessings still sync separately over PLPWR) |
 | `/rpc legacy` | The classic PallyPower options frame (escape hatch in case something wasn't migrated) |
 | `/rpc reset` | Reset the class bar's position |

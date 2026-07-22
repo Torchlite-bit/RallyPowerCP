@@ -11,6 +11,8 @@
 --   <v> REQ
 --   <v> BLK <caster> <seq> <payload>      payload = cTOKEN;t<wids>;d<entries>;b<pairs>
 --   <v> CLR <caster>
+--   <v> FA  <0|1>                          raid-wide Free Assignment flag (leader)
+--   <v> TS  <mt> <ot1> <ot2>               tank-slot order, "-" = empty (leader)
 -- Wids never cross the wire as spell names (Turtle-rename safe); unknown wids
 -- are skipped, not errored (forward-compat). Permission mirrors PallyPower:
 -- accept a block for CASTER from SENDER iff sender==caster or sender is
@@ -33,6 +35,7 @@ local MAX_LEN     = 250         -- addon-message payload ceiling (warn only)
 local applyingRemote = false    -- true while installing a received block
 local dirty = {}                -- set of caster names pending broadcast
 local freeDirty = false         -- Free Assignment flag changed, pending send
+local tsDirty = false           -- tank-slot order changed, pending send
 local flushAccum = 0
 local lastReq = -100
 
@@ -264,7 +267,7 @@ local function MarkAuthoritativeDirty()
         if name == Me() or iLead then dirty[name] = true end
     end
     dirty[Me()] = true          -- always assert myself, even with an empty block skipped later
-    if iLead then freeDirty = true end   -- announce the Free Assignment state
+    if iLead then freeDirty = true; tsDirty = true end   -- announce free-assign + tank order
 end
 
 local function Flush()
@@ -274,6 +277,11 @@ local function Flush()
         RawSend(PROTO_V .. " FA " .. (A.GetFreeAssign() and "1" or "0"))
     end
     freeDirty = false
+    -- tank-slot order (leader only; shares the raid's MT/OT plan)
+    if tsDirty and A.IAmLead() then
+        RawSend(PROTO_V .. " TS " .. table.concat(A.EncodeTankSlots(), " "))
+    end
+    tsDirty = false
     local any = false
     for name in pairs(dirty) do any = true; break end
     if not any then return end
@@ -330,6 +338,16 @@ local function Receive(sender, msg)
         end
         return
     end
+
+    if cmd == "TS" then
+        -- only a leader may set the shared tank-slot order (tok[3..] = slots)
+        if LeaderLike(sender) then
+            applyingRemote = true
+            A.ApplyTankSlots(A.DecodeTankSlots(tok, 3))
+            applyingRemote = false
+        end
+        return
+    end
 end
 
 --------------------------------------------------------------------------
@@ -341,6 +359,10 @@ A.Subscribe(function(domain, caster)
     if applyingRemote then return end
     if domain == "free" then
         freeDirty = true          -- leader flipped Free Assignment; broadcast it
+        return
+    end
+    if domain == "tankslots" then
+        tsDirty = true            -- leader shares the MT/OT order (gated in Flush)
         return
     end
     if domain == "totem" or domain == "duty" or domain == "cbuff" then
