@@ -40,6 +40,10 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
   they're shown ready. Exact raid-wide interrupt timers are a sync-milestone
   follow-up. (Turtle-unverified cooldowns are one-line edits in the
   `INTERRUPTS` table.)
+- **Diagnostics**: `/rpc castdbg` toggles raw `UNIT_CASTEVENT` logging (to
+  validate the cast observation on Turtle - verbose, for a short test then
+  off); `/rpc slots` prints the shared tank-slot plan plus your leader /
+  free-assign state, to compare across two clients.
 - **Roles tab redesigned** around named tank slots: a **Main Tank** and up to
   **two off-tanks**, each picked from a dropdown. Under each slot a second
   **blessing dropdown** ("gets (instead of Salv):") shows at a glance what

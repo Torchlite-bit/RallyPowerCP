@@ -1712,6 +1712,40 @@ SlashCmdList["AEGISRP"] = function(msg)
         return
     end
 
+    -- Diagnostics (for validating the SuperWoW cast observation the Kick tab
+    -- uses). Toggle raw UNIT_CASTEVENT logging; verbose, meant for a short
+    -- controlled test, then toggle off.
+    if msg == "castdbg" then
+        if not SUPERWOW_VERSION then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r cast debug needs SuperWoW "
+                .. "(so do other players' kick timers).")
+            return
+        end
+        AegisRP_Settings._castDbg = not AegisRP_Settings._castDbg
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r cast debug "
+            .. (AegisRP_Settings._castDbg
+                and "|cff5be07aON|r - trigger some interrupts, then /rpc castdbg to stop (verbose)."
+                or "off."))
+        return
+    end
+
+    -- Dump the shared tank-slot plan + my leader/free-assign state, to compare
+    -- across two clients (verifies the RPCX TS sync).
+    if msg == "slots" or msg == "tanks" then
+        local A = AegisRP.Assign
+        if not A then return end
+        local labels = { "Main Tank", "Off-Tank 1", "Off-Tank 2" }
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis tank slots|r (lead="
+            .. (A.IAmLead() and "yes" or "no") .. ", free-assign="
+            .. (A.GetFreeAssign() and "on" or "off") .. "):")
+        local n = (A.TankSlotCount and A.TankSlotCount()) or 3
+        for i = 1, n do
+            DEFAULT_CHAT_FRAME:AddMessage("  " .. labels[i] .. ": "
+                .. (A.GetTankSlot(i) or "|cff777777-|r"))
+        end
+        return
+    end
+
     if PLAYER_CLASS == "PALADIN" then
         DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r As a Paladin, use /pp for the blessing grid (it now has the hover player pop-out). /rpc assign opens the assignment panel; /rpc sync re-syncs assignments; /rpc options opens the settings (right-click the minimap icon); /rpc legacy opens the classic PallyPower frame; /rpc icon changes the minimap icon.")
         return
