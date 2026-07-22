@@ -1719,7 +1719,7 @@ end
 -- keep working; the MT/OT ORDER is Aegis-only and rides RPCX.
 local SLOT_LABELS = { "Main Tank", "Off-Tank 1", "Off-Tank 2" }
 local tankDD = {}          -- dropdown frames
-local tankBlessBtn = {}    -- per-slot blessing buttons
+local tankBlessDD = {}     -- per-slot blessing dropdowns ("gets instead of Salv")
 
 -- 1.12 UIDropDownMenu_SetWidth reads the implicit `this`; set it explicitly.
 local function DDWidth(dd, w)
@@ -1749,46 +1749,39 @@ local function ToggleHealer(name)
     RefreshCurrent()
 end
 
-local function CycleTankBless(name, dir)
-    if A.GetRole(name) ~= "TANK" then
-        Msg("Put " .. name .. " in a tank slot first, then set its blessing.")
-        return
-    end
+-- The class ID a tank's blessing override is stored under (PallyPower keys
+-- NormalAssignments by the TARGET's class).
+local function TankCid(name)
     local tok = MemberClass(name)
-    local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
+    return tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
+end
+
+-- Set slot i's tank to blessing `bid` (-1 = class default). The dropdown menu
+-- only offers castable picks; this re-checks permission on the way in.
+local function SetTankBless(i, bid)
+    local who = A.GetTankSlot(i)
+    if not who then return end
+    local cid = TankCid(who)
     if not cid then return end
-    local preview = AegisRP.PreviewNames and AegisRP.PreviewNames[name]
-    if preview then
-        -- sandbox: cycle every blessing (fake tanks, no real cast)
-        local cur = A.GetTankBlessing(name, cid) + dir
-        if cur > 5 then cur = -1 elseif cur < -1 then cur = 5 end
-        A.SetTankBlessing(name, cid, cur)
-        RefreshCurrent()
-        return
-    end
-    if not (AllPallys and next(AllPallys)) then
+    if not (AegisRP.PreviewNames and AegisRP.PreviewNames[who])
+       and not (AllPallys and next(AllPallys)) then
         Msg("No paladins known - a tank blessing needs a paladin to cast it.")
         return
     end
-    -- Only offer blessings a paladin can actually cast (-1 = class default),
-    -- so the override never silently drops the tank's blessing.
-    local opts = { -1 }
-    for bid = 0, 5 do
-        if A.TankBlessingCastable(bid) then table.insert(opts, bid) end
-    end
-    if table.getn(opts) <= 1 then
-        Msg("No paladin here can cast an alternative blessing yet.")
-        return
-    end
-    local cur = A.GetTankBlessing(name, cid)
-    local idx = 1
-    for i = 1, table.getn(opts) do if opts[i] == cur then idx = i end end
-    idx = idx + dir
-    if idx > table.getn(opts) then idx = 1 elseif idx < 1 then idx = table.getn(opts) end
-    if not A.SetTankBlessing(name, cid, opts[idx]) then
+    if not A.SetTankBlessing(who, cid, bid) then
         Msg("You can't set that blessing (need lead/assist).")
     end
     RefreshCurrent()
+end
+
+-- Current blessing short-name for a slot's tank ("Kings"), or nil = default.
+local function SlotBlessName(who)
+    local cid = who and TankCid(who)
+    local bid = cid and A.GetTankBlessing(who, cid) or -1
+    if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
+        return PallyPower_BlessingID[bid]
+    end
+    return nil
 end
 
 -- one tank-slot dropdown, capturing its slot index `i` (proven Options-tab
@@ -1818,45 +1811,45 @@ local function MakeTankDD(p, i)
     return dd
 end
 
--- small square button beside a slot showing that tank's blessing; click/wheel
--- cycles it (reuses CycleTankBless).
-local function MakeBlessBtn(p, i)
-    local b = MakeCell(p, 24, 24)
-    b.slot = i
-    b:EnableMouseWheel(true)
-    local ic = b:CreateTexture(nil, "ARTWORK")
-    ic:SetWidth(18); ic:SetHeight(18)
-    ic:SetPoint("CENTER", b, "CENTER", 0, 0)
-    b.icon = ic
-    b:SetScript("OnClick", function()
-        local who = A.GetTankSlot(this.slot)
-        if who then CycleTankBless(who, (arg1 == "RightButton") and -1 or 1)
-        else Msg("Fill this tank slot first, then set its blessing.") end
-    end)
-    b:SetScript("OnMouseWheel", function()
-        local who = A.GetTankSlot(this.slot)
-        if who then CycleTankBless(who, (arg1 and arg1 > 0) and 1 or -1) end
-    end)
-    b:SetScript("OnEnter", SafeTip(function()
-        if AegisRP_Settings.tooltips == false then return end
-        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-        local who = A.GetTankSlot(this.slot)
-        GameTooltip:SetText(who and (who .. "'s blessing") or "Tank blessing", 1, 1, 1)
-        if who then
-            local tok = MemberClass(who)
-            local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
-            local bid = cid and A.GetTankBlessing(who, cid) or -1
-            if bid >= 0 and PallyPower_BlessingID and PallyPower_BlessingID[bid] then
-                GameTooltip:AddLine(PallyPower_BlessingID[bid], 0.5, 1, 0.5)
-            else
-                GameTooltip:AddLine("Class default", 0.7, 0.7, 0.7)
+-- per-slot blessing dropdown: shows what that tank currently gets ("Class
+-- default" / "Kings" / ...) and lists every blessing a paladin present can
+-- actually cast (preview tanks offer all six - sandbox, no real cast). This
+-- is the "what does my MT get instead of Salv" control.
+local function MakeBlessDD(p, i)
+    local nm = "AegisRP_RoleBlessDD" .. i
+    local dd = CreateFrame("Frame", nm, p, "UIDropDownMenuTemplate")
+    UIDropDownMenu_Initialize(dd, function()
+        local who = A.GetTankSlot(i)
+        if not who then
+            local it = {}
+            it.text = "(no tank in this slot)"
+            it.func = function() end
+            UIDropDownMenu_AddButton(it)
+            return
+        end
+        local cid = TankCid(who)
+        local cur = cid and A.GetTankBlessing(who, cid) or -1
+        local preview = AegisRP.PreviewNames and AegisRP.PreviewNames[who]
+        local function add(bid, label)
+            local it = {}
+            it.text = label
+            if bid == cur then it.checked = 1 end
+            it.func = function() SetTankBless(i, bid) end
+            UIDropDownMenu_AddButton(it)
+        end
+        add(-1, "Class default")
+        -- only blessings a paladin here can cast (a non-castable override
+        -- would silently drop the tank's blessing); preview offers all six
+        for bid = 0, 5 do
+            if preview or A.TankBlessingCastable(bid) then
+                add(bid, (PallyPower_BlessingID and PallyPower_BlessingID[bid])
+                    or ("Blessing " .. bid))
             end
         end
-        GameTooltip:AddLine("Click / wheel to give this tank its own blessing.", 0.6, 0.6, 0.6)
-        GameTooltip:Show()
-    end))
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    return b
+    end)
+    DDWidth(dd, 130)
+    dd.glob = nm
+    return dd
 end
 
 local function RoleCellTip()
@@ -1880,7 +1873,8 @@ local function RoleCellClick()
 end
 
 local function BuildRoles(p)
-    -- three tank-slot dropdowns across the top, each with a blessing button
+    -- three tank-slot columns across the top: who tanks, and what blessing
+    -- they get instead of their class default (the no-Salv override)
     for i = 1, 3 do
         local x = (i - 1) * 236
         local capfs = Fnt(p, 11, GOLD)
@@ -1888,18 +1882,22 @@ local function BuildRoles(p)
         capfs:SetPoint("TOPLEFT", p, "TOPLEFT", x + 20, -46)
         capfs:SetText(SLOT_LABELS[i])
         local dd = MakeTankDD(p, i)
-        dd:SetPoint("TOPLEFT", p, "TOPLEFT", x, -60)
+        dd:SetPoint("TOPLEFT", p, "TOPLEFT", x, -58)
         tankDD[i] = dd
-        local bb = MakeBlessBtn(p, i)
-        bb:SetPoint("TOPLEFT", p, "TOPLEFT", x + 190, -64)
-        tankBlessBtn[i] = bb
+        local bcap = Fnt(p, 9, INK_DIM)
+        bcap:SetWidth(200); bcap:SetHeight(10)
+        bcap:SetPoint("TOPLEFT", p, "TOPLEFT", x + 20, -92)
+        bcap:SetText("gets (instead of Salv):")
+        local bdd = MakeBlessDD(p, i)
+        bdd:SetPoint("TOPLEFT", p, "TOPLEFT", x, -102)
+        tankBlessDD[i] = bdd
     end
     -- healer grid below (3 columns; every member, click toggles Healer)
     for i = 1, ROLE_COLS * ROLE_ROWS do
         local col = math.mod(i - 1, ROLE_COLS)
         local rowN = math.floor((i - 1) / ROLE_COLS)
         local b = MakeCell(p, ROLE_CELL_W, 24)
-        b:SetPoint("TOPLEFT", p, "TOPLEFT", col * (ROLE_CELL_W + 8), -112 - rowN * 26)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", col * (ROLE_CELL_W + 8), -142 - rowN * 25)
         b.name = Fnt(b, 11, INK)
         b.name:SetWidth(132); b.name:SetHeight(12)
         b.name:SetPoint("LEFT", b, "LEFT", 8, 0)
@@ -1915,22 +1913,20 @@ local function BuildRoles(p)
 end
 
 local function RefreshRoles(p)
-    -- tank slots
+    -- tank slots: who, and the blessing they get (readable at a glance)
     for i = 1, 3 do
         local who = A.GetTankSlot(i)
         local txt = getglobal(tankDD[i].glob .. "Text")
         if txt then txt:SetText(who or "(none)") end
-        local bb = tankBlessBtn[i]
-        local shown = false
-        if who then
-            local tok = MemberClass(who)
-            local cid = tok and AegisRP.Token2ClassID and AegisRP.Token2ClassID[tok]
-            local bid = cid and A.GetTankBlessing(who, cid) or -1
-            if bid >= 0 and BlessingIcon and BlessingIcon[bid] then
-                bb.icon:SetTexture(BlessingIcon[bid]); shown = true
+        local btxt = getglobal(tankBlessDD[i].glob .. "Text")
+        if btxt then
+            if who then
+                local bn = SlotBlessName(who)
+                btxt:SetText(bn and ("|cff5be07a" .. bn .. "|r") or "Class default")
+            else
+                btxt:SetText("|cff777777-|r")
             end
         end
-        if shown then bb.icon:Show() else bb.icon:Hide() end
     end
     -- healer grid
     local members = AllMembers()
@@ -1967,9 +1963,10 @@ local function RefreshRoles(p)
     p.note:SetText(ntank .. (ntank == 1 and " tank, " or " tanks, ")
         .. nheal .. (nheal == 1 and " healer" or " healers"))
     p.cover:SetText("")
-    p.hint:SetText("Pick your Main Tank and off-tanks from the dropdowns; the box beside each "
-        .. "sets that tank's own blessing. Left-click a name below to mark a Healer. "
-        .. "Shared with PallyPower and its no-Salvation-on-tanks rule.")
+    p.hint:SetText("Pick your Main Tank and off-tanks from the top dropdowns; the dropdown "
+        .. "under each slot sets the blessing that tank gets instead of Salvation "
+        .. "(only blessings a paladin here can cast). Left-click a name below to mark "
+        .. "a Healer. Shared with PallyPower and its no-Salvation-on-tanks rule.")
 end
 
 --------------------------------------------------------------------------

@@ -41,9 +41,12 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
   follow-up. (Turtle-unverified cooldowns are one-line edits in the
   `INTERRUPTS` table.)
 - **Roles tab redesigned** around named tank slots: a **Main Tank** and up to
-  **two off-tanks**, each picked from a dropdown, with a blessing box beside
-  each slot to give that tank its own blessing. Healer marking moves to the
-  grid below (left-click a name to toggle Healer). The tank *membership* still
+  **two off-tanks**, each picked from a dropdown. Under each slot a second
+  **blessing dropdown** ("gets (instead of Salv):") shows at a glance what
+  that tank currently gets and lets you pick the blessing it receives instead
+  of its class default — listing only blessings a paladin present can
+  actually cast. Healer marking moves to the grid below (left-click a name to
+  toggle Healer). The tank *membership* still
   rides `PallyPower_Tanks` (so the no-Salvation rule, tank blessings, and
   stock-PallyPower interop all keep working); the MT/OT **order** is shared
   over RPCX (new leader-gated `TS` message) so the whole raid sees one tank
