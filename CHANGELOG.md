@@ -13,13 +13,19 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
 ---
 
 ## [Unreleased]
+### Added (Mage Scorch debuff tracking)
+- **Mage Scorch button** added to the class-buff strip as a debuff-tracking
+  button alongside Intellect/Brilliance. The button shows your target's Scorch
+  state (refreshed or needs applying) and exact countdown if present (learned
+  from your cast). Like Warrior Sunder, it tracks locally and only your own
+  casts - exact raid-wide timers are a future sync enhancement. The strip's
+  Options tab includes a "Debuff buttons" toggle to hide/show it (default on).
+
 ### Planned / under consideration
 - **Cast-exact shared timers** via SuperWoW `UNIT_CASTEVENT`, so the panel and
   strips show what is *actually up* across the raid, not just your own casts.
 - **Message chunking** for the rare assignment block that outgrows one addon
   message (v1 warns and truncates).
-- **Mage Scorch button** on the strip (needs the class-buff strip to grow a
-  debuff-button type first).
 
 ---
 

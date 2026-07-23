@@ -534,6 +534,11 @@ local function ButtonsTabEntries()
             label = "Utility buttons (top row)", default = true,
             onChange = function() AegisRP_GridRefresh() end })
     end
+    if M.debuffs and table.getn(M.debuffs) > 0 then
+        table.insert(entries, { type = "check", key = "debuffRow",
+            label = "Debuff buttons", default = true,
+            onChange = function() AegisRP_GridRefresh() end })
+    end
     if M.optionsInfo then
         for i = 1, table.getn(M.optionsInfo) do
             table.insert(entries, M.optionsInfo[i])

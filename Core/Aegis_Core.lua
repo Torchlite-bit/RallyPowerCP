@@ -73,6 +73,7 @@ end
 local PLAYER_CLASS               -- e.g. "PRIEST"  (English, locale-independent)
 local ACTIVE_BUFFS = {}          -- the buff list for PLAYER_CLASS (or nil)
 local ACTIVE_UTILITY             -- utility-spell list for PLAYER_CLASS (or nil)
+local ACTIVE_DEBUFFS             -- debuff-tracking list for PLAYER_CLASS (or nil)
 local KNOWN = {}                 -- set of spell names the player actually knows
 local NEEDCOUNT = {}             -- per-buff: how many roster members still need it
 local lastScan = 0
@@ -712,6 +713,27 @@ local function UtilityOnClick()
     end
 end
 
+local function DebuffOnClick(state, debuff)
+    if not KNOWN[debuff.name] then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r You haven't learned " .. debuff.name .. ".")
+        return
+    end
+    if not UnitExists("target") or UnitIsFriend("player", "target") then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffff00Aegis:|r Need a hostile target.")
+        return
+    end
+    if AegisRP.IsTestMode() then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[test]|r would apply " .. debuff.name)
+        state.target = "(test)"
+        state.deadline = GetTime() + debuff.dur
+        return
+    end
+    if AegisRP.CastAtTarget(debuff.name) then
+        state.target = UnitName("target")
+        state.deadline = GetTime() + debuff.dur
+    end
+end
+
 -- Forward declarations: the pop-out refresher and the class-strip refresher
 -- are defined further down but referenced by the wheel/scan closures above.
 local RefreshClassStrip
@@ -1249,6 +1271,52 @@ local function UtilityButtonDef(u, uidx)
     }
 end
 
+local function DebuffButtonDef(d, didx)
+    local short = d.name
+    local _, _, after = string.find(d.name, ": (.+)")
+    if after then short = after end
+    local debuffState = {}
+    return {
+        key = "debuff_" .. didx,
+        visible = function() return KNOWN[d.name] and AegisRP_Settings.debuffRow ~= false end,
+        refresh = function(b)
+            b:SetLabel("|cffffd100" .. short .. "|r")
+            b:SetIcon(GetSpellIconByName(d.name) or ("Interface\\Icons\\" .. (d.icon or "INV_Misc_QuestionMark")))
+            local test = AegisRP.IsTestMode()
+            if test then
+                if debuffState.deadline and debuffState.deadline > GetTime() then
+                    b:SetState("good"); b:SetTimer(AegisRP.FmtTime(debuffState.deadline - GetTime()))
+                else
+                    b:SetState("need"); b:SetTimer("")
+                end
+                return
+            end
+            if not UnitExists("target") or UnitIsFriend("player", "target") then
+                b:SetTimer(""); b:SetState("off")
+                return
+            end
+            if AegisRP.UnitHasDebuffEntry("target", d) then
+                b:SetState("good")
+                if debuffState.target == UnitName("target") and debuffState.deadline and debuffState.deadline > GetTime() then
+                    b:SetTimer(AegisRP.FmtTime(debuffState.deadline - GetTime()))
+                else
+                    b:SetTimer("")
+                end
+            else
+                b:SetState("need"); b:SetTimer("")
+            end
+        end,
+        onClick = function(b)
+            b.debuffIndex = didx
+            DebuffOnClick(debuffState, d)
+        end,
+        tooltip = function(b, tt)
+            tt:AddLine(d.name, 1, 1, 1)
+            tt:AddLine("Click to apply on your target", 0.8, 0.8, 0.8)
+        end,
+    }
+end
+
 -- Build the shared class-buff strip (Priest / Mage / Druid). One button per
 -- class in CLASS_ORDER plus the module's utility buttons; presence gating and
 -- the drag/scale/position furniture all come from the strip engine, so these
@@ -1265,6 +1333,11 @@ function AegisRP.BuildClassBuffs()
     if ACTIVE_UTILITY then
         for i = 1, table.getn(ACTIVE_UTILITY) do
             classStrip:AddButton(UtilityButtonDef(ACTIVE_UTILITY[i], i))
+        end
+    end
+    if ACTIVE_DEBUFFS then
+        for i = 1, table.getn(ACTIVE_DEBUFFS) do
+            classStrip:AddButton(DebuffButtonDef(ACTIVE_DEBUFFS[i], i))
         end
     end
     classStrip:Finish()
@@ -1401,12 +1474,15 @@ local function Activate()
         -- Paladins use the original PallyPower bar/grid (now with the hover
         -- player pop-out from Aegis_Popout.lua). No separate strip.
         ACTIVE_BUFFS = nil
+        ACTIVE_UTILITY = nil
+        ACTIVE_DEBUFFS = nil
         return
     end
 
     AegisRP.active = AegisRP.classes[PLAYER_CLASS]
     ACTIVE_BUFFS   = AegisRP.active and AegisRP.active.buffs
     ACTIVE_UTILITY = AegisRP.active and AegisRP.active.utility
+    ACTIVE_DEBUFFS = AegisRP.active and AegisRP.active.debuffs
 
     -- Every non-paladin module builds its own strip UI here: Shaman totems,
     -- Hunter stings, Warlock/Rogue duties, the Warrior shout, and the

@@ -15,6 +15,11 @@ M.buffs = {
       dur = 30*60, gdur = 60*60 },
 }
 
+M.debuffs = {
+    { name = "Scorch", dur = 30,
+      icon = "Spell_Fire_SoulBurn" },
+}
+
 function M:OnActivate()
     AegisRP.BuildClassBuffs()
 end
