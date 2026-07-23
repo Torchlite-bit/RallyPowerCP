@@ -11,6 +11,22 @@ A comprehensive buff management addon for Turtle WoW that extends PallyPower's P
 **By Subtilizer (Torchlite) · Built on PallyPowerTW (ivanovlk) & original PallyPower**
 
 ---
+## 📸 Screenshots
+
+<!-- 
+TEMPLATE INSTRUCTIONS: 
+Replace the placeholder image links (e.g., 'path/to/your/image1.png') inside the parentheses with the actual URLs or relative file paths to your screenshots once you have them uploaded to your repository. 
+-->
+
+
+<img width="1539" height="688" alt="class buff" src="https://github.com/user-attachments/assets/921b44d4-564b-4a77-8323-59f40af7478e" />
+
+<img width="1556" height="688" alt="raid roles" src="https://github.com/user-attachments/assets/51575c1f-b2f1-4f81-be10-b1c241e9ca0d" />
+
+
+
+
+---
 
 ## ✨ Key Features
 
