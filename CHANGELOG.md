@@ -21,11 +21,17 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
   casts - exact raid-wide timers are a future sync enhancement. The strip's
   Options tab includes a "Debuff buttons" toggle to hide/show it (default on).
 
+### Added (Message chunking for large assignment blocks)
+- **Automatic message chunking** handles the rare case where a complex assignment
+  block exceeds the ~255-char addon-message limit. Large payloads are split
+  across multiple CHUNK messages and reassembled on receive (30s timeout for
+  stale chunks). The sender transparently picks between BLK (single message) and
+  CHUNK (multi-message) based on serialized size. Receiver handles both formats
+  identically to ensure zero-impact forward compatibility.
+
 ### Planned / under consideration
 - **Cast-exact shared timers** via SuperWoW `UNIT_CASTEVENT`, so the panel and
   strips show what is *actually up* across the raid, not just your own casts.
-- **Message chunking** for the rare assignment block that outgrows one addon
-  message (v1 warns and truncates).
 
 ---
 

@@ -30,7 +30,9 @@ local PREFIX      = "RPCX"
 local PROTO_V     = 1
 local FLUSH_DELAY = 0.5         -- debounce a burst of edits into one send
 local REQ_THROTTLE = 3         -- min seconds between our own REQ storms
-local MAX_LEN     = 250         -- addon-message payload ceiling (warn only)
+local MAX_LEN     = 250         -- addon-message payload ceiling
+local CHUNK_SIZE  = 240         -- max payload per chunk (leave room for header)
+local CHUNK_EXPIRE = 30         -- seconds before reassembly buffer expires
 
 local applyingRemote = false    -- true while installing a received block
 local dirty = {}                -- set of caster names pending broadcast
@@ -38,6 +40,7 @@ local freeDirty = false         -- Free Assignment flag changed, pending send
 local tsDirty = false           -- tank-slot order changed, pending send
 local flushAccum = 0
 local lastReq = -100
+local chunks = {}               -- reassembly buffer: [caster][seq] = { chunks, expire_time }
 
 --------------------------------------------------------------------------
 -- helpers + lazy catalog reverse maps (catalogs register at class-module
@@ -217,6 +220,53 @@ local function DeserializeBlock(caster, seq, payload)
 end
 
 --------------------------------------------------------------------------
+-- message chunking for large assignment blocks
+
+local function SplitPayload(payload)
+    if string.len(payload) <= CHUNK_SIZE then
+        return nil  -- single message, no chunking needed
+    end
+    local chunks = {}
+    local pos = 1
+    while pos <= string.len(payload) do
+        table.insert(chunks, string.sub(payload, pos, pos + CHUNK_SIZE - 1))
+        pos = pos + CHUNK_SIZE
+    end
+    return chunks
+end
+
+local function AssembleChunk(caster, seq, chunkId, totalChunks, payload)
+    if not chunks[caster] then chunks[caster] = {} end
+    if not chunks[caster][seq] then
+        chunks[caster][seq] = { chunks = {}, expire = GetTime() + CHUNK_EXPIRE }
+    end
+    local assembler = chunks[caster][seq]
+    assembler.chunks[chunkId] = payload
+    assembler.total = totalChunks
+    if table.getn(assembler.chunks) == totalChunks then
+        local full = ""
+        for i = 1, totalChunks do
+            if assembler.chunks[i] then full = full .. assembler.chunks[i]
+            else return nil end
+        end
+        chunks[caster][seq] = nil
+        return full
+    end
+    return nil
+end
+
+local function ExpireOldChunks()
+    local now = GetTime()
+    for caster in pairs(chunks) do
+        for seq in pairs(chunks[caster]) do
+            if chunks[caster][seq].expire < now then
+                chunks[caster][seq] = nil
+            end
+        end
+    end
+end
+
+--------------------------------------------------------------------------
 -- send
 --------------------------------------------------------------------------
 
@@ -224,11 +274,6 @@ local function RawSend(msg)
     -- test mode is a local sandbox: never broadcast (preview edits, and even
     -- real ones, stay off the wire so a tester can't pollute a live raid)
     if AegisRP.IsTestMode and AegisRP.IsTestMode() then return end
-    if string.len(msg) > MAX_LEN then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis:|r assignment too large to "
-            .. "sync in one message (" .. string.len(msg) .. " chars) - some of it may not "
-            .. "reach others until chunking lands.")
-    end
     if GetNumRaidMembers() > 0 then
         SendAddonMessage(PREFIX, msg, "RAID", Me())
     elseif GetNumPartyMembers() > 0 then
@@ -242,7 +287,15 @@ local function SendBlock(name)
     if not payload or payload == "" then return end
     local c = A.GetCaster(name)
     local seq = (c and c.seq) or 0
-    RawSend(PROTO_V .. " BLK " .. name .. " " .. seq .. " " .. payload)
+    local payloadChunks = SplitPayload(payload)
+    if not payloadChunks then
+        RawSend(PROTO_V .. " BLK " .. name .. " " .. seq .. " " .. payload)
+    else
+        for i = 1, table.getn(payloadChunks) do
+            RawSend(PROTO_V .. " CHUNK " .. name .. " " .. seq .. " " .. i .. " "
+                .. table.getn(payloadChunks) .. " " .. payloadChunks[i])
+        end
+    end
 end
 
 local function SendREQ()
@@ -348,6 +401,21 @@ local function Receive(sender, msg)
         end
         return
     end
+
+    if cmd == "CHUNK" then
+        local caster, seq, chunkId, totalChunks = tok[3], tok[4], tonumber(tok[5]) or 0, tonumber(tok[6]) or 0
+        local payload = tok[7]
+        if not (caster and chunkId > 0 and totalChunks > 0 and payload) then return end
+        if not CanAccept(sender, caster) then return end
+        local fullPayload = AssembleChunk(caster, seq, chunkId, totalChunks, payload)
+        if fullPayload then
+            local block = DeserializeBlock(caster, seq, fullPayload)
+            applyingRemote = true
+            A.ApplyRemoteBlock(caster, block)
+            applyingRemote = false
+        end
+        return
+    end
 end
 
 --------------------------------------------------------------------------
@@ -407,6 +475,7 @@ f:SetScript("OnUpdate", function()
     flushAccum = flushAccum + (arg1 or 0)
     if flushAccum < FLUSH_DELAY then return end
     flushAccum = 0
+    ExpireOldChunks()
     local ok, err = pcall(Flush)
     if not ok then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Aegis error:|r "
