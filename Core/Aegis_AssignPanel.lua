@@ -1546,6 +1546,17 @@ if SUPERWOW_VERSION then
     local ke = CreateFrame("Frame")
     ke:RegisterEvent("UNIT_CASTEVENT")
     ke:SetScript("OnEvent", function()
+        -- `/rpc castdbg` dumps raw args so we can confirm the event fires and
+        -- learn the real arg layout on Turtle (skips melee-swing spam).
+        if AegisRP_Settings._castDbg and arg3 ~= "MAINHAND" and arg3 ~= "OFFHAND" then
+            local ok, line = pcall(function()
+                return "castdbg: name=" .. tostring(UnitName(arg1))
+                    .. " evt=" .. tostring(arg3) .. " sid=" .. tostring(arg4)
+                    .. " spell=" .. tostring(SpellNameFromId(arg4))
+            end)
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff" .. (ok and line
+                or ("castdbg err: " .. tostring(line))) .. "|r")
+        end
         pcall(function()
             -- SuperWoW UNIT_CASTEVENT: arg1 casterGUID, arg2 targetGUID,
             -- arg3 eventType, arg4 spellID

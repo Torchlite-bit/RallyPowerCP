@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: Aegis: RallyPower
 ## Author: Subtilizer (Torchlite)
-## Version: 0.14.0
+## Version: 0.15.0
 ## Notes: Aegis: RallyPower - all-class buff management for Turtle WoW 1.18.1 (1.12 client). Paladin grid as PallyPower; auto-tailored buff tracker for every other class.
 ## Notes-deDE: Ein Paladin-Segen-Helfer
 ## DefaultState: Enabled

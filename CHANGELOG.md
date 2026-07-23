@@ -13,13 +13,25 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
 ---
 
 ## [Unreleased]
+### Added (Mage Scorch debuff tracking)
+- **Mage Scorch button** added to the class-buff strip as a debuff-tracking
+  button alongside Intellect/Brilliance. The button shows your target's Scorch
+  state (refreshed or needs applying) and exact countdown if present (learned
+  from your cast). Like Warrior Sunder, it tracks locally and only your own
+  casts - exact raid-wide timers are a future sync enhancement. The strip's
+  Options tab includes a "Debuff buttons" toggle to hide/show it (default on).
+
+### Added (Message chunking for large assignment blocks)
+- **Automatic message chunking** handles the rare case where a complex assignment
+  block exceeds the ~255-char addon-message limit. Large payloads are split
+  across multiple CHUNK messages and reassembled on receive (30s timeout for
+  stale chunks). The sender transparently picks between BLK (single message) and
+  CHUNK (multi-message) based on serialized size. Receiver handles both formats
+  identically to ensure zero-impact forward compatibility.
+
 ### Planned / under consideration
 - **Cast-exact shared timers** via SuperWoW `UNIT_CASTEVENT`, so the panel and
   strips show what is *actually up* across the raid, not just your own casts.
-- **Message chunking** for the rare assignment block that outgrows one addon
-  message (v1 warns and truncates).
-- **Mage Scorch button** on the strip (needs the class-buff strip to grow a
-  debuff-button type first).
 
 ---
 
@@ -40,6 +52,10 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
   they're shown ready. Exact raid-wide interrupt timers are a sync-milestone
   follow-up. (Turtle-unverified cooldowns are one-line edits in the
   `INTERRUPTS` table.)
+- **Diagnostics**: `/rpc castdbg` toggles raw `UNIT_CASTEVENT` logging (to
+  validate the cast observation on Turtle - verbose, for a short test then
+  off); `/rpc slots` prints the shared tank-slot plan plus your leader /
+  free-assign state, to compare across two clients.
 - **Roles tab redesigned** around named tank slots: a **Main Tank** and up to
   **two off-tanks**, each picked from a dropdown. Under each slot a second
   **blessing dropdown** ("gets (instead of Salv):") shows at a glance what
