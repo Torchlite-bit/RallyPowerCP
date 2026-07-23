@@ -1732,12 +1732,12 @@ local SLOT_LABELS = { "Main Tank", "Off-Tank 1", "Off-Tank 2" }
 local tankDD = {}          -- dropdown frames
 local tankBlessDD = {}     -- per-slot blessing dropdowns ("gets instead of Salv")
 
--- Only classes that can actually hold a target in Vanilla can be tanks, so the
--- tank dropdowns list them alone: this keeps the menu short (a 40-man's rogues,
+-- Only classes that can actually hold a target can be tanks, so the tank
+-- dropdowns list them alone: this keeps the menu short (a 40-man's rogues,
 -- hunters, mages, warlocks and priests would blow past the UIDropDownMenu
--- button cap and clip names) and removes nonsensical picks. Edit here if a
--- Turtle spec changes who can tank (e.g. to add SHAMAN).
-local TANK_CLASSES = { WARRIOR = true, PALADIN = true, DRUID = true }
+-- button cap and clip names) and removes nonsensical picks. Shaman is included
+-- because Turtle WoW has a tanking shaman spec. Edit here if that changes.
+local TANK_CLASSES = { WARRIOR = true, PALADIN = true, DRUID = true, SHAMAN = true }
 local function CanTank(name) return TANK_CLASSES[MemberClass(name)] and true or false end
 
 -- 1.12 UIDropDownMenu_SetWidth reads the implicit `this`; set it explicitly.
