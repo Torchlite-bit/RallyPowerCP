@@ -31,13 +31,14 @@ earlier predate the rebrand and say "RallyPowerCP" — same addon.)
 
 ### Fixed (Roles tab: tank dropdown overflow in a full raid)
 - The **Main Tank / Off-Tank dropdowns** now list only tank-capable classes
-  (Warrior, Paladin, Druid). In a 40-man the old "everyone" list overran the
-  UIDropDownMenu button cap ("Too many buttons in UIDropDownMenu") and clipped
-  names off the bottom; restricting it to classes that can actually hold aggro
-  keeps the menu short and removes nonsensical picks (a rogue/mage/priest tank).
-  A tank already set is always still offered so a stale slot stays clearable.
-  (Tank-capable classes are a one-line edit at the top of the Roles section if a
-  Turtle spec changes who can tank.)
+  (Warrior, Paladin, Druid, Shaman — Turtle WoW has a tanking shaman spec). In a
+  40-man the old "everyone" list overran the UIDropDownMenu button cap ("Too many
+  buttons in UIDropDownMenu") and clipped names off the bottom; restricting it to
+  classes that can actually hold aggro keeps the menu short and removes
+  nonsensical picks (a rogue/mage/priest tank). A tank already set is always
+  still offered so a stale slot stays clearable. (Tank-capable classes are a
+  one-line edit at the top of the Roles section if a Turtle spec changes who can
+  tank.)
 
 ### Planned / under consideration
 - **Cast-exact shared timers** via SuperWoW `UNIT_CASTEVENT`, so the panel and
