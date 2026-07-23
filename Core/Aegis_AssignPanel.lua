@@ -1732,6 +1732,14 @@ local SLOT_LABELS = { "Main Tank", "Off-Tank 1", "Off-Tank 2" }
 local tankDD = {}          -- dropdown frames
 local tankBlessDD = {}     -- per-slot blessing dropdowns ("gets instead of Salv")
 
+-- Only classes that can actually hold a target in Vanilla can be tanks, so the
+-- tank dropdowns list them alone: this keeps the menu short (a 40-man's rogues,
+-- hunters, mages, warlocks and priests would blow past the UIDropDownMenu
+-- button cap and clip names) and removes nonsensical picks. Edit here if a
+-- Turtle spec changes who can tank (e.g. to add SHAMAN).
+local TANK_CLASSES = { WARRIOR = true, PALADIN = true, DRUID = true }
+local function CanTank(name) return TANK_CLASSES[MemberClass(name)] and true or false end
+
 -- 1.12 UIDropDownMenu_SetWidth reads the implicit `this`; set it explicitly.
 local function DDWidth(dd, w)
     local saved = this
@@ -1807,14 +1815,19 @@ local function MakeTankDD(p, i)
         if not cur then none.checked = 1 end
         none.func = function() SetSlot(i, "") end
         UIDropDownMenu_AddButton(none)
+        -- Only tank-capable classes (keeps the list short and sensible). The
+        -- currently-set tank is always offered, even if a stale assignment put
+        -- a non-tank class here, so the slot stays visible and clearable.
         local names = AllMembers()
         for j = 1, table.getn(names) do
             local who = names[j]
-            local it = {}
-            it.text = who; it.value = who
-            if who == cur then it.checked = 1 end
-            it.func = function() SetSlot(i, who) end
-            UIDropDownMenu_AddButton(it)
+            if CanTank(who) or who == cur then
+                local it = {}
+                it.text = who; it.value = who
+                if who == cur then it.checked = 1 end
+                it.func = function() SetSlot(i, who) end
+                UIDropDownMenu_AddButton(it)
+            end
         end
     end)
     DDWidth(dd, 130)
